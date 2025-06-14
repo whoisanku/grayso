@@ -42,6 +42,11 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     navigation.setOptions({
       title: "New Post",
       headerLeft: () => <Button onPress={onCancel} title="Cancel" />,
+    });
+  }, [navigation, onCancel]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
       headerRight: () => (
         <Button
           onPress={onPost}
@@ -50,7 +55,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
         />
       ),
     });
-  }, [navigation, onCancel, onPost, text, images]);
+  }, [navigation, onPost, text, images]);
 
   const pickImage = async () => {
     // No permissions request is needed for launching the image library
