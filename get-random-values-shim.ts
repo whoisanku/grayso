@@ -1,3 +1,3 @@
-import { polyfillWebCrypto } from 'expo-standard-web-crypto';
+import { polyfillWebCrypto } from "expo-standard-web-crypto";
 
 polyfillWebCrypto();

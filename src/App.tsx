@@ -1,8 +1,8 @@
+import CryptoPolyfill from "react-native-webview-crypto";
 import "react-native-gesture-handler";
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import CryptoPolyfill from "react-native-webview-crypto";
 import { DeSoIdentityProvider } from "react-deso-protocol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";

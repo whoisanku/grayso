@@ -8,6 +8,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "runtimeVersion": { "policy": "appVersion" },
-    "updates": { "url": "https://u.expo.dev/<project-id>" }
+    "updates": { "url": "https://u.expo.dev/<project-id>" },
+    "scheme": "starterapp"
   }
 }

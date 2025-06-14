@@ -1,13 +1,15 @@
-import './get-random-values-shim';
-import '@ethersproject/shims';
-import { TextDecoder, TextEncoder } from 'text-encoding';
-import 'react-native-url-polyfill/auto';
+import "./get-random-values-shim";
 
-if (typeof global.TextEncoder === 'undefined') {
-  // @ts-ignore
+import "@ethersproject/shims";
+
+import { TextDecoder, TextEncoder } from "text-encoding";
+
+import "react-native-url-polyfill/auto";
+
+if (typeof global.TextEncoder === "undefined") {
   global.TextEncoder = TextEncoder;
 }
-if (typeof global.TextDecoder === 'undefined') {
-  // @ts-ignore
+
+if (typeof global.TextDecoder === "undefined") {
   global.TextDecoder = TextDecoder;
 }

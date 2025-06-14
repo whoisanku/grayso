@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeTabs from "./HomeTabs";
 import ComposerScreen from "../screens/ComposerScreen";
@@ -9,6 +9,10 @@ const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
   const { currentUser } = useContext(DeSoIdentityContext);
+
+  useEffect(() => {
+    currentUser;
+  }, [currentUser]);
 
   return (
     <Stack.Navigator>
