@@ -1,0 +1,33 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Expo
+.expo/
+dist/
+*.jks
+*.p12
+*.key
+*.mobileprovision
+
+# Metro Bundler
+.metro-cache/
+
+# iOS
+ios/build/
+ios/Pods/
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/gradle/
+android/app/src/main/assets/
+
+# Others
+.idea/
+*.iml
+.DS_Store
+coverage/
+web-build/ 
