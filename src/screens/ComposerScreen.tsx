@@ -12,13 +12,9 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { type RootStackParamList } from "../navigation/types";
 
 const MAX_LENGTH = 280;
-
-type RootStackParamList = {
-  Main: undefined;
-  Composer: undefined;
-};
 
 type ComposerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Composer">;

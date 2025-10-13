@@ -2,19 +2,15 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
 import ProfileScreen from "../screens/ProfileScreen";
-import CloudIcon from "../assets/navIcons/cloud.svg";
+import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import PlusIcon from "../assets/navIcons/plus.svg";
 import { View, TouchableOpacity } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { type HomeTabParamList, type RootStackParamList } from "./types";
 
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
-
-type RootStackParamList = {
-  Main: undefined;
-  Composer: undefined;
-};
 
 type HomeTabsProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Main">;
@@ -31,11 +27,11 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
       }}
     >
       <Tab.Screen
-        name="Home"
+        name="Messages"
         component={HomeScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <CloudIcon width={size} height={size} stroke={color} fill="none" />
+            <MessageIcon width={size} height={size} stroke={color} fill="none" />
           ),
         }}
       />

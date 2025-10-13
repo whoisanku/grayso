@@ -3,9 +3,11 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeTabs from "./HomeTabs";
 import ComposerScreen from "../screens/ComposerScreen";
 import LoginScreen from "../screens/LoginScreen";
+import MessageThreadScreen from "../screens/MessageThreadScreen";
 import { DeSoIdentityContext } from "react-deso-protocol";
+import { type RootStackParamList } from "./types";
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -23,6 +25,11 @@ export default function RootNavigator() {
               name="Main"
               component={HomeTabs}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="MessageThread"
+              component={MessageThreadScreen}
+              options={{ title: "Conversation" }}
             />
           </Stack.Group>
           <Stack.Group

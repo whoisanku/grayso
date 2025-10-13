@@ -1,4 +1,10 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,6 +18,7 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import {
   buildProfilePictureUrl,
   getSingleProfile,
+  identity,
   type ProfileEntryResponse,
 } from "deso-protocol";
 
@@ -127,6 +134,14 @@ export default function ProfileScreen() {
     : 0;
   const hodlersCount = currentUser?.UsersWhoHODLYouCount ?? 0;
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await identity.logout();
+    } catch (logoutError) {
+      console.warn("Logout error:", logoutError);
+    }
+  }, []);
+
   if (!currentUser && !isLoading) {
     return (
       <View style={styles.center}>
@@ -157,6 +172,29 @@ export default function ProfileScreen() {
         {errorMessage ? (
           <Text style={styles.errorText}>{errorMessage}</Text>
         ) : null}
+        <View style={styles.stats}>
+          <View style={styles.statBlock}>
+            <Text style={styles.statCount}>{formatNumber(coinHolders)}</Text>
+            <Text style={styles.statLabel}>Coin holders</Text>
+          </View>
+          <View style={styles.statBlock}>
+            <Text style={styles.statCount}>{coinPrice.toFixed(2)}</Text>
+            <Text style={styles.statLabel}>Creator coin (DESO)</Text>
+          </View>
+          <View style={styles.statBlock}>
+            <Text style={styles.statCount}>{desoBalance.toFixed(2)}</Text>
+            <Text style={styles.statLabel}>Balance (DESO)</Text>
+          </View>
+          <View style={styles.statBlock}>
+            <Text style={styles.statCount}>{formatNumber(hodlersCount)}</Text>
+            <Text style={styles.statLabel}>People holding you</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.logoutContainer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
       </View>
       {(isLoading || isFetchingProfile) && (
         <View style={styles.loadingOverlay}>
@@ -244,6 +282,21 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     color: "#d9534f",
+  },
+  logoutContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  logoutButton: {
+    backgroundColor: "#ef4444",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
   center: {
     flex: 1,
