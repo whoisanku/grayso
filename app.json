@@ -3,7 +3,7 @@
     "name": "StarterApp",
     "slug": "starter-app",
     "version": "1.0.0",
-    "sdkVersion": "53.0.0",
+    "sdkVersion": "54.0.0",
     "platforms": ["ios", "android"],
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
