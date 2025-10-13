@@ -1,69 +1,168 @@
-import React from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
   Image,
-  TouchableOpacity,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { SvgUri } from "react-native-svg";
+import { DeSoIdentityContext } from "react-deso-protocol";
+import {
+  buildProfilePictureUrl,
+  getSingleProfile,
+  type ProfileEntryResponse,
+} from "deso-protocol";
 
-// Mock data for the profile, as we are only focusing on the UI
-const mockProfile = {
-  displayName: "Ankit Bhandari",
-  handle: "ankitbhandari",
-  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", // Placeholder avatar
-  banner: "https://placekitten.com/600/200", // Placeholder banner
-  followersCount: 1234,
-  followsCount: 567,
-  postsCount: 890,
-  description: "This is a sample bio. I love coding and cats!",
-  viewer: {
-    following: false,
-    followedBy: true,
-  },
-  createdAt: new Date().toISOString(),
+const FALLBACK_BANNER =
+  "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80";
+const FALLBACK_AVATAR = "https://images.deso.org/placeholder-profile-pic.png";
+const NANOS_IN_DESO = 1_000_000_000;
+
+const formatNumber = (value?: number | null) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0";
+  }
+
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  }
+
+  return value.toString();
 };
 
 export default function ProfileScreen() {
-  const navigation = useNavigation();
+  const { currentUser, isLoading } = useContext(DeSoIdentityContext);
+  const [profileDetails, setProfileDetails] =
+    useState<ProfileEntryResponse | null>(
+      currentUser?.ProfileEntryResponse ?? null
+    );
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const publicKey = currentUser?.PublicKeyBase58Check;
+
+  useEffect(() => {
+    setProfileDetails(currentUser?.ProfileEntryResponse ?? null);
+  }, [currentUser?.ProfileEntryResponse]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!publicKey) {
+      setProfileDetails(null);
+      setErrorMessage(null);
+      return undefined;
+    }
+
+    setIsFetchingProfile(true);
+    setErrorMessage(null);
+
+    getSingleProfile({
+      PublicKeyBase58Check: publicKey,
+      NoErrorOnMissing: true,
+    })
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        setProfileDetails(response.Profile ?? null);
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        console.warn("Failed to load profile", error);
+        setErrorMessage("Unable to load the latest profile details.");
+      })
+      .finally(() => {
+        if (active) {
+          setIsFetchingProfile(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [publicKey]);
+
+  const bannerUri = useMemo(() => {
+    if (profileDetails?.ExtraData?.CoverImage) {
+      return profileDetails.ExtraData.CoverImage;
+    }
+
+    return FALLBACK_BANNER;
+  }, [profileDetails?.ExtraData?.CoverImage]);
+
+  const avatarUri = useMemo(() => {
+    if (!publicKey) {
+      return FALLBACK_AVATAR;
+    }
+
+    try {
+      return buildProfilePictureUrl(publicKey, {
+        fallbackImageUrl: FALLBACK_AVATAR,
+      });
+    } catch (error) {
+      console.warn("Failed to build profile picture URL", error);
+      return FALLBACK_AVATAR;
+    }
+  }, [publicKey]);
+
+  const username = profileDetails?.Username ?? "Unnamed";
+  const description = profileDetails?.Description?.trim();
+  const coinHolders = profileDetails?.CoinEntry?.NumberOfHolders ?? 0;
+  const coinPrice = profileDetails?.CoinPriceDeSoNanos
+    ? profileDetails.CoinPriceDeSoNanos / NANOS_IN_DESO
+    : 0;
+  const desoBalance = currentUser?.BalanceNanos
+    ? currentUser.BalanceNanos / NANOS_IN_DESO
+    : 0;
+  const hodlersCount = currentUser?.UsersWhoHODLYouCount ?? 0;
+
+  if (!currentUser && !isLoading) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyStateText}>
+          Sign in with your DeSo identity to view your profile.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
-      <Image source={{ uri: mockProfile.banner }} style={styles.banner} />
+      <Image source={{ uri: bannerUri }} style={styles.banner} />
       <View style={styles.profileHeader}>
         <View style={styles.avatarContainer}>
-          <SvgUri width="100%" height="100%" uri={mockProfile.avatar} />
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
         </View>
-        <TouchableOpacity style={styles.followButton}>
+        <TouchableOpacity style={styles.followButton} disabled>
           <Text style={styles.followButtonText}>Follow</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.profileInfo}>
-        <Text style={styles.displayName}>{mockProfile.displayName}</Text>
-        <Text style={styles.handle}>@{mockProfile.handle}</Text>
-        {/* {mockProfile.viewer.followedBy && (
-          <View style={styles.followsYou}>
-            <Text style={styles.followsYouText}>Follows you</Text>
-          </View>
-        )} */}
-        <Text style={styles.description}>{mockProfile.description}</Text>
-        <View style={styles.stats}>
-          <Text style={styles.stat}>
-            <Text style={styles.statCount}>{mockProfile.followersCount}</Text>{" "}
-            Followers
-          </Text>
-          <Text style={styles.stat}>
-            <Text style={styles.statCount}>{mockProfile.followsCount}</Text>{" "}
-            Following
-          </Text>
-          <Text style={styles.stat}>
-            <Text style={styles.statCount}>{mockProfile.postsCount}</Text> Posts
-          </Text>
-        </View>
+        <Text style={styles.displayName}>{username}</Text>
+        <Text style={styles.handle} numberOfLines={1}>
+          {publicKey}
+        </Text>
+        {!!description && <Text style={styles.description}>{description}</Text>}
+        {errorMessage ? (
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        ) : null}
       </View>
+      {(isLoading || isFetchingProfile) && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#000" />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -84,13 +183,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: -40,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: "#fff",
-  },
   avatarContainer: {
     width: 80,
     height: 80,
@@ -99,6 +191,10 @@ const styles = StyleSheet.create({
     borderColor: "#fff",
     overflow: "hidden",
     backgroundColor: "white",
+  },
+  avatar: {
+    width: "100%",
+    height: "100%",
   },
   followButton: {
     backgroundColor: "#000",
@@ -122,18 +218,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "gray",
   },
-  followsYou: {
-    backgroundColor: "#eee",
-    borderRadius: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    alignSelf: "flex-start",
-    marginTop: 4,
-  },
-  followsYouText: {
-    color: "#555",
-    fontSize: 12,
-  },
   description: {
     marginTop: 12,
     fontSize: 16,
@@ -141,13 +225,46 @@ const styles = StyleSheet.create({
   },
   stats: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 16,
-  },
-  stat: {
-    marginRight: 16,
-    fontSize: 16,
   },
   statCount: {
     fontWeight: "bold",
+    fontSize: 18,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  statBlock: {
+    marginRight: 24,
+    marginBottom: 12,
+  },
+  errorText: {
+    marginTop: 12,
+    color: "#d9534f",
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: "#fff",
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
   },
 });
