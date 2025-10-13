@@ -3,11 +3,22 @@
     "name": "StarterApp",
     "slug": "starter-app",
     "version": "1.0.0",
-    "sdkVersion": "53.0.0",
-    "platforms": ["ios", "android"],
+    "sdkVersion": "54.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": { "policy": "appVersion" },
-    "updates": { "url": "https://u.expo.dev/<project-id>" }
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/<project-id>"
+    },
+    "scheme": "starterapp",
+    "ios": {
+      "bundleIdentifier": "com.anonymous.starter-app"
+    }
   }
 }

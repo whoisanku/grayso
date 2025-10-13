@@ -1,4 +1,5 @@
-import { registerRootComponent } from 'expo';
-import App from './src/App';
+import "./shims";
+import { registerRootComponent } from "expo";
+import App from "./src/App";
 
 registerRootComponent(App);
