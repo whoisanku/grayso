@@ -9,7 +9,9 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   ListRenderItem,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -43,6 +45,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     partyGroupOwnerPublicKeyBase58Check,
     lastTimestampNanos,
     title,
+    recipientInfo,
   } = route.params;
 
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
@@ -119,7 +122,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         if (isGroupChat) {
           const groupChatTimestamp = (lastTimestampNanos ?? Date.now() * 1_000_000) * 10;
           const payload = {
-            UserPublicKeyBase58Check: userPublicKey,
+            UserPublicKeyBase58Check: recipientInfo?.OwnerPublicKeyBase58Check ?? messages[0]?.RecipientInfo?.OwnerPublicKeyBase58Check ?? userPublicKey,
             AccessGroupKeyName: threadAccessGroupKeyName,
             MaxMessagesToFetch: PAGE_SIZE,
             StartTimeStamp: groupChatTimestamp,
@@ -133,7 +136,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
           result = await fetchPaginatedGroupThreadMessages(
             payload,
-            accessGroupsRef.current
+            accessGroupsRef.current,
+            userPublicKey
           );
         } else {
           const dmTimestamp = new Date().valueOf() * 1e6;
@@ -162,9 +166,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
           (msg): msg is DecryptedMessageEntryResponse => Boolean(msg)
         );
 
-        setMessages((prev) =>
-          initial ? decryptedMessages : mergeMessages(prev, decryptedMessages)
-        );
+        console.log("[ConversationScreen] Decrypted messages:", decryptedMessages.map(m => ({
+          hasDecryptedMessage: !!m.DecryptedMessage,
+          decryptedMessage: m.DecryptedMessage?.substring(0, 50),
+          error: (m as any).error,
+          chatType: m.ChatType,
+        })));
+
+        setMessages((prev) => {
+          if (initial) {
+            return [...decryptedMessages].sort(
+              (a, b) =>
+                (b.MessageInfo?.TimestampNanos ?? 0) - (a.MessageInfo?.TimestampNanos ?? 0)
+            );
+          }
+          return mergeMessages(prev, decryptedMessages);
+        });
 
         accessGroupsRef.current = result.updatedAllAccessGroups;
         setAccessGroups(result.updatedAllAccessGroups);
@@ -173,11 +190,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
         hasMoreRef.current = nextHasMore;
         setHasMore(nextHasMore);
 
-        const lastMessage = decryptedMessages[decryptedMessages.length - 1];
-        if (lastMessage?.MessageInfo?.TimestampNanos) {
+        const oldestMessageInBatch = decryptedMessages.sort(
+          (a, b) =>
+            (a.MessageInfo?.TimestampNanos ?? 0) - (b.MessageInfo?.TimestampNanos ?? 0)
+        )[0];
+
+        if (oldestMessageInBatch?.MessageInfo?.TimestampNanos) {
           const nextCursor = Math.max(
             0,
-            Number(lastMessage.MessageInfo.TimestampNanos) - 1
+            Number(oldestMessageInBatch.MessageInfo.TimestampNanos) - 1
           );
           cursorTimestampRef.current = nextCursor;
           setCursorTimestamp(nextCursor);
@@ -205,26 +226,27 @@ export default function ConversationScreen({ navigation, route }: Props) {
   );
 
   useEffect(() => {
-    accessGroupsRef.current = [];
-    cursorTimestampRef.current = lastTimestampNanos;
-    hasMoreRef.current = true;
-    isLoadingRef.current = false;
-
-    setMessages([]);
-    setCursorTimestamp(lastTimestampNanos);
-    setAccessGroups([]);
-    setHasMore(true);
-    setError(null);
-    setIsLoading(true);
-    setIsRefreshing(false);
-
-    let cancelled = false;
+    let isMounted = true;
 
     const bootstrap = async () => {
+      // Reset state for the new conversation
+      setMessages([]);
+      setCursorTimestamp(lastTimestampNanos);
+      setAccessGroups([]);
+      setHasMore(true);
+      setError(null);
+      setIsLoading(true);
+      setIsRefreshing(false);
+
+      accessGroupsRef.current = [];
+      cursorTimestampRef.current = lastTimestampNanos;
+      hasMoreRef.current = true;
+      isLoadingRef.current = false;
+
       try {
         await loadMessages(true, false);
       } catch (err) {
-        if (!cancelled) {
+        if (isMounted) {
           setError(err instanceof Error ? err.message : "Failed to load messages");
         }
       }
@@ -233,21 +255,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
     bootstrap();
 
     return () => {
-      cancelled = true;
+      isMounted = false;
     };
-  }, [
-    chatType,
-    counterPartyPublicKey,
-    lastTimestampNanos,
-    loadMessages,
-    threadAccessGroupKeyName,
-    userAccessGroupKeyName,
-    userPublicKey,
-  ]);
+  }, [counterPartyPublicKey, userPublicKey, chatType, threadAccessGroupKeyName]);
 
   const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({ item }) => {
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check;
-    const preview = item.DecryptedMessage || "Encrypted message";
+    const hasError = (item as any).error;
+    const preview = item.DecryptedMessage || (hasError ? `Error: ${hasError}` : "Decrypting...");
     const timestamp = item.MessageInfo?.TimestampNanos;
 
     return (
@@ -290,13 +305,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [isLoading, messages.length]);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+    >
       <FlatList
         data={messages}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={header}
         ListFooterComponent={footer}
+        inverted
         contentContainerStyle={
           messages.length === 0 ? styles.emptyListContent : styles.listContent
         }
@@ -318,7 +338,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </View>
         )}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -351,7 +371,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   listContent: {
+    flexGrow: 1,
     padding: 16,
+    justifyContent: "flex-end",
   },
   emptyListContent: {
     flexGrow: 1,

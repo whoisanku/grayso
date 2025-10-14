@@ -66,6 +66,7 @@ type MockConversation = {
   userAccessGroupKeyName?: string;
   partyGroupOwnerPublicKeyBase58Check?: string;
   lastTimestampNanos?: number;
+  recipientInfo?: any; // Using any for now to match the data structure
 };
 
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -121,6 +122,7 @@ export default function HomeScreen() {
         userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
         threadAccessGroupKeyName: isGroup ? last?.RecipientInfo?.AccessGroupKeyName : DEFAULT_KEY_MESSAGING_GROUP_NAME,
         partyGroupOwnerPublicKeyBase58Check: otherPk,
+        recipientInfo: last?.RecipientInfo,
       };
     });
   }, [conversations, profiles, currentUser?.PublicKeyBase58Check]);
@@ -141,6 +143,7 @@ export default function HomeScreen() {
           item.partyGroupOwnerPublicKeyBase58Check,
         lastTimestampNanos: item.lastTimestampNanos,
         title: item.name,
+        recipientInfo: item.recipientInfo,
       });
     },
     [currentUser?.PublicKeyBase58Check, navigation]

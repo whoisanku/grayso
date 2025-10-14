@@ -11,6 +11,7 @@ export type ConversationRouteParams = {
   lastTimestampNanos?: number;
   lastTimestampNanosString?: string;
   title?: string;
+  recipientInfo?: any;
 };
 
 export type RootStackParamList = {

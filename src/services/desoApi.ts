@@ -53,6 +53,7 @@ export type GetPaginatedMessagesForDmThreadRequest = {
 };
 
 export type PaginatedMessagesResponse = {
+  GroupChatMessages?: NewMessageEntryResponse[];
   Messages?: NewMessageEntryResponse[];
   ThreadMessages?: NewMessageEntryResponse[];
   PublicKeyToProfileEntryResponse: PublicKeyToProfileEntryResponseMap;
