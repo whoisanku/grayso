@@ -3,14 +3,20 @@ import {
   ChatType,
   DecryptedMessageEntryResponse,
   getAllAccessGroups,
-  getAllMessageThreads,
   identity,
   NewMessageEntryResponse,
   type PublicKeyToProfileEntryResponseMap,
 } from "deso-protocol";
+import {
+  getAllUserMessageThreads,
+  getPaginatedMessagesForDmThread,
+  getPaginatedMessagesForGroupThread,
+  type GetPaginatedMessagesForDmThreadRequest,
+  type GetPaginatedMessagesForGroupThreadRequest,
+} from "./desoApi";
 
 // Minimal constants/types adapted from the web repo
-const DEFAULT_KEY_MESSAGING_GROUP_NAME = "default-key";
+export const DEFAULT_KEY_MESSAGING_GROUP_NAME = "default-key";
 
 export type Conversation = {
   firstMessagePublicKey: string;
@@ -80,14 +86,17 @@ export async function getConversationNew(
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
   updatedAllAccessGroups: AccessGroupEntryResponse[];
 }> {
-  const messages = await getAllMessageThreads({
+  const messages = await getAllUserMessageThreads({
     UserPublicKeyBase58Check: userPublicKeyBase58Check,
   });
+
+  const rawThreads =
+    messages.MessageThreads ?? messages.ThreadMessages ?? [];
 
   const { decrypted, updatedAllAccessGroups } =
     await decryptAccessGroupMessagesWithRetry(
       userPublicKeyBase58Check,
-      messages.MessageThreads,
+      rawThreads,
       allAccessGroups
     );
 
@@ -144,4 +153,54 @@ export function decryptAccessGroupMessages(
   return Promise.all(
     (messages || []).map((m) => identity.decryptMessage(m, accessGroups))
   );
+}
+
+export async function fetchPaginatedDmThreadMessages(
+  payload: GetPaginatedMessagesForDmThreadRequest,
+  accessGroups: AccessGroupEntryResponse[]
+): Promise<{
+  decrypted: DecryptedMessageEntryResponse[];
+  updatedAllAccessGroups: AccessGroupEntryResponse[];
+  publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+}> {
+  const response = await getPaginatedMessagesForDmThread(payload);
+  const rawMessages = response.Messages ?? response.ThreadMessages ?? [];
+  const { decrypted, updatedAllAccessGroups } =
+    await decryptAccessGroupMessagesWithRetry(
+      payload.UserGroupOwnerPublicKeyBase58Check,
+      rawMessages,
+      accessGroups
+    );
+
+  return {
+    decrypted,
+    updatedAllAccessGroups,
+    publicKeyToProfileEntryResponseMap:
+      response.PublicKeyToProfileEntryResponse,
+  };
+}
+
+export async function fetchPaginatedGroupThreadMessages(
+  payload: GetPaginatedMessagesForGroupThreadRequest,
+  accessGroups: AccessGroupEntryResponse[]
+): Promise<{
+  decrypted: DecryptedMessageEntryResponse[];
+  updatedAllAccessGroups: AccessGroupEntryResponse[];
+  publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+}> {
+  const response = await getPaginatedMessagesForGroupThread(payload);
+  const rawMessages = response.Messages ?? response.ThreadMessages ?? [];
+  const { decrypted, updatedAllAccessGroups } =
+    await decryptAccessGroupMessagesWithRetry(
+      payload.UserPublicKeyBase58Check,
+      rawMessages,
+      accessGroups
+    );
+
+  return {
+    decrypted,
+    updatedAllAccessGroups,
+    publicKeyToProfileEntryResponseMap:
+      response.PublicKeyToProfileEntryResponse,
+  };
 }

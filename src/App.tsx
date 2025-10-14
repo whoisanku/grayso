@@ -17,9 +17,15 @@ const redirectUri = AuthSession.makeRedirectUri({ useProxy: true } as any);
 configure({
   redirectURI: redirectUri,
   identityPresenter: async (url) => {
+    console.log("Opening auth session with URL:", url);
     const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+    console.log("Auth session result:", result);
     if (result.type === "success") {
-      identity.handleRedirectURI(result.url);
+      console.log("Handling redirect URI:", result.url);
+      await identity.handleRedirectURI(result.url);
+      console.log("Redirect URI handled successfully");
+    } else {
+      console.log("Auth session was not successful:", result.type);
     }
   },
   storageProvider: AsyncStorage,

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useMemo, useCallback } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -6,12 +6,13 @@ import {
   TouchableOpacity,
   View,
   Image,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   ChatType,
   buildProfilePictureUrl,
-  getAllAccessGroups,
 } from "deso-protocol";
 import {
   CompositeNavigationProp,
@@ -24,15 +25,17 @@ import {
   type RootStackParamList,
 } from "../navigation/types";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { getConversationsNewMap } from "../services/conversations";
+import {
+  DEFAULT_KEY_MESSAGING_GROUP_NAME,
+} from "../services/conversations";
 import {
   formatPublicKey,
   FALLBACK_GROUP_IMAGE,
   FALLBACK_PROFILE_IMAGE,
 } from "../utils/deso";
+import { useConversations } from "../hooks/useConversations";
 
 // Navigation types
-
 type MessagesTabNavigationProp = BottomTabNavigationProp<
   HomeTabParamList,
   "Messages"
@@ -49,7 +52,6 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
 >;
 
 // UI-only mock data
-
 type MockConversation = {
   id: string;
   name: string;
@@ -58,212 +60,122 @@ type MockConversation = {
   avatarUri?: string | null;
   isGroup: boolean;
   stackedAvatarUris?: string[];
+  chatType: ChatType;
+  threadPublicKey: string;
+  threadAccessGroupKeyName?: string;
+  userAccessGroupKeyName?: string;
+  partyGroupOwnerPublicKeyBase58Check?: string;
+  lastTimestampNanos?: number;
+};
+
+const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+const formatTimestamp = (timestampMs: number) => {
+  if (!timestampMs) return "";
+  const date = new Date(timestampMs);
+  if (Number.isNaN(date.getTime())) return "";
+  const diff = Date.now() - date.getTime();
+  if (diff < ONE_DAY_IN_MS) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 };
 
 export default function HomeScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const [items, setItems] = useState<MockConversation[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const { conversations, profiles, isLoading, error, reload } = useConversations();
 
-  // Background logging only: list AccessGroup public keys and Message IDs
-  useEffect(() => {
-    if (!currentUser?.PublicKeyBase58Check) return;
+  const items = useMemo<MockConversation[]>(() => {
+    const userPk = currentUser?.PublicKeyBase58Check;
+    if (!userPk) return [];
 
-    async function load() {
-      setIsLoading(true);
-      try {
-        const userPkSafe = currentUser!.PublicKeyBase58Check;
-        const { AccessGroupsOwned, AccessGroupsMember } =
-          await getAllAccessGroups({
-            PublicKeyBase58Check: userPkSafe,
-          });
-        const allGroups = (AccessGroupsOwned || []).concat(
-          AccessGroupsMember || []
-        );
+    return Object.values(conversations).map((c) => {
+      const last = c.messages[0];
+      const info = last?.MessageInfo || {};
+      const time = formatTimestamp(info.TimestampNanos ? info.TimestampNanos / 1e6 : 0);
+      const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
+      const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
+      const senderName = senderPk === userPk ? "You" : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
+      const isGroup = c.ChatType === ChatType.GROUPCHAT;
+      const otherPk = senderPk === userPk ? recipientPk : senderPk;
+      const name = isGroup ? last?.RecipientInfo?.AccessGroupKeyName || "Group" : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
+      const preview = `${senderName}: ${last?.DecryptedMessage || '...'}`;
+      const avatarUri = isGroup ? FALLBACK_GROUP_IMAGE : buildProfilePictureUrl(otherPk, { fallbackImageUrl: FALLBACK_PROFILE_IMAGE });
 
-        const userPk = userPkSafe;
-        const { conversations, publicKeyToProfileEntryResponseMap } =
-          await getConversationsNewMap(userPk, allGroups);
-
-        const list: MockConversation[] = Object.values(conversations).map(
-          (c) => {
-            const last = c.messages[0];
-            const info = last?.MessageInfo || {};
-            const timestampNanosStr =
-              info.TimestampNanosString || String(info.TimestampNanos || "");
-
-            const tsMs = timestampNanosStr
-              ? Number(timestampNanosStr) / 1_000_000
-              : 0;
-            const time = formatTimestamp(tsMs);
-
-            const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
-            const recipientPk =
-              last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
-            const senderName =
-              senderPk === userPk
-                ? "You"
-                : publicKeyToProfileEntryResponseMap?.[senderPk]?.Username ||
-                  formatPublicKey(senderPk);
-
-            let name = "";
-            const isGroup = (c.ChatType as any) === ChatType.GROUPCHAT;
-            if (isGroup) {
-              const ex = (last as any)?.MessageInfo?.ExtraData || {};
-              name =
-                ex.groupChatTitle ||
-                ex.GroupChatTitle ||
-                ex.groupName ||
-                ex.GroupName ||
-                last?.RecipientInfo?.AccessGroupKeyName ||
-                "Group chat";
-            } else {
-              const other = senderPk === userPk ? recipientPk : senderPk;
-              name =
-                publicKeyToProfileEntryResponseMap?.[other]?.Username ||
-                formatPublicKey(other);
-            }
-
-            const bodyRaw = (last as any)?.DecryptedMessage || "";
-            const preview = bodyRaw
-              ? `${senderName}: ${bodyRaw}`
-              : `${senderName}: ...`;
-
-            // Avatar resolution similar to web
-            let avatarUri: string | null = null;
-            if (isGroup) {
-              const ex = (last as any)?.MessageInfo?.ExtraData || {};
-              const groupImageUrl =
-                ex.groupChatImageUrl ||
-                ex.GroupChatImageUrl ||
-                ex.groupChatImageURL ||
-                ex.GroupChatImageURL ||
-                ex.chatImageUrl ||
-                ex.ChatImageUrl ||
-                ex.chatImageURL ||
-                ex.ChatImageURL ||
-                ex.groupImageUrl ||
-                ex.GroupImageUrl ||
-                null;
-              avatarUri = groupImageUrl ?? FALLBACK_GROUP_IMAGE;
-            } else {
-              const other = senderPk === userPk ? recipientPk : senderPk;
-              try {
-                avatarUri = buildProfilePictureUrl(other, {
-                  fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-                });
-              } catch {
-                avatarUri = FALLBACK_PROFILE_IMAGE;
-              }
-            }
-
-            // Small stack for groups
-            let stackedAvatarUris: string[] | undefined;
-            if (isGroup) {
-              const candidates = Array.from(
-                new Set(
-                  [
-                    last?.SenderInfo?.OwnerPublicKeyBase58Check,
-                    last?.RecipientInfo?.OwnerPublicKeyBase58Check,
-                  ].filter(Boolean) as string[]
-                )
-              );
-              stackedAvatarUris = candidates.slice(0, 3).map((pk) => {
-                try {
-                  return buildProfilePictureUrl(pk, {
-                    fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-                  });
-                } catch {
-                  return FALLBACK_PROFILE_IMAGE;
-                }
-              });
-            }
-
-            return {
-              id: `${c.firstMessagePublicKey}-${c.ChatType}-${
-                last?.RecipientInfo?.AccessGroupKeyName || ""
-              }`,
-              name,
-              preview,
-              time,
-              avatarUri,
-              isGroup,
-              stackedAvatarUris,
-            };
-          }
-        );
-
-        // Log identifiers for debugging
-        try {
-          // eslint-disable-next-line no-console
-          console.log(
-            "[Messages] Displaying (derived from web approach):",
-            Object.values(conversations).map((c) => {
-              const last = c.messages[0] as any;
-              const info = last?.MessageInfo || {};
-              const messageId =
-                info?.MessageIdBase58Check ||
-                info?.EncryptedMessageHashHex ||
-                info?.MessageHashHex ||
-                info?.TimestampNanosString ||
-                String(info?.TimestampNanos || "");
-              return {
-                messageId,
-                senderAccessGroupPublicKey:
-                  last?.SenderInfo?.AccessGroupPublicKeyBase58Check ||
-                  last?.SenderInfo?.AccessGroupPublicKey ||
-                  null,
-                recipientAccessGroupPublicKey:
-                  last?.RecipientInfo?.AccessGroupPublicKeyBase58Check ||
-                  last?.RecipientInfo?.AccessGroupPublicKey ||
-                  null,
-              };
-            })
-          );
-        } catch {}
-
-        setItems(list);
-      } catch (e) {
-        console.warn("Failed to load conversations", e);
-        setItems([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    load();
-  }, [currentUser?.PublicKeyBase58Check]);
-
-  const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
-  const formatTimestamp = (timestampMs: number) => {
-    if (!timestampMs) return "";
-    const date = new Date(timestampMs);
-    if (Number.isNaN(date.getTime())) return "";
-    const diff = Date.now() - date.getTime();
-    if (diff < ONE_DAY_IN_MS) {
-      return date.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    }
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
+      return {
+        id: `${c.firstMessagePublicKey}-${c.ChatType}`,
+        name,
+        preview,
+        time,
+        avatarUri,
+        isGroup,
+        chatType: c.ChatType,
+        threadPublicKey: otherPk,
+        lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
+        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+        threadAccessGroupKeyName: isGroup ? last?.RecipientInfo?.AccessGroupKeyName : DEFAULT_KEY_MESSAGING_GROUP_NAME,
+        partyGroupOwnerPublicKeyBase58Check: otherPk,
+      };
     });
-  };
+  }, [conversations, profiles, currentUser?.PublicKeyBase58Check]);
+
+  const handlePress = useCallback(
+    (item: MockConversation) => {
+      if (!currentUser?.PublicKeyBase58Check) {
+        return;
+      }
+
+      navigation.navigate("Conversation", {
+        threadPublicKey: item.threadPublicKey || item.id,
+        chatType: item.chatType,
+        userPublicKey: currentUser.PublicKeyBase58Check,
+        threadAccessGroupKeyName: item.threadAccessGroupKeyName,
+        userAccessGroupKeyName: item.userAccessGroupKeyName,
+        partyGroupOwnerPublicKeyBase58Check:
+          item.partyGroupOwnerPublicKeyBase58Check,
+        lastTimestampNanos: item.lastTimestampNanos,
+        title: item.name,
+      });
+    },
+    [currentUser?.PublicKeyBase58Check, navigation]
+  );
+
+  if (isLoading && items.length === 0) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header removed per spec to match web styling */}
-
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={reload} />}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.7}
+            onPress={() => handlePress(item)}
+          >
             <View style={styles.avatarContainer}>
               {item.avatarUri ? (
                 <Image
@@ -300,7 +212,7 @@ export default function HomeScreen() {
                 {item.preview}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={() => (
           <View style={styles.empty}>
@@ -320,6 +232,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   listContent: {
     paddingHorizontal: 16,
