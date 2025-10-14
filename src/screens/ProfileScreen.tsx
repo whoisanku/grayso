@@ -135,12 +135,16 @@ export default function ProfileScreen() {
   const hodlersCount = currentUser?.UsersWhoHODLYouCount ?? 0;
 
   const handleLogout = useCallback(async () => {
+    if (!currentUser) {
+      console.warn("Logout error: No user is currently logged in.");
+      return;
+    }
     try {
       await identity.logout();
     } catch (logoutError) {
       console.warn("Logout error:", logoutError);
     }
-  }, []);
+  }, [currentUser]);
 
   if (!currentUser && !isLoading) {
     return (

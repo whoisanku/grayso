@@ -27,6 +27,7 @@
     "expo-crypto": "^15.0.7",
     "expo-image-picker": "~17.0.8",
     "expo-standard-web-crypto": "^3.0.7",
+    "expo-web-browser": "~15.0.8",
     "lucide-react-native": "^0.515.0",
     "process": "^0.11.10",
     "react": "19.0.0",
@@ -49,6 +50,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "@types/react-native": "^0.72.8",
+    "@types/react-navigation": "^3.0.8",
+    "metro-react-native-babel-transformer": "^0.77.0",
     "react-native-svg-transformer": "^1.5.1",
     "typescript": "~5.9.2"
   },

@@ -4,16 +4,23 @@ import { identity } from "deso-protocol";
 import { DeSoIdentityContext } from "react-deso-protocol";
 
 const LoginScreen = () => {
-  const { currentUser } = useContext(DeSoIdentityContext);
+  const { currentUser, isLoading } = useContext(DeSoIdentityContext);
+
+  const handleLogin = async () => {
+    try {
+      await identity.login();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login with DeSo</Text>
       <Button
-        title="Login"
-        onPress={() => {
-          identity.login();
-          console.log(currentUser);
-        }}
+        title={isLoading ? 'Logging in...' : 'Login'}
+        onPress={handleLogin}
+        disabled={isLoading}
       />
     </View>
   );

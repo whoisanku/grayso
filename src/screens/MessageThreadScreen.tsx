@@ -110,6 +110,9 @@ export default function MessageThreadScreen() {
   const [error, setError] = useState<string | null>(null);
   const [composerValue, setComposerValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [oldestTimestamp, setOldestTimestamp] = useState<string | null>(null);
 
   const thread = route.params.thread;
   const isGroupChat = route.params.isGroupChat;
@@ -221,7 +224,7 @@ export default function MessageThreadScreen() {
   }, [thread.MessageInfo.TimestampNanos, thread.MessageInfo.TimestampNanosString]);
 
   const fetchMessages = useCallback(
-    async (options?: { refreshing?: boolean; shouldAbort?: () => boolean }) => {
+    async (options?: { refreshing?: boolean; shouldAbort?: () => boolean; loadMore?: boolean }) => {
       if (!currentUser?.PublicKeyBase58Check) {
         setMessages([]);
         setError("Sign in to view this conversation.");
@@ -238,6 +241,8 @@ export default function MessageThreadScreen() {
 
       if (options?.refreshing) {
         setIsRefreshing(true);
+      } else if (options?.loadMore) {
+        setIsLoadingMore(true);
       } else {
         setIsLoading(true);
       }
@@ -247,13 +252,26 @@ export default function MessageThreadScreen() {
         let profileMap: Record<string, ProfileEntryResponse | null> = {};
 
         if (isGroupChat) {
-          const response = await getPaginatedGroupChatThread({
-            UserPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
-            AccessGroupKeyName: groupAccessGroupKeyName ?? "default-key",
-            StartTimeStampString: startTimestampString,
+          // For group chats, use the group owner's public key (RecipientInfo)
+          const groupOwnerPublicKey = thread.RecipientInfo.OwnerPublicKeyBase58Check;
+          console.log("Fetching group chat messages with params:", {
+            UserPublicKeyBase58Check: groupOwnerPublicKey,
+            AccessGroupKeyName: groupAccessGroupKeyName,
             MaxMessagesToFetch: MAX_MESSAGES_TO_FETCH,
           });
+          // Use the oldest timestamp for pagination, or future timestamp for initial load
+          const timestamp = options?.loadMore && oldestTimestamp
+            ? oldestTimestamp
+            : Math.trunc((Date.now() + 365 * 24 * 60 * 60 * 1000) * 1_000_000).toString();
+          const response = await getPaginatedGroupChatThread({
+            UserPublicKeyBase58Check: groupOwnerPublicKey,
+            AccessGroupKeyName: groupAccessGroupKeyName ?? "default-key",
+            StartTimeStampString: timestamp,
+            MaxMessagesToFetch: MAX_MESSAGES_TO_FETCH,
+          });
+          console.log("Group chat API response:", response);
           rawMessages = response.GroupChatMessages ?? [];
+          console.log("Raw messages count:", rawMessages.length);
           profileMap = response.PublicKeyToProfileEntryResponse ?? {};
         } else {
           const isSender =
@@ -279,10 +297,19 @@ export default function MessageThreadScreen() {
           return;
         }
 
+        console.log("Access groups available:", accessGroups.length);
+        console.log("Starting decryption for", rawMessages.length, "messages");
+        
         const decrypted = await Promise.all(
           rawMessages.map(async (message, index) => {
             try {
-              return await identity.decryptMessage(message, accessGroups);
+              if (!currentUser?.PublicKeyBase58Check) {
+                throw new Error("Cannot decrypt messages without a logged in user");
+              }
+              console.log(`Decrypting message ${index + 1}/${rawMessages.length}`);
+              const result = await identity.decryptMessage(message, accessGroups);
+              console.log(`Message ${index + 1} decrypted:`, result.DecryptedMessage?.substring(0, 50));
+              return result;
             } catch (decryptError) {
               console.warn("Failed to decrypt message", decryptError);
               const fallbackIsSender =
@@ -298,6 +325,8 @@ export default function MessageThreadScreen() {
             }
           })
         );
+        
+        console.log("Decryption complete, decrypted count:", decrypted.length);
 
         decrypted.sort((a, b) => {
           const aTimestamp =
@@ -340,7 +369,24 @@ export default function MessageThreadScreen() {
           };
         });
 
-        setMessages(formatted);
+        console.log("Formatted Messages:", formatted);
+        
+        // Update messages - append if loading more, replace otherwise
+        if (options?.loadMore) {
+          setMessages(prev => [...prev, ...formatted]);
+        } else {
+          setMessages(formatted);
+        }
+        
+        // Track oldest timestamp for pagination
+        if (formatted.length > 0) {
+          const oldest = formatted[formatted.length - 1];
+          const oldestNanos = oldest.timestamp ? (oldest.timestamp * 1_000_000).toString() : null;
+          setOldestTimestamp(oldestNanos);
+        }
+        
+        // Check if there are more messages to load
+        setHasMoreMessages(rawMessages.length === MAX_MESSAGES_TO_FETCH);
         setError(null);
       } catch (threadError) {
         console.warn("Failed to load thread", threadError);
@@ -355,6 +401,8 @@ export default function MessageThreadScreen() {
 
         if (options?.refreshing) {
           setIsRefreshing(false);
+        } else if (options?.loadMore) {
+          setIsLoadingMore(false);
         } else {
           setIsLoading(false);
         }
@@ -387,6 +435,12 @@ export default function MessageThreadScreen() {
   const handleRefresh = useCallback(() => {
     void fetchMessages({ refreshing: true });
   }, [fetchMessages]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMoreMessages) {
+      void fetchMessages({ loadMore: true });
+    }
+  }, [fetchMessages, hasMoreMessages, isLoadingMore]);
 
   const handleSend = useCallback(async () => {
     const trimmed = composerValue.trim();
@@ -528,6 +582,21 @@ export default function MessageThreadScreen() {
         renderItem={renderMessage}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={listEmptyComponent}
+        ListFooterComponent={
+          hasMoreMessages && messages.length > 0 ? (
+            <TouchableOpacity
+              style={styles.loadMoreButton}
+              onPress={handleLoadMore}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? (
+                <ActivityIndicator size="small" color="#2563eb" />
+              ) : (
+                <Text style={styles.loadMoreText}>Load More Messages</Text>
+              )}
+            </TouchableOpacity>
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -722,5 +791,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#0f172a",
+  },
+  loadMoreButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    marginVertical: 8,
+  },
+  loadMoreText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

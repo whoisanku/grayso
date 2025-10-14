@@ -119,18 +119,23 @@ export default function HomeScreen() {
         return;
       }
 
-      if (!currentUser?.PublicKeyBase58Check) {
-        setMessageThreads([]);
-        setError(null);
+      const finalizeLoading = () => {
         if (options?.refreshing) {
           setIsRefreshing(false);
         } else {
           setIsLoading(false);
         }
+      };
+
+      if (!currentUser?.PublicKeyBase58Check) {
+        setMessageThreads([]);
+        setError(null);
+        finalizeLoading();
         return;
       }
 
       if (options?.shouldAbort?.()) {
+        finalizeLoading();
         return;
       }
 
@@ -146,6 +151,7 @@ export default function HomeScreen() {
         });
 
         if (options?.shouldAbort?.()) {
+          finalizeLoading();
           return;
         }
 
@@ -155,6 +161,9 @@ export default function HomeScreen() {
         const decryptedThreads = await Promise.all(
           threads.map(async (thread, index) => {
             try {
+              if (!currentUser?.PublicKeyBase58Check) {
+                throw new Error("Cannot decrypt messages without a logged in user");
+              }
               const decrypted = await identity.decryptMessage(
                 thread,
                 accessGroups
@@ -177,6 +186,7 @@ export default function HomeScreen() {
         );
 
         if (options?.shouldAbort?.()) {
+          finalizeLoading();
           return;
         }
 
@@ -317,6 +327,7 @@ export default function HomeScreen() {
         setError(null);
       } catch (fetchError) {
         if (options?.shouldAbort?.()) {
+          finalizeLoading();
           return;
         }
 
@@ -327,14 +338,11 @@ export default function HomeScreen() {
         setMessageThreads([]);
       } finally {
         if (options?.shouldAbort?.()) {
+          finalizeLoading();
           return;
         }
 
-        if (options?.refreshing) {
-          setIsRefreshing(false);
-        } else {
-          setIsLoading(false);
-        }
+        finalizeLoading();
       }
     },
     [

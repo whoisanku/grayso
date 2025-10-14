@@ -6,10 +6,13 @@ import { TextDecoder, TextEncoder } from "text-encoding";
 
 import "react-native-url-polyfill/auto";
 
-if (typeof global.TextEncoder === "undefined") {
-  global.TextEncoder = TextEncoder;
+const g = globalThis as typeof globalThis &
+  Partial<{ TextEncoder: typeof TextEncoder; TextDecoder: typeof TextDecoder }>;
+
+if (typeof g.TextEncoder === "undefined") {
+  g.TextEncoder = TextEncoder;
 }
 
-if (typeof global.TextDecoder === "undefined") {
-  global.TextDecoder = TextDecoder;
+if (typeof g.TextDecoder === "undefined") {
+  g.TextDecoder = TextDecoder;
 }

@@ -19,6 +19,12 @@
     "scheme": "starterapp",
     "ios": {
       "bundleIdentifier": "com.anonymous.starter-app"
-    }
+    },
+    "android": {
+      "package": "com.anonymous.starterapp"
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }
