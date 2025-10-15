@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { configure, identity } from "deso-protocol";
+import { getTransactionSpendingLimits } from "./utils/deso";
 import RootNavigator from "./navigation/RootNavigator";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -30,6 +31,7 @@ configure({
   },
   storageProvider: AsyncStorage,
   appName: "Starter App",
+  spendingLimitOptions: getTransactionSpendingLimits(""),
 });
 
 export default function App() {

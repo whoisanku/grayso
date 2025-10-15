@@ -1,6 +1,13 @@
 import React, { useContext, useState, useEffect } from "react";
-import { View, Text, Button, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  Button,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { identity } from "deso-protocol";
+import { getTransactionSpendingLimits } from "../utils/deso";
 import { DeSoIdentityContext } from "react-deso-protocol";
 
 const LoginScreen = () => {
@@ -22,7 +29,10 @@ const LoginScreen = () => {
     try {
       setLocalLoading(true);
       console.log("Starting login...");
-      const result = await identity.login();
+      // Provide spending limits so derived key is authorized for messaging
+      const result = await identity.login({
+        spendingLimitOptions: getTransactionSpendingLimits(""),
+      } as any);
       console.log("Login result:", result);
       // Don't set loading to false here - let the context handle it
     } catch (e) {
@@ -44,7 +54,7 @@ const LoginScreen = () => {
         <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
       )}
       <Button
-        title={showLoading ? 'Logging in...' : 'Login'}
+        title={showLoading ? "Logging in..." : "Login"}
         onPress={handleLogin}
         disabled={showLoading}
       />

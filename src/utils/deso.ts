@@ -1,4 +1,7 @@
-import { buildProfilePictureUrl } from "deso-protocol";
+import {
+  buildProfilePictureUrl,
+  type TransactionSpendingLimitResponseOptions,
+} from "deso-protocol";
 import type { ProfileEntryResponse } from "deso-protocol";
 
 export const FALLBACK_PROFILE_IMAGE =
@@ -59,4 +62,35 @@ export function getProfileImageUrl(
   return buildProfilePictureUrl(publicKey, {
     fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
   });
+}
+
+export function getTransactionSpendingLimits(
+  publicKey: string
+): TransactionSpendingLimitResponseOptions {
+  const UNLIMITED = "UNLIMITED" as unknown as number; // the SDK accepts this string sentinel
+  return {
+    GlobalDESOLimit: 5 * 1e9,
+    TransactionCountLimitMap: {
+      AUTHORIZE_DERIVED_KEY: 1,
+      NEW_MESSAGE: UNLIMITED as any,
+    } as any,
+    AccessGroupLimitMap: [
+      {
+        AccessGroupOwnerPublicKeyBase58Check: publicKey,
+        ScopeType: "Any" as any,
+        AccessGroupKeyName: "",
+        OperationType: "Any" as any,
+        OpCount: UNLIMITED as any,
+      },
+    ],
+    AccessGroupMemberLimitMap: [
+      {
+        AccessGroupOwnerPublicKeyBase58Check: publicKey,
+        ScopeType: "Any" as any,
+        AccessGroupKeyName: "",
+        OperationType: "Any" as any,
+        OpCount: UNLIMITED as any,
+      },
+    ],
+  } as any;
 }

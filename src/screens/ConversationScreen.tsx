@@ -17,6 +17,8 @@ import {
   Text,
   View,
   Image,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 import {
   AccessGroupEntryResponse,
@@ -26,6 +28,7 @@ import {
 } from "deso-protocol";
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
+  encryptAndSendNewMessage,
   fetchPaginatedDmThreadMessages,
   fetchPaginatedGroupThreadMessages,
 } from "../services/conversations";
@@ -409,6 +412,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </View>
         )}
       />
+
+      <Composer
+        isGroupChat={isGroupChat}
+        userPublicKey={userPublicKey}
+        counterPartyPublicKey={counterPartyPublicKey}
+        threadAccessGroupKeyName={threadAccessGroupKeyName}
+        userAccessGroupKeyName={userAccessGroupKeyName}
+        onSent={() => loadMessages(true, true)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -550,4 +562,105 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: 12,
   },
+  composerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    backgroundColor: "#fff",
+  },
+  composerInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 10 : 8,
+    marginRight: 8,
+  },
+  composerSend: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+  },
+  composerSendText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
 });
+
+type ComposerProps = {
+  isGroupChat: boolean;
+  userPublicKey: string;
+  counterPartyPublicKey: string;
+  threadAccessGroupKeyName: string;
+  userAccessGroupKeyName: string;
+  onSent?: () => void;
+};
+
+function Composer({
+  isGroupChat,
+  userPublicKey,
+  counterPartyPublicKey,
+  threadAccessGroupKeyName,
+  userAccessGroupKeyName,
+  onSent,
+}: ComposerProps) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const onSend = useCallback(async () => {
+    if (!text.trim() || sending) return;
+    try {
+      setSending(true);
+
+      // Use shared encryptAndSendNewMessage from services
+      await encryptAndSendNewMessage(
+        text.trim(),
+        userPublicKey,
+        counterPartyPublicKey,
+        threadAccessGroupKeyName,
+        userAccessGroupKeyName
+      );
+
+      // Optimistic clear and refresh
+      setText("");
+      onSent && onSent();
+    } catch (e) {
+      console.error("Send message error", e);
+    } finally {
+      setSending(false);
+    }
+  }, [
+    text,
+    sending,
+    isGroupChat,
+    userPublicKey,
+    threadAccessGroupKeyName,
+    onSent,
+  ]);
+
+  return (
+    <View style={styles.composerContainer}>
+      <TextInput
+        style={styles.composerInput}
+        placeholder={isGroupChat ? "Message group" : "Message"}
+        value={text}
+        onChangeText={setText}
+        multiline
+      />
+      <TouchableOpacity
+        style={styles.composerSend}
+        onPress={onSend}
+        disabled={sending || !text.trim()}
+      >
+        <Text style={styles.composerSendText}>
+          {sending ? "Sending" : "Send"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
