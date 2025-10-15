@@ -1,3 +1,4 @@
+import { buildProfilePictureUrl } from "deso-protocol";
 import type { ProfileEntryResponse } from "deso-protocol";
 
 export const FALLBACK_PROFILE_IMAGE =
@@ -25,3 +26,37 @@ export const getProfileDisplayName = (
 
   return formatPublicKey(publicKey);
 };
+
+// Deterministically generate a hex color from a string
+function generateHexColorFromString(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+  const r = (hash >> 16) & 0xff;
+  const g = (hash >> 8) & 0xff;
+  const b = hash & 0xff;
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `${toHex(Math.abs(r))}${toHex(Math.abs(g))}${toHex(Math.abs(b))}`;
+}
+
+export function getProfileImageUrl(
+  publicKey?: string,
+  opts?: { groupChat?: boolean }
+): string {
+  if (!publicKey) {
+    return FALLBACK_PROFILE_IMAGE;
+  }
+
+  if (opts?.groupChat) {
+    const sanitized = publicKey.replace(/[^a-zA-Z0-9]+/g, "");
+    const bg = generateHexColorFromString(publicKey.slice(0, 2));
+    return `https://ui-avatars.com/api/?name=${sanitized}&background=${bg}`;
+  }
+
+  // Use deso-protocol helper for consistent CDN URL with fallback
+  return buildProfilePictureUrl(publicKey, {
+    fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+  });
+}

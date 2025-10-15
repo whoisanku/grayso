@@ -16,18 +16,25 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
 } from "react-native";
 import {
   AccessGroupEntryResponse,
   ChatType,
   DecryptedMessageEntryResponse,
+  PublicKeyToProfileEntryResponseMap,
 } from "deso-protocol";
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
   fetchPaginatedDmThreadMessages,
   fetchPaginatedGroupThreadMessages,
 } from "../services/conversations";
-import { formatPublicKey } from "../utils/deso";
+import {
+  FALLBACK_PROFILE_IMAGE,
+  formatPublicKey,
+  getProfileDisplayName,
+  getProfileImageUrl,
+} from "../utils/deso";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -58,6 +65,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [cursorTimestamp, setCursorTimestamp] = useState<number | undefined>(
     lastTimestampNanos
+  );
+  const [profiles, setProfiles] = useState<PublicKeyToProfileEntryResponseMap>(
+    {}
   );
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
@@ -91,7 +101,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
       }
 
       return Array.from(map.values()).sort(
-        (a, b) => (b.MessageInfo?.TimestampNanos ?? 0) - (a.MessageInfo?.TimestampNanos ?? 0)
+        (a, b) =>
+          (b.MessageInfo?.TimestampNanos ?? 0) -
+          (a.MessageInfo?.TimestampNanos ?? 0)
       );
     },
     []
@@ -120,9 +132,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
         let result: Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>;
 
         if (isGroupChat) {
-          const groupChatTimestamp = (lastTimestampNanos ?? Date.now() * 1_000_000) * 10;
+          const groupChatTimestamp =
+            (lastTimestampNanos ?? Date.now() * 1_000_000) * 10;
           const payload = {
-            UserPublicKeyBase58Check: recipientInfo?.OwnerPublicKeyBase58Check ?? messages[0]?.RecipientInfo?.OwnerPublicKeyBase58Check ?? userPublicKey,
+            UserPublicKeyBase58Check:
+              recipientInfo?.OwnerPublicKeyBase58Check ??
+              messages[0]?.RecipientInfo?.OwnerPublicKeyBase58Check ??
+              userPublicKey,
             AccessGroupKeyName: threadAccessGroupKeyName,
             MaxMessagesToFetch: PAGE_SIZE,
             StartTimeStamp: groupChatTimestamp,
@@ -166,18 +182,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
           (msg): msg is DecryptedMessageEntryResponse => Boolean(msg)
         );
 
-        console.log("[ConversationScreen] Decrypted messages:", decryptedMessages.map(m => ({
-          hasDecryptedMessage: !!m.DecryptedMessage,
-          decryptedMessage: m.DecryptedMessage?.substring(0, 50),
-          error: (m as any).error,
-          chatType: m.ChatType,
-        })));
+        console.log(
+          "[ConversationScreen] Decrypted messages:",
+          decryptedMessages.map((m) => ({
+            hasDecryptedMessage: !!m.DecryptedMessage,
+            decryptedMessage: m.DecryptedMessage?.substring(0, 50),
+            error: (m as any).error,
+            chatType: m.ChatType,
+          }))
+        );
 
         setMessages((prev) => {
           if (initial) {
             return [...decryptedMessages].sort(
               (a, b) =>
-                (b.MessageInfo?.TimestampNanos ?? 0) - (a.MessageInfo?.TimestampNanos ?? 0)
+                (b.MessageInfo?.TimestampNanos ?? 0) -
+                (a.MessageInfo?.TimestampNanos ?? 0)
             );
           }
           return mergeMessages(prev, decryptedMessages);
@@ -186,13 +206,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
         accessGroupsRef.current = result.updatedAllAccessGroups;
         setAccessGroups(result.updatedAllAccessGroups);
 
+        // Merge in any new profiles from the result for rendering avatars/usernames
+        if (result.publicKeyToProfileEntryResponseMap) {
+          setProfiles((prev) => ({
+            ...prev,
+            ...result.publicKeyToProfileEntryResponseMap,
+          }));
+        }
+
         const nextHasMore = decryptedMessages.length === PAGE_SIZE;
         hasMoreRef.current = nextHasMore;
         setHasMore(nextHasMore);
 
         const oldestMessageInBatch = decryptedMessages.sort(
           (a, b) =>
-            (a.MessageInfo?.TimestampNanos ?? 0) - (b.MessageInfo?.TimestampNanos ?? 0)
+            (a.MessageInfo?.TimestampNanos ?? 0) -
+            (b.MessageInfo?.TimestampNanos ?? 0)
         )[0];
 
         if (oldestMessageInBatch?.MessageInfo?.TimestampNanos) {
@@ -207,7 +236,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
           setCursorTimestamp(undefined);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load messages");
+        setError(
+          err instanceof Error ? err.message : "Failed to load messages"
+        );
       } finally {
         isLoadingRef.current = false;
         setIsLoading(false);
@@ -247,7 +278,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
         await loadMessages(true, false);
       } catch (err) {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : "Failed to load messages");
+          setError(
+            err instanceof Error ? err.message : "Failed to load messages"
+          );
         }
       }
     };
@@ -257,21 +290,59 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return () => {
       isMounted = false;
     };
-  }, [counterPartyPublicKey, userPublicKey, chatType, threadAccessGroupKeyName]);
+  }, [
+    counterPartyPublicKey,
+    userPublicKey,
+    chatType,
+    threadAccessGroupKeyName,
+  ]);
 
-  const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({ item }) => {
-    const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check;
+  const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({
+    item,
+  }) => {
+    const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+    const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
-    const preview = item.DecryptedMessage || (hasError ? `Error: ${hasError}` : "Decrypting...");
+    const messageText =
+      item.DecryptedMessage ||
+      (hasError ? `Error: ${hasError}` : "Decrypting...");
     const timestamp = item.MessageInfo?.TimestampNanos;
 
+    const senderProfile = profiles[senderPk];
+    const displayName = getProfileDisplayName(senderProfile, senderPk);
+    const avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat });
+
     return (
-      <View style={styles.messageContainer}>
-        <Text style={styles.sender}>{formatPublicKey(senderPk ?? "")}</Text>
-        <Text style={styles.messageBody}>{preview}</Text>
-        {timestamp ? (
-          <Text style={styles.timestamp}>{formatTimestamp(timestamp)}</Text>
-        ) : null}
+      <View style={[styles.row, isMine ? styles.rowRight : styles.rowLeft]}>
+        {!isMine && <Image source={{ uri: avatarUri }} style={styles.avatar} />}
+
+        <View
+          style={[
+            styles.bubble,
+            isMine ? styles.bubbleRight : styles.bubbleLeft,
+          ]}
+        >
+          <Text
+            style={[styles.name, isMine ? styles.nameRight : styles.nameLeft]}
+          >
+            {displayName}
+          </Text>
+          <Text style={[styles.messageBody, isMine && styles.messageBodyRight]}>
+            {messageText}
+          </Text>
+          {timestamp ? (
+            <Text
+              style={[
+                styles.timestamp,
+                isMine ? styles.timestampRight : styles.timestampLeft,
+              ]}
+            >
+              {formatTimestamp(timestamp)}
+            </Text>
+          ) : null}
+        </View>
+
+        {isMine && <Image source={{ uri: avatarUri }} style={styles.avatar} />}
       </View>
     );
   };
@@ -387,20 +458,74 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#f1f5f9",
   },
+  // Message row alignment
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  rowLeft: {
+    justifyContent: "flex-start",
+  },
+  rowRight: {
+    justifyContent: "flex-end",
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginHorizontal: 8,
+    backgroundColor: "#e2e8f0",
+  },
+  bubble: {
+    maxWidth: "75%",
+    padding: 10,
+    borderRadius: 14,
+  },
+  bubbleLeft: {
+    backgroundColor: "#f1f5f9",
+    borderTopLeftRadius: 4,
+  },
+  bubbleRight: {
+    backgroundColor: "#dcfce7",
+    borderTopRightRadius: 4,
+  },
   sender: {
     fontSize: 12,
     fontWeight: "600",
     color: "#475569",
     marginBottom: 4,
   },
+  name: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  nameLeft: {
+    color: "#475569",
+    textAlign: "left",
+  },
+  nameRight: {
+    color: "#166534",
+    textAlign: "right",
+  },
   messageBody: {
     fontSize: 14,
     color: "#0f172a",
+  },
+  messageBodyRight: {
+    textAlign: "right",
   },
   timestamp: {
     marginTop: 6,
     fontSize: 11,
     color: "#94a3b8",
+  },
+  timestampLeft: {
+    textAlign: "left",
+  },
+  timestampRight: {
+    textAlign: "right",
   },
   errorBanner: {
     padding: 12,
