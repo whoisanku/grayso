@@ -66,9 +66,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [cursorTimestamp, setCursorTimestamp] = useState<number | undefined>(
-    undefined
-  );
   const [profiles, setProfiles] = useState<PublicKeyToProfileEntryResponseMap>(
     {}
   );
@@ -78,7 +75,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
 
   const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
-  const cursorTimestampRef = useRef<number | undefined>(undefined);
+  const paginationCursorRef = useRef<string | null>(null);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
 
@@ -125,6 +122,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
         } else {
           setIsLoading(true);
         }
+        paginationCursorRef.current = null;
+        hasMoreRef.current = true;
+        setHasMore(true);
       } else {
         setIsLoading(true);
       }
@@ -132,7 +132,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
       setError(null);
 
       try {
-        let result: Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>;
+        let pageInfo: { hasNextPage: boolean; endCursor: string | null } | null =
+          null;
+        let result:
+          | Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>
+          | Awaited<ReturnType<typeof fetchPaginatedGroupThreadMessages>>;
 
         if (isGroupChat) {
           const groupChatTimestamp =
@@ -175,14 +179,16 @@ export default function ConversationScreen({ navigation, route }: Props) {
             payload,
           });
 
-          result = await fetchPaginatedDmThreadMessages(
+          const dmResult = await fetchPaginatedDmThreadMessages(
             payload,
             accessGroupsRef.current,
             {
-              beforeTimestampNanos: initial ? undefined : cursorTimestampRef.current,
+              afterCursor: initial ? null : paginationCursorRef.current,
               limit: PAGE_SIZE,
             }
           );
+          result = dmResult;
+          pageInfo = dmResult.pageInfo;
         }
 
         const decryptedMessages = result.decrypted.filter(
@@ -221,27 +227,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
           }));
         }
 
-        const nextHasMore = decryptedMessages.length === PAGE_SIZE;
-        hasMoreRef.current = nextHasMore;
-        setHasMore(nextHasMore);
-
-        if (!initial && decryptedMessages.length > 0) {
-          const oldestMessageInBatch = decryptedMessages.sort(
-            (a, b) =>
-              (a.MessageInfo?.TimestampNanos ?? 0) -
-              (b.MessageInfo?.TimestampNanos ?? 0)
-          )[0];
-
-          if (oldestMessageInBatch?.MessageInfo?.TimestampNanos) {
-            const timestampNum = typeof oldestMessageInBatch.MessageInfo.TimestampNanos === 'number'
-              ? oldestMessageInBatch.MessageInfo.TimestampNanos
-              : Number(oldestMessageInBatch.MessageInfo.TimestampNanos);
-            
-            if (Number.isSafeInteger(timestampNum) && timestampNum > 0) {
-              cursorTimestampRef.current = timestampNum - 1;
-              setCursorTimestamp(timestampNum - 1);
-            }
-          }
+        if (!isGroupChat && pageInfo) {
+          const nextCursor = pageInfo.endCursor ?? null;
+          const nextHasMore =
+            Boolean(pageInfo.hasNextPage) && Boolean(nextCursor);
+          paginationCursorRef.current = nextCursor;
+          hasMoreRef.current = nextHasMore;
+          setHasMore(nextHasMore);
+        } else {
+          const nextHasMore = decryptedMessages.length === PAGE_SIZE;
+          paginationCursorRef.current = null;
+          hasMoreRef.current = nextHasMore;
+          setHasMore(nextHasMore);
         }
       } catch (err) {
         setError(
@@ -270,7 +267,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const bootstrap = async () => {
       // Reset state for the new conversation
       setMessages([]);
-      setCursorTimestamp(lastTimestampNanos);
       setAccessGroups([]);
       setHasMore(true);
       setError(null);
@@ -278,7 +274,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
       setIsRefreshing(false);
 
       accessGroupsRef.current = [];
-      cursorTimestampRef.current = lastTimestampNanos;
+      paginationCursorRef.current = null;
       hasMoreRef.current = true;
       isLoadingRef.current = false;
 

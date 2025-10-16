@@ -278,38 +278,36 @@ export async function fetchPaginatedDmThreadMessages(
   payload: GetPaginatedMessagesForDmThreadRequest,
   accessGroups: AccessGroupEntryResponse[],
   options: {
-    beforeTimestampNanos?: number;
+    afterCursor?: string | null;
     limit?: number;
+    fallbackBeforeTimestampNanos?: number;
   } = {}
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
 }> {
-  const { beforeTimestampNanos, limit = payload.MaxMessagesToFetch ?? 10 } = options;
-
-  // Validate timestamp is safe to use
-  const safeTimestamp = beforeTimestampNanos && Number.isSafeInteger(beforeTimestampNanos)
-    ? beforeTimestampNanos
-    : undefined;
+  const {
+    afterCursor,
+    limit = payload.MaxMessagesToFetch ?? 10,
+  } = options;
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     console.log("[fetchPaginatedDmThreadMessages] 🚀 Attempting GraphQL fetch", {
       userPublicKey: payload.UserGroupOwnerPublicKeyBase58Check,
       counterPartyPublicKey: payload.PartyGroupOwnerPublicKeyBase58Check,
-      beforeTimestampNanos: safeTimestamp,
-      originalTimestamp: beforeTimestampNanos,
-      isSafe: beforeTimestampNanos ? Number.isSafeInteger(beforeTimestampNanos) : 'N/A',
+      afterCursor,
       limit,
     });
   }
 
   try {
-    const nodes = await fetchDmMessagesViaGraphql({
+    const { nodes, pageInfo } = await fetchDmMessagesViaGraphql({
       userPublicKey: payload.UserGroupOwnerPublicKeyBase58Check,
       counterPartyPublicKey: payload.PartyGroupOwnerPublicKeyBase58Check,
-      beforeTimestampNanos: safeTimestamp,
       limit,
+      afterCursor,
     });
 
     const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
@@ -319,6 +317,7 @@ export async function fetchPaginatedDmThreadMessages(
       console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
         count: nodes.length,
         nodes,
+        pageInfo,
       });
     }
 
@@ -414,6 +413,7 @@ export async function fetchPaginatedDmThreadMessages(
         decrypted: [],
         updatedAllAccessGroups: accessGroups,
         publicKeyToProfileEntryResponseMap,
+        pageInfo,
       };
     }
 
@@ -435,6 +435,7 @@ export async function fetchPaginatedDmThreadMessages(
       decrypted,
       updatedAllAccessGroups,
       publicKeyToProfileEntryResponseMap,
+      pageInfo,
     };
   } catch (error) {
     if (typeof __DEV__ !== "undefined" && __DEV__) {
@@ -469,6 +470,10 @@ export async function fetchPaginatedDmThreadMessages(
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
+    pageInfo: {
+      hasNextPage: false,
+      endCursor: null,
+    },
   };
 }
 

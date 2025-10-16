@@ -3,16 +3,28 @@ import type { ProfileEntryResponse } from "deso-protocol";
 const DEFAULT_GRAPHQL_URL = "https://graphql-prod.deso.com/graphql";
 
 const GRAPHQL_QUERY = `
-  query Messages($filter: MessageFilter, $orderBy: [MessagesOrderBy!]) {
-    messages(filter: $filter, orderBy: $orderBy) {
+  query Messages(
+    $filter: MessageFilter
+    $orderBy: [MessagesOrderBy!]
+    $first: Int
+    $before: Cursor
+    $after: Cursor
+  ) {
+    messages(
+      filter: $filter
+      orderBy: $orderBy
+      first: $first
+      before: $before
+      after: $after
+    ) {
       nodes {
-        id
         encryptedText
         timestamp
         senderAccessGroupOwnerPublicKey
         recipientAccessGroupOwnerPublicKey
         senderAccessGroupPublicKey
         recipientAccessGroupPublicKey
+        id
         isGroupChatMessage
         senderAccessGroup {
           accessGroupKeyName
@@ -29,6 +41,10 @@ const GRAPHQL_QUERY = `
           username
           publicKey
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -119,6 +135,10 @@ type GraphqlMessagesResponse = {
   data?: {
     messages?: {
       nodes?: GraphqlMessageNode[];
+      pageInfo?: {
+        hasNextPage?: boolean | null;
+        endCursor?: string | null;
+      } | null;
     } | null;
   } | null;
   errors?: { message?: string }[];
@@ -129,7 +149,8 @@ type FetchDmMessagesInput = {
   counterPartyPublicKey: string;
   limit: number;
   isGroupChat?: boolean;
-  beforeTimestampNanos?: number;
+  afterCursor?: string | null;
+  beforeCursor?: string | null;
   graphqlEndpoint?: string;
 };
 
@@ -176,10 +197,14 @@ export async function fetchDmMessagesViaGraphql({
   userPublicKey,
   counterPartyPublicKey,
   limit,
-  beforeTimestampNanos,
+  afterCursor,
+  beforeCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
     DEFAULT_GRAPHQL_URL,
-}: FetchDmMessagesInput): Promise<GraphqlMessageNode[]> {
+}: FetchDmMessagesInput): Promise<{
+  nodes: GraphqlMessageNode[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}> {
   const participantsFilter = [
     {
       and: [
@@ -216,32 +241,32 @@ export async function fetchDmMessagesViaGraphql({
     isGroupChatMessage: { equalTo: false },
   };
 
-  if (beforeTimestampNanos && Number.isSafeInteger(beforeTimestampNanos)) {
-    // Ensure timestamp is properly formatted as a string for GraphQL
-    const timestampStr = beforeTimestampNanos.toString();
-    if (typeof __DEV__ !== "undefined" && __DEV__) {
-      console.log("[fetchDmMessagesViaGraphql] Using timestamp filter", {
-        original: beforeTimestampNanos,
-        asString: timestampStr,
-        length: timestampStr.length,
-      });
-    }
-    filter.timestamp = { lessThan: timestampStr };
+  const variables: Record<string, unknown> = {
+    filter,
+    orderBy: ["TIMESTAMP_DESC"],
+  };
+
+  if (Number.isFinite(limit) && limit > 0) {
+    variables.first = limit;
+  }
+
+  if (afterCursor) {
+    variables.after = afterCursor;
+  }
+
+  if (beforeCursor) {
+    variables.before = beforeCursor;
   }
 
   const body = {
     query: GRAPHQL_QUERY,
-    variables: {
-      filter,
-      orderBy: ["TIMESTAMP_DESC"],
-    },
+    variables,
   };
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     console.log("[fetchDmMessagesViaGraphql] request payload", {
       userPublicKey,
       counterPartyPublicKey,
-      beforeTimestampNanos,
       variables: body.variables,
     });
   }
@@ -273,18 +298,30 @@ export async function fetchDmMessagesViaGraphql({
   }
 
   const nodes = json.data?.messages?.nodes ?? [];
+  const pageInfo = json.data?.messages?.pageInfo ?? {};
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     console.log("[fetchDmMessagesViaGraphql] messages nodes", {
       count: Array.isArray(nodes) ? nodes.length : 0,
       firstNode: Array.isArray(nodes) ? nodes[0] : null,
+      pageInfo,
     });
   }
   if (!Array.isArray(nodes)) {
-    return [];
+    return {
+      nodes: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
   }
 
-  return nodes.slice(0, limit);
+  return {
+    nodes,
+    pageInfo: {
+      hasNextPage: Boolean(pageInfo?.hasNextPage),
+      endCursor:
+        typeof pageInfo?.endCursor === "string" ? pageInfo.endCursor : null,
+    },
+  };
 }
 
 export function buildDefaultProfileEntry(
