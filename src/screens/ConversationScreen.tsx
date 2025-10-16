@@ -13,7 +13,6 @@ import {
   ListRenderItem,
   Platform,
   RefreshControl,
-  StyleSheet,
   Text,
   View,
   Image,
@@ -132,8 +131,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
       setError(null);
 
       try {
-        let pageInfo: { hasNextPage: boolean; endCursor: string | null } | null =
-          null;
+        let pageInfo: {
+          hasNextPage: boolean;
+          endCursor: string | null;
+        } | null = null;
         let result:
           | Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>
           | Awaited<ReturnType<typeof fetchPaginatedGroupThreadMessages>>;
@@ -317,36 +318,56 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat });
 
     return (
-      <View style={[styles.row, isMine ? styles.rowRight : styles.rowLeft]}>
-        {!isMine && <Image source={{ uri: avatarUri }} style={styles.avatar} />}
+      <View
+        className={`mb-3 flex-row items-end ${
+          isMine ? "justify-end" : "justify-start"
+        }`}
+      >
+        {!isMine && (
+          <Image
+            source={{ uri: avatarUri }}
+            className="mx-2 h-8 w-8 rounded-full bg-slate-200"
+          />
+        )}
 
         <View
-          style={[
-            styles.bubble,
-            isMine ? styles.bubbleRight : styles.bubbleLeft,
-          ]}
+          className={`max-w-[75%] rounded-2xl p-2.5 ${
+            isMine
+              ? "rounded-tr-sm bg-emerald-100"
+              : "rounded-tl-sm bg-slate-100"
+          }`}
         >
           <Text
-            style={[styles.name, isMine ? styles.nameRight : styles.nameLeft]}
+            className={`mb-1 text-xs font-semibold ${
+              isMine ? "text-emerald-700 text-right" : "text-slate-600"
+            }`}
           >
             {displayName}
           </Text>
-          <Text style={[styles.messageBody, isMine && styles.messageBodyRight]}>
+          <Text
+            className={`text-sm text-slate-900 ${
+              isMine ? "text-right" : "text-left"
+            }`}
+          >
             {messageText}
           </Text>
           {timestamp ? (
             <Text
-              style={[
-                styles.timestamp,
-                isMine ? styles.timestampRight : styles.timestampLeft,
-              ]}
+              className={`mt-1.5 text-[11px] text-slate-400 ${
+                isMine ? "text-right" : "text-left"
+              }`}
             >
               {formatTimestamp(timestamp)}
             </Text>
           ) : null}
         </View>
 
-        {isMine && <Image source={{ uri: avatarUri }} style={styles.avatar} />}
+        {isMine && (
+          <Image
+            source={{ uri: avatarUri }}
+            className="mx-2 h-8 w-8 rounded-full bg-slate-200"
+          />
+        )}
       </View>
     );
   };
@@ -364,8 +385,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const header = useMemo(() => {
     if (!error) return null;
     return (
-      <View style={styles.errorBanner}>
-        <Text style={styles.errorText}>{error}</Text>
+      <View className="mb-3 rounded-xl bg-red-50 p-3">
+        <Text className="text-sm text-red-700">{error}</Text>
       </View>
     );
   }, [error]);
@@ -373,7 +394,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const footer = useMemo(() => {
     if (!isLoading || messages.length === 0) return null;
     return (
-      <View style={styles.loadingFooter}>
+      <View className="py-4">
         <ActivityIndicator size="small" />
       </View>
     );
@@ -381,7 +402,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      className="flex-1 bg-white"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
     >
@@ -392,8 +413,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
         ListHeaderComponent={header}
         ListFooterComponent={footer}
         inverted
-        contentContainerStyle={
-          messages.length === 0 ? styles.emptyListContent : styles.listContent
+        contentContainerClassName={
+          messages.length === 0 ? "flex-grow items-center justify-center p-4" : "flex-grow justify-end p-4"
         }
         onEndReachedThreshold={0.3}
         onEndReached={() => loadMessages(false)}
@@ -404,11 +425,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
           />
         }
         ListEmptyComponent={() => (
-          <View style={styles.emptyState}>
+          <View className="items-center justify-center p-8">
             {isLoading ? (
               <ActivityIndicator size="large" />
             ) : (
-              <Text style={styles.emptyText}>No messages yet.</Text>
+              <Text className="mt-3 text-sm text-slate-500">No messages yet.</Text>
             )}
           </View>
         )}
@@ -449,149 +470,6 @@ function formatTimestamp(timestampNanos: number): string {
   });
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  listContent: {
-    flexGrow: 1,
-    padding: 16,
-    justifyContent: "flex-end",
-  },
-  emptyListContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  messageContainer: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#f1f5f9",
-  },
-  // Message row alignment
-  row: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    marginBottom: 12,
-  },
-  rowLeft: {
-    justifyContent: "flex-start",
-  },
-  rowRight: {
-    justifyContent: "flex-end",
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginHorizontal: 8,
-    backgroundColor: "#e2e8f0",
-  },
-  bubble: {
-    maxWidth: "75%",
-    padding: 10,
-    borderRadius: 14,
-  },
-  bubbleLeft: {
-    backgroundColor: "#f1f5f9",
-    borderTopLeftRadius: 4,
-  },
-  bubbleRight: {
-    backgroundColor: "#dcfce7",
-    borderTopRightRadius: 4,
-  },
-  sender: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#475569",
-    marginBottom: 4,
-  },
-  name: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  nameLeft: {
-    color: "#475569",
-    textAlign: "left",
-  },
-  nameRight: {
-    color: "#166534",
-    textAlign: "right",
-  },
-  messageBody: {
-    fontSize: 14,
-    color: "#0f172a",
-  },
-  messageBodyRight: {
-    textAlign: "right",
-  },
-  timestamp: {
-    marginTop: 6,
-    fontSize: 11,
-    color: "#94a3b8",
-  },
-  timestampLeft: {
-    textAlign: "left",
-  },
-  timestampRight: {
-    textAlign: "right",
-  },
-  errorBanner: {
-    padding: 12,
-    backgroundColor: "#fee2e2",
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  errorText: {
-    color: "#b91c1c",
-    fontSize: 14,
-  },
-  loadingFooter: {
-    paddingVertical: 16,
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#64748b",
-    marginTop: 12,
-  },
-  composerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e2e8f0",
-    backgroundColor: "#fff",
-  },
-  composerInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
-    marginRight: 8,
-  },
-  composerSend: {
-    backgroundColor: "#2563eb",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-  },
-  composerSendText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-});
 
 type ComposerProps = {
   isGroupChat: boolean;
@@ -645,20 +523,22 @@ function Composer({
   ]);
 
   return (
-    <View style={styles.composerContainer}>
+    <View className="flex-row items-center border-t border-slate-200 bg-white px-3 py-2">
       <TextInput
-        style={styles.composerInput}
+        className="mr-2 flex-1 rounded-full border border-slate-200 px-3 py-2 text-base text-slate-900"
         placeholder={isGroupChat ? "Message group" : "Message"}
         value={text}
         onChangeText={setText}
         multiline
       />
       <TouchableOpacity
-        style={styles.composerSend}
+        className={`rounded-full bg-blue-600 px-3.5 py-2.5 ${
+          sending || !text.trim() ? "opacity-50" : ""
+        }`}
         onPress={onSend}
         disabled={sending || !text.trim()}
       >
-        <Text style={styles.composerSendText}>
+        <Text className="font-semibold text-white">
           {sending ? "Sending" : "Send"}
         </Text>
       </TouchableOpacity>

@@ -1,7 +1,6 @@
 import React, { useContext, useMemo, useCallback } from "react";
 import {
   FlatList,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -151,7 +150,7 @@ export default function HomeScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <View style={styles.center}>
+      <View className="flex-1 items-center justify-center">
         <ActivityIndicator />
       </View>
     );
@@ -159,69 +158,81 @@ export default function HomeScreen() {
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text>{error}</Text>
+      <View className="flex-1 items-center justify-center bg-slate-50 p-6">
+        <Text className="text-sm text-red-500">{error}</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-slate-50">
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={reload} />}
+        className="flex-1 px-4 pb-4"
+        ItemSeparatorComponent={() => <View className="h-2" />}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={reload} />
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.card}
+            className="flex-row items-center rounded-2xl border border-slate-200 bg-white p-3.5"
             activeOpacity={0.7}
             onPress={() => handlePress(item)}
           >
-            <View style={styles.avatarContainer}>
+            <View className="relative mr-3 h-14 w-14 items-center justify-center">
               {item.avatarUri ? (
                 <Image
                   source={{ uri: item.avatarUri }}
-                  style={styles.avatarImage}
+                  className="h-12 w-12 rounded-full bg-slate-200"
                 />
               ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+                <View className="h-12 w-12 items-center justify-center rounded-full bg-slate-200">
+                  <Text className="text-lg font-bold text-slate-700">
+                    {item.name.charAt(0)}
+                  </Text>
                 </View>
               )}
               {item.isGroup &&
               item.stackedAvatarUris &&
               item.stackedAvatarUris.length > 0 ? (
-                <View style={styles.stackedOverlay}>
+                <View className="absolute -bottom-0.5 -right-1.5 h-6 w-12">
                   {item.stackedAvatarUris.map((uri, idx) => (
                     <Image
                       key={`${item.id}-stk-${idx}`}
                       source={{ uri }}
-                      style={[styles.smallAvatar, { left: idx * 14 }]}
+                      className="absolute h-5 w-5 rounded-full border-2 border-white bg-slate-200"
+                      style={{ left: idx * 14 }}
                     />
                   ))}
                 </View>
               ) : null}
             </View>
-            <View style={styles.cardBody}>
-              <View style={styles.cardHeader}>
-                <Text numberOfLines={1} style={styles.name}>
+            <View className="flex-1">
+              <View className="mb-1.5 flex-row items-center justify-between">
+                <Text
+                  numberOfLines={1}
+                  className="mr-2 flex-1 text-base font-semibold text-slate-900"
+                >
                   {item.name}
                 </Text>
-                <Text style={styles.time}>{item.time}</Text>
+                <Text className="text-xs font-medium text-slate-500">
+                  {item.time}
+                </Text>
               </View>
-              <Text numberOfLines={1} style={styles.preview}>
+              <Text numberOfLines={1} className="text-sm text-slate-500">
                 {item.preview}
               </Text>
             </View>
           </TouchableOpacity>
         )}
         ListEmptyComponent={() => (
-          <View style={styles.empty}>
+          <View className="items-center py-12">
             <Feather name="message-square" size={36} color="#94a3b8" />
-            <Text style={styles.emptyTitle}>No messages yet</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text className="mt-3 text-lg font-semibold text-slate-800">
+              No messages yet
+            </Text>
+            <Text className="mt-1.5 text-sm text-slate-500">
               Start a conversation to see it here.
             </Text>
           </View>
@@ -230,114 +241,3 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  avatarContainer: {
-    width: 56,
-    height: 56,
-    marginRight: 12,
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#e2e8f0",
-  },
-  avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#e2e8f0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stackedOverlay: {
-    position: "absolute",
-    bottom: -2,
-    right: -6,
-    height: 24,
-    width: 48,
-  },
-  smallAvatar: {
-    position: "absolute",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#fff",
-    backgroundColor: "#e2e8f0",
-  },
-  avatarText: {
-    fontWeight: "700",
-    color: "#334155",
-    fontSize: 18,
-  },
-  cardBody: {
-    flex: 1,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  name: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0f172a",
-    flex: 1,
-    marginRight: 8,
-  },
-  time: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: "500",
-  },
-  preview: {
-    fontSize: 14,
-    color: "#64748b",
-  },
-  separator: {
-    height: 8,
-  },
-  empty: {
-    alignItems: "center",
-    paddingVertical: 48,
-  },
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1e293b",
-  },
-  emptySubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    color: "#64748b",
-  },
-});

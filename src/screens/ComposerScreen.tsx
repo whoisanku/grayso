@@ -2,13 +2,11 @@ import React, { useState, useLayoutEffect, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   ScrollView,
   Button,
   TouchableOpacity,
   Image,
-  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -72,10 +70,13 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.inputContainer}>
+    <ScrollView
+      className="flex-1 bg-white p-3"
+      keyboardShouldPersistTaps="handled"
+    >
+      <View className="flex-row">
         <TextInput
-          style={styles.textInput}
+          className="min-h-[100px] flex-1 text-lg text-slate-900"
           multiline
           placeholder="What's on your mind?"
           value={text}
@@ -83,61 +84,23 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           maxLength={MAX_LENGTH}
         />
       </View>
-      <View style={styles.footer}>
-        <TouchableOpacity onPress={pickImage} style={styles.iconButton}>
-          <Text style={{ fontSize: 24 }}>🖼️</Text>
+      <View className="mt-2 flex-row items-center justify-between border-t border-slate-200 pt-2">
+        <TouchableOpacity onPress={pickImage} className="p-2">
+          <Text className="text-2xl">🖼️</Text>
         </TouchableOpacity>
-        <Text style={styles.charCount}>
+        <Text className="text-sm text-gray-500">
           {text.length}/{MAX_LENGTH}
         </Text>
       </View>
-      <View style={styles.imagePreviewContainer}>
+      <View className="mt-3 flex-row flex-wrap">
         {images.map((uri, index) => (
-          <Image key={index} source={{ uri }} style={styles.previewImage} />
+          <Image
+            key={index}
+            source={{ uri }}
+            className="m-1.5 h-24 w-24 rounded-lg border border-slate-200"
+          />
         ))}
       </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "white",
-    padding: 10,
-  },
-  inputContainer: {
-    flexDirection: "row",
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 18,
-    minHeight: 100,
-  },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    paddingTop: 10,
-  },
-  iconButton: {
-    padding: 8,
-  },
-  charCount: {
-    color: "gray",
-  },
-  imagePreviewContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 10,
-  },
-  previewImage: {
-    width: 100,
-    height: 100,
-    margin: 5,
-    borderRadius: 8,
-  },
-});

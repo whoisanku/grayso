@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, Text, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 interface Post {
@@ -12,16 +12,19 @@ interface Post {
 }
 export default function PostCard({ post }: { post: Post }) {
   return (
-    <View style={styles.container}>
-      <Image source={{ uri: post.avatar }} style={styles.avatar} />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.name}>{post.user}</Text>
-          <Text style={styles.handle}>{post.handle}</Text>
-          <Text style={styles.time}> · {post.time}</Text>
+    <View className="flex-row border-b border-slate-200 px-4 py-3">
+      <Image
+        source={{ uri: post.avatar }}
+        className="mr-2 h-10 w-10 rounded-full"
+      />
+      <View className="flex-1">
+        <View className="flex-row items-center">
+          <Text className="mr-1 font-semibold text-slate-900">{post.user}</Text>
+          <Text className="mr-1 text-slate-500">{post.handle}</Text>
+          <Text className="text-slate-500"> · {post.time}</Text>
         </View>
-        <Text style={styles.body}>{post.text}</Text>
-        <View style={styles.actions}>
+        <Text className="mt-1 text-slate-800">{post.text}</Text>
+        <View className="mt-2 w-32 flex-row justify-between">
           <Feather name="message-circle" size={16} />
           <Feather name="repeat" size={16} />
           <Feather name="heart" size={16} />
@@ -30,30 +33,3 @@ export default function PostCard({ post }: { post: Post }) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  content: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center" },
-  name: { fontWeight: "bold", marginRight: 4 },
-  handle: { color: "#666", marginRight: 4 },
-  time: { color: "#666" },
-  body: { marginTop: 4 },
-  actions: {
-    flexDirection: "row",
-    marginTop: 8,
-    width: 120,
-    justifyContent: "space-between",
-  },
-});

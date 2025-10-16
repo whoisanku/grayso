@@ -1,11 +1,5 @@
 import React, { useContext, useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  Button,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, Button, ActivityIndicator } from "react-native";
 import { identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "../utils/deso";
 import { DeSoIdentityContext } from "react-deso-protocol";
@@ -48,10 +42,16 @@ const LoginScreen = () => {
   const showLoading = isLoading || localLoading;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login with DeSo</Text>
+    <View className="flex-1 items-center justify-center p-5">
+      <Text className="mb-5 text-2xl font-semibold text-slate-900">
+        Login with DeSo
+      </Text>
       {showLoading && (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
+        <ActivityIndicator
+          size="large"
+          color="#0000ff"
+          className="my-2"
+        />
       )}
       <Button
         title={showLoading ? "Logging in..." : "Login"}
@@ -59,33 +59,12 @@ const LoginScreen = () => {
         disabled={showLoading}
       />
       {currentUser && (
-        <Text style={styles.debugText}>
+        <Text className="mt-5 text-xs text-slate-500">
           User detected: {currentUser.PublicKeyBase58Check?.substring(0, 10)}...
         </Text>
       )}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 20,
-  },
-  loader: {
-    marginVertical: 10,
-  },
-  debugText: {
-    marginTop: 20,
-    fontSize: 12,
-    color: "#666",
-  },
-});
 
 export default LoginScreen;

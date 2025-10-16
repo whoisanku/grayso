@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -146,8 +145,8 @@ export default function ProfileScreen() {
 
   if (!currentUser && !isLoading) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyStateText}>
+      <View className="flex-1 items-center justify-center bg-white p-6">
+        <Text className="text-center text-base text-slate-700">
           Sign in with your DeSo identity to view your profile.
         </Text>
       </View>
@@ -155,171 +154,84 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Image source={{ uri: bannerUri }} style={styles.banner} />
-      <View style={styles.profileHeader}>
-        <View style={styles.avatarContainer}>
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+    <ScrollView className="flex-1 bg-white">
+      <Image
+        source={{ uri: bannerUri }}
+        className="h-[120px] w-full"
+        resizeMode="cover"
+      />
+      <View className="-mt-10 flex-row items-start justify-between px-4">
+        <View className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-white">
+          <Image source={{ uri: avatarUri }} className="h-full w-full" />
         </View>
-        <TouchableOpacity style={styles.followButton} disabled>
-          <Text style={styles.followButtonText}>Follow</Text>
+        <TouchableOpacity
+          className="mt-12 rounded-full bg-black px-4 py-2 opacity-30"
+          disabled
+        >
+          <Text className="font-bold text-white">Follow</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.profileInfo}>
-        <Text style={styles.displayName}>{username}</Text>
-        <Text style={styles.handle} numberOfLines={1}>
+      <View className="p-4">
+        <Text className="text-2xl font-bold text-slate-900">{username}</Text>
+        <Text className="text-base text-gray-500" numberOfLines={1}>
           {publicKey}
         </Text>
-        {!!description && <Text style={styles.description}>{description}</Text>}
+        {!!description && (
+          <Text className="mt-3 text-base leading-6 text-slate-700">
+            {description}
+          </Text>
+        )}
         {errorMessage ? (
-          <Text style={styles.errorText}>{errorMessage}</Text>
+          <Text className="mt-3 text-sm text-rose-500">{errorMessage}</Text>
         ) : null}
-        <View style={styles.stats}>
-          <View style={styles.statBlock}>
-            <Text style={styles.statCount}>{formatNumber(coinHolders)}</Text>
-            <Text style={styles.statLabel}>Coin holders</Text>
+        <View className="mt-4 flex-row flex-wrap">
+          <View className="mr-6 mb-3">
+            <Text className="text-lg font-bold text-slate-900">
+              {formatNumber(coinHolders)}
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-500">
+              Coin holders
+            </Text>
           </View>
-          <View style={styles.statBlock}>
-            <Text style={styles.statCount}>{coinPrice.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>Creator coin (DESO)</Text>
+          <View className="mr-6 mb-3">
+            <Text className="text-lg font-bold text-slate-900">
+              {coinPrice.toFixed(2)}
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-500">
+              Creator coin (DESO)
+            </Text>
           </View>
-          <View style={styles.statBlock}>
-            <Text style={styles.statCount}>{desoBalance.toFixed(2)}</Text>
-            <Text style={styles.statLabel}>Balance (DESO)</Text>
+          <View className="mr-6 mb-3">
+            <Text className="text-lg font-bold text-slate-900">
+              {desoBalance.toFixed(2)}
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-500">
+              Balance (DESO)
+            </Text>
           </View>
-          <View style={styles.statBlock}>
-            <Text style={styles.statCount}>{formatNumber(hodlersCount)}</Text>
-            <Text style={styles.statLabel}>People holding you</Text>
+          <View className="mr-6 mb-3">
+            <Text className="text-lg font-bold text-slate-900">
+              {formatNumber(hodlersCount)}
+            </Text>
+            <Text className="mt-0.5 text-xs text-slate-500">
+              People holding you
+            </Text>
           </View>
         </View>
       </View>
-      <View style={styles.logoutContainer}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
+      <View className="px-4 pb-8">
+        <TouchableOpacity
+          className="items-center rounded-xl bg-rose-500 py-3"
+          onPress={handleLogout}
+        >
+          <Text className="text-lg font-semibold text-white">Logout</Text>
         </TouchableOpacity>
       </View>
       {(isLoading || isFetchingProfile) && (
-        <View style={styles.loadingOverlay}>
+        <View className="absolute inset-0 items-center justify-center bg-white/60">
           <ActivityIndicator size="large" color="#000" />
         </View>
       )}
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  banner: {
-    width: "100%",
-    height: 120,
-  },
-  profileHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    paddingHorizontal: 16,
-    marginTop: -40,
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: "#fff",
-    overflow: "hidden",
-    backgroundColor: "white",
-  },
-  avatar: {
-    width: "100%",
-    height: "100%",
-  },
-  followButton: {
-    backgroundColor: "#000",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 48,
-  },
-  followButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  profileInfo: {
-    padding: 16,
-  },
-  displayName: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  handle: {
-    fontSize: 16,
-    color: "gray",
-  },
-  description: {
-    marginTop: 12,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  stats: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 16,
-  },
-  statCount: {
-    fontWeight: "bold",
-    fontSize: 18,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 2,
-  },
-  statBlock: {
-    marginRight: 24,
-    marginBottom: 12,
-  },
-  errorText: {
-    marginTop: 12,
-    color: "#d9534f",
-  },
-  logoutContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  logoutButton: {
-    backgroundColor: "#ef4444",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  logoutButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-    backgroundColor: "#fff",
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: "#333",
-    textAlign: "center",
-  },
-  loadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.6)",
-  },
-});
