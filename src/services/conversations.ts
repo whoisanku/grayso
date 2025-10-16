@@ -19,6 +19,11 @@ import {
   GetPaginatedMessagesForDmThreadRequest,
   GetPaginatedMessagesForGroupThreadRequest,
 } from "./desoApi";
+import {
+  buildDefaultProfileEntry,
+  fetchDmMessagesViaGraphql,
+  normalizeTimestampToNanos,
+} from "./desoGraphql";
 
 // This was causing issues, so defining it locally.
 // You might want to create the files and export from there.
@@ -271,12 +276,179 @@ export const encryptAndSendNewMessage = async (
 
 export async function fetchPaginatedDmThreadMessages(
   payload: GetPaginatedMessagesForDmThreadRequest,
-  accessGroups: AccessGroupEntryResponse[]
+  accessGroups: AccessGroupEntryResponse[],
+  options: {
+    beforeTimestampNanos?: number;
+    limit?: number;
+  } = {}
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
 }> {
+  const { beforeTimestampNanos, limit = payload.MaxMessagesToFetch ?? 10 } = options;
+
+  // Validate timestamp is safe to use
+  const safeTimestamp = beforeTimestampNanos && Number.isSafeInteger(beforeTimestampNanos)
+    ? beforeTimestampNanos
+    : undefined;
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedDmThreadMessages] 🚀 Attempting GraphQL fetch", {
+      userPublicKey: payload.UserGroupOwnerPublicKeyBase58Check,
+      counterPartyPublicKey: payload.PartyGroupOwnerPublicKeyBase58Check,
+      beforeTimestampNanos: safeTimestamp,
+      originalTimestamp: beforeTimestampNanos,
+      isSafe: beforeTimestampNanos ? Number.isSafeInteger(beforeTimestampNanos) : 'N/A',
+      limit,
+    });
+  }
+
+  try {
+    const nodes = await fetchDmMessagesViaGraphql({
+      userPublicKey: payload.UserGroupOwnerPublicKeyBase58Check,
+      counterPartyPublicKey: payload.PartyGroupOwnerPublicKeyBase58Check,
+      beforeTimestampNanos: safeTimestamp,
+      limit,
+    });
+
+    const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
+      {};
+
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
+        count: nodes.length,
+        nodes,
+      });
+    }
+
+    const rawMessages = nodes
+      .map((node, index) => {
+        const senderPublicKey =
+          node.senderAccessGroupOwnerPublicKey ??
+          node.sender?.publicKey ??
+          "";
+        const recipientPublicKey =
+          node.recipientAccessGroupOwnerPublicKey ??
+          node.receiver?.publicKey ??
+          "";
+        const {
+          nanos: timestampNanos,
+          nanosString: timestampNanosString,
+        } = normalizeTimestampToNanos(node.timestamp);
+
+        if (typeof __DEV__ !== "undefined" && __DEV__ && index === 0) {
+          console.log("[fetchPaginatedDmThreadMessages] First node structure", {
+            senderAccessGroupPublicKey: node.senderAccessGroupPublicKey,
+            recipientAccessGroupPublicKey: node.recipientAccessGroupPublicKey,
+            senderAccessGroupOwnerPublicKey: node.senderAccessGroupOwnerPublicKey,
+            recipientAccessGroupOwnerPublicKey: node.recipientAccessGroupOwnerPublicKey,
+          });
+        }
+
+        if (node.sender?.publicKey) {
+          publicKeyToProfileEntryResponseMap[node.sender.publicKey] =
+            buildDefaultProfileEntry(
+              node.sender.publicKey,
+              node.sender.username ?? undefined
+            );
+        }
+
+        if (node.receiver?.publicKey) {
+          publicKeyToProfileEntryResponseMap[node.receiver.publicKey] =
+            buildDefaultProfileEntry(
+              node.receiver.publicKey,
+              node.receiver.username ?? undefined
+            );
+        }
+
+        if (!node.encryptedText || !senderPublicKey || !recipientPublicKey) {
+          return null;
+        }
+
+        const senderAccessGroupPublicKey =
+          node.senderAccessGroupPublicKey ?? "";
+        const recipientAccessGroupPublicKey =
+          node.recipientAccessGroupPublicKey ?? "";
+
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.log("[fetchPaginatedDmThreadMessages] Access group keys", {
+            senderAccessGroupPublicKey,
+            recipientAccessGroupPublicKey,
+            hasSenderKey: !!senderAccessGroupPublicKey,
+            hasRecipientKey: !!recipientAccessGroupPublicKey,
+          });
+        }
+
+        return {
+          ChatType: ChatType.DM,
+          SenderInfo: {
+            OwnerPublicKeyBase58Check: senderPublicKey,
+            AccessGroupPublicKeyBase58Check: senderAccessGroupPublicKey,
+            AccessGroupKeyName:
+              node.senderAccessGroup?.accessGroupKeyName ??
+              DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          },
+          RecipientInfo: {
+            OwnerPublicKeyBase58Check: recipientPublicKey,
+            AccessGroupPublicKeyBase58Check: recipientAccessGroupPublicKey,
+            AccessGroupKeyName:
+              node.receiverAccessGroup?.accessGroupKeyName ??
+              DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          },
+          MessageInfo: {
+            EncryptedText: node.encryptedText,
+            TimestampNanos: timestampNanos,
+            TimestampNanosString: timestampNanosString,
+            ExtraData: {},
+          },
+        } as NewMessageEntryResponse;
+      })
+      .filter(
+        (message): message is NewMessageEntryResponse =>
+          Boolean(message?.MessageInfo?.EncryptedText)
+      );
+
+    if (rawMessages.length === 0) {
+      return {
+        decrypted: [],
+        updatedAllAccessGroups: accessGroups,
+        publicKeyToProfileEntryResponseMap,
+      };
+    }
+
+    const { decrypted, updatedAllAccessGroups } =
+      await decryptAccessGroupMessagesWithRetry(
+        payload.UserGroupOwnerPublicKeyBase58Check,
+        rawMessages,
+        accessGroups
+      );
+
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.log("[fetchPaginatedDmThreadMessages] ✅ GraphQL fetch SUCCESS", {
+        count: decrypted.length,
+        decrypted,
+      });
+    }
+
+    return {
+      decrypted,
+      updatedAllAccessGroups,
+      publicKeyToProfileEntryResponseMap,
+    };
+  } catch (error) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn(
+        "[fetchPaginatedDmThreadMessages] GraphQL query failed, falling back to REST endpoint",
+        error
+      );
+    }
+  }
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedDmThreadMessages] 🔄 Using REST API fallback");
+  }
+
   const response = await getPaginatedMessagesForDmThread(payload);
   const rawMessages = response.Messages ?? (response as any).ThreadMessages ?? [];
   const { decrypted, updatedAllAccessGroups } =
@@ -285,6 +457,12 @@ export async function fetchPaginatedDmThreadMessages(
       rawMessages,
       accessGroups
     );
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedDmThreadMessages] ✅ REST API fetch SUCCESS", {
+      count: decrypted.length,
+    });
+  }
 
   return {
     decrypted,

@@ -43,7 +43,7 @@ import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 export default function ConversationScreen({ navigation, route }: Props) {
   const {
@@ -67,7 +67,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cursorTimestamp, setCursorTimestamp] = useState<number | undefined>(
-    lastTimestampNanos
+    undefined
   );
   const [profiles, setProfiles] = useState<PublicKeyToProfileEntryResponseMap>(
     {}
@@ -78,7 +78,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
 
   const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
-  const cursorTimestampRef = useRef<number | undefined>(lastTimestampNanos);
+  const cursorTimestampRef = useRef<number | undefined>(undefined);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
 
@@ -177,7 +177,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
           result = await fetchPaginatedDmThreadMessages(
             payload,
-            accessGroupsRef.current
+            accessGroupsRef.current,
+            {
+              beforeTimestampNanos: initial ? undefined : cursorTimestampRef.current,
+              limit: PAGE_SIZE,
+            }
           );
         }
 
@@ -221,22 +225,23 @@ export default function ConversationScreen({ navigation, route }: Props) {
         hasMoreRef.current = nextHasMore;
         setHasMore(nextHasMore);
 
-        const oldestMessageInBatch = decryptedMessages.sort(
-          (a, b) =>
-            (a.MessageInfo?.TimestampNanos ?? 0) -
-            (b.MessageInfo?.TimestampNanos ?? 0)
-        )[0];
+        if (!initial && decryptedMessages.length > 0) {
+          const oldestMessageInBatch = decryptedMessages.sort(
+            (a, b) =>
+              (a.MessageInfo?.TimestampNanos ?? 0) -
+              (b.MessageInfo?.TimestampNanos ?? 0)
+          )[0];
 
-        if (oldestMessageInBatch?.MessageInfo?.TimestampNanos) {
-          const nextCursor = Math.max(
-            0,
-            Number(oldestMessageInBatch.MessageInfo.TimestampNanos) - 1
-          );
-          cursorTimestampRef.current = nextCursor;
-          setCursorTimestamp(nextCursor);
-        } else if (initial) {
-          cursorTimestampRef.current = undefined;
-          setCursorTimestamp(undefined);
+          if (oldestMessageInBatch?.MessageInfo?.TimestampNanos) {
+            const timestampNum = typeof oldestMessageInBatch.MessageInfo.TimestampNanos === 'number'
+              ? oldestMessageInBatch.MessageInfo.TimestampNanos
+              : Number(oldestMessageInBatch.MessageInfo.TimestampNanos);
+            
+            if (Number.isSafeInteger(timestampNum) && timestampNum > 0) {
+              cursorTimestampRef.current = timestampNum - 1;
+              setCursorTimestamp(timestampNum - 1);
+            }
+          }
         }
       } catch (err) {
         setError(
