@@ -11,14 +11,18 @@ import {
   FlatList,
   KeyboardAvoidingView,
   ListRenderItem,
+  NativeSyntheticEvent,
   Platform,
   RefreshControl,
   Text,
+  TextInputContentSizeChangeEventData,
   View,
   Image,
   TextInput,
   TouchableOpacity,
+  StyleSheet,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   AccessGroupEntryResponse,
   ChatType,
@@ -33,12 +37,13 @@ import {
 } from "../services/conversations";
 import {
   FALLBACK_PROFILE_IMAGE,
-  formatPublicKey,
   getProfileDisplayName,
   getProfileImageUrl,
 } from "../utils/deso";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
+import { useFocusEffect } from "@react-navigation/native";
+import { Feather } from "@expo/vector-icons";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -304,70 +309,126 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({
     item,
+    index,
   }) => {
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
     const messageText =
       item.DecryptedMessage ||
-      (hasError ? `Error: ${hasError}` : "Decrypting...");
+      (hasError ? "Unable to decrypt this message." : "Decrypting…");
     const timestamp = item.MessageInfo?.TimestampNanos;
+    const previousTimestamp =
+      messages[index + 1]?.MessageInfo?.TimestampNanos ?? undefined;
 
     const senderProfile = profiles[senderPk];
     const displayName = getProfileDisplayName(senderProfile, senderPk);
-    const avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat });
+    const avatarUri =
+      getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ??
+      FALLBACK_PROFILE_IMAGE;
+    const hasAvatar = Boolean(avatarUri);
+    const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
 
     return (
-      <View
-        className={`mb-3 flex-row items-end ${
-          isMine ? "justify-end" : "justify-start"
-        }`}
-      >
-        {!isMine && (
-          <Image
-            source={{ uri: avatarUri }}
-            className="mx-2 h-8 w-8 rounded-full bg-slate-200"
-          />
-        )}
-
+      <View className="mb-3">
+        {showDayDivider ? (
+          <View className="items-center py-3">
+            <View className="rounded-full bg-gray-200 px-3 py-1">
+              <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+                {formatDayLabel(timestamp)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
         <View
-          className={`max-w-[75%] rounded-2xl p-2.5 ${
-            isMine
-              ? "rounded-tr-sm bg-emerald-100"
-              : "rounded-tl-sm bg-slate-100"
+          className={`flex-row px-1 ${
+            isMine ? "justify-end" : "justify-start"
           }`}
         >
-          <Text
-            className={`mb-1 text-xs font-semibold ${
-              isMine ? "text-emerald-700 text-right" : "text-slate-600"
+          {!isMine ? (
+            <View className="mr-2">
+              {hasAvatar ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  className="h-8 w-8 rounded-full bg-gray-200"
+                />
+              ) : (
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200">
+                  <Feather name="user" size={16} color="#6b7280" />
+                </View>
+              )}
+            </View>
+          ) : null}
+          <View
+            className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${
+              isMine ? "bg-blue-500" : "bg-white"
             }`}
+            style={
+              isMine ? styles.outgoingBubbleShadow : styles.incomingBubbleShadow
+            }
           >
-            {displayName}
-          </Text>
-          <Text
-            className={`text-sm text-slate-900 ${
-              isMine ? "text-right" : "text-left"
-            }`}
-          >
-            {messageText}
-          </Text>
-          {timestamp ? (
+            {!isMine && (
+              <Text
+                className="mb-1 text-[10px] font-semibold text-gray-500"
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+            )}
             <Text
-              className={`mt-1.5 text-[11px] text-slate-400 ${
-                isMine ? "text-right" : "text-left"
+              className={`text-[15px] leading-5 ${
+                isMine ? "text-white" : "text-gray-900"
               }`}
             >
-              {formatTimestamp(timestamp)}
+              {messageText}
             </Text>
+            <View
+              className={`mt-1 flex-row items-center ${
+                isMine ? "justify-end" : "justify-start"
+              }`}
+            >
+              {hasError ? (
+                <Text className="text-[10px] font-medium text-red-500">
+                  Failed to decrypt
+                </Text>
+              ) : (
+                <>
+                  {timestamp ? (
+                    <Text
+                      className={`text-[10px] ${
+                        isMine ? "text-white/80" : "text-gray-400"
+                      }`}
+                    >
+                      {formatTimestamp(timestamp)}
+                    </Text>
+                  ) : null}
+                  {isMine ? (
+                    <Feather
+                      name="check"
+                      size={12}
+                      color="rgba(255,255,255,0.75)"
+                      style={{ marginLeft: 4 }}
+                    />
+                  ) : null}
+                </>
+              )}
+            </View>
+          </View>
+          {isMine ? (
+            <View className="ml-2">
+              {hasAvatar ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  className="h-8 w-8 rounded-full bg-blue-100"
+                />
+              ) : (
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-blue-100">
+                  <Feather name="user" size={16} color="#3b82f6" />
+                </View>
+              )}
+            </View>
           ) : null}
         </View>
-
-        {isMine && (
-          <Image
-            source={{ uri: avatarUri }}
-            className="mx-2 h-8 w-8 rounded-full bg-slate-200"
-          />
-        )}
       </View>
     );
   };
@@ -385,8 +446,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const header = useMemo(() => {
     if (!error) return null;
     return (
-      <View className="mb-3 rounded-xl bg-red-50 p-3">
-        <Text className="text-sm text-red-700">{error}</Text>
+      <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+        <Text className="text-sm font-medium text-red-900">{error}</Text>
       </View>
     );
   }, [error]);
@@ -394,56 +455,81 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const footer = useMemo(() => {
     if (!isLoading || messages.length === 0) return null;
     return (
-      <View className="py-4">
-        <ActivityIndicator size="small" />
+      <View className="py-5">
+        <ActivityIndicator size="small" color="#3b82f6" />
       </View>
     );
   }, [isLoading, messages.length]);
 
-  return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-    >
-      <FlatList
-        data={messages}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ListHeaderComponent={header}
-        ListFooterComponent={footer}
-        inverted
-        contentContainerClassName={
-          messages.length === 0 ? "flex-grow items-center justify-center p-4" : "flex-grow justify-end p-4"
-        }
-        onEndReachedThreshold={0.3}
-        onEndReached={() => loadMessages(false)}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => loadMessages(true, true)}
-          />
-        }
-        ListEmptyComponent={() => (
-          <View className="items-center justify-center p-8">
-            {isLoading ? (
-              <ActivityIndicator size="large" />
-            ) : (
-              <Text className="mt-3 text-sm text-slate-500">No messages yet.</Text>
-            )}
-          </View>
-        )}
-      />
+  const keyboardVerticalOffset = Platform.OS === "ios" ? 78 : 0;
 
-      <Composer
-        isGroupChat={isGroupChat}
-        userPublicKey={userPublicKey}
-        counterPartyPublicKey={counterPartyPublicKey}
-        threadAccessGroupKeyName={threadAccessGroupKeyName}
-        userAccessGroupKeyName={userAccessGroupKeyName}
-        onSent={() => loadMessages(true, true)}
-      />
-    </KeyboardAvoidingView>
+  return (
+    <SafeAreaView className="flex-1 bg-gray-50" edges={["bottom"]}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        <View className="flex-1">
+          <FlatList
+            data={messages}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            ListHeaderComponent={header}
+            ListFooterComponent={footer}
+            inverted
+            showsVerticalScrollIndicator={false}
+            contentContainerClassName={
+              messages.length === 0
+                ? "flex-grow items-center justify-center px-6 pb-16"
+                : "px-4 pb-8"
+            }
+            maintainVisibleContentPosition={
+              Platform.OS === "ios"
+                ? { minIndexForVisible: 0, autoscrollToTopThreshold: 40 }
+                : undefined
+            }
+            onEndReachedThreshold={0.35}
+            onEndReached={() => loadMessages(false)}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                tintColor="#3b82f6"
+                colors={["#3b82f6"]}
+                refreshing={isRefreshing}
+                onRefresh={() => loadMessages(true, true)}
+              />
+            }
+            ListEmptyComponent={() => (
+              <View className="items-center justify-center rounded-2xl border border-gray-200 bg-white px-6 py-10">
+                {isLoading ? (
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                ) : (
+                  <>
+                    <Feather name="message-circle" size={38} color="#9ca3af" />
+                    <Text className="mt-4 text-lg font-semibold text-gray-900">
+                      No messages yet
+                    </Text>
+                    <Text className="mt-1 text-center text-sm text-gray-500">
+                      Start the conversation and it will appear here instantly.
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
+          />
+        </View>
+
+        <Composer
+          isGroupChat={isGroupChat}
+          userPublicKey={userPublicKey}
+          counterPartyPublicKey={counterPartyPublicKey}
+          threadAccessGroupKeyName={threadAccessGroupKeyName}
+          userAccessGroupKeyName={userAccessGroupKeyName}
+          onSent={() => loadMessages(true, true)}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -470,6 +556,92 @@ function formatTimestamp(timestampNanos: number): string {
   });
 }
 
+function shouldShowDayDivider(
+  currentTimestampNanos?: number,
+  previousTimestampNanos?: number
+): boolean {
+  if (!currentTimestampNanos) {
+    return false;
+  }
+
+  if (!previousTimestampNanos) {
+    return true;
+  }
+
+  const currentDate = new Date(currentTimestampNanos / 1_000_000);
+  const previousDate = new Date(previousTimestampNanos / 1_000_000);
+
+  if (
+    Number.isNaN(currentDate.getTime()) ||
+    Number.isNaN(previousDate.getTime())
+  ) {
+    return false;
+  }
+
+  return !isSameCalendarDay(currentDate, previousDate);
+}
+
+function formatDayLabel(timestampNanos?: number): string {
+  if (!timestampNanos) {
+    return "";
+  }
+
+  const date = new Date(timestampNanos / 1_000_000);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const now = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+
+  if (isSameCalendarDay(date, now)) {
+    return "Today";
+  }
+
+  if (isSameCalendarDay(date, yesterday)) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+const styles = StyleSheet.create({
+  incomingBubbleShadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  outgoingBubbleShadow: {
+    shadowColor: "#3b82f6",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  composerShadow: {
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+});
+
 
 type ComposerProps = {
   isGroupChat: boolean;
@@ -490,13 +662,33 @@ function Composer({
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [inputHeight, setInputHeight] = useState(44);
+  const textInputRef = useRef<TextInput>(null);
+
+  const focusInput = useCallback(() => {
+    if (Platform.OS === "ios") {
+      requestAnimationFrame(() => textInputRef.current?.focus());
+    } else {
+      textInputRef.current?.focus();
+    }
+  }, []);
+
+  const handleContentSizeChange = useCallback(
+    (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+      const nextHeight = Math.min(
+        140,
+        Math.max(44, event.nativeEvent.contentSize.height)
+      );
+      setInputHeight(nextHeight);
+    },
+    []
+  );
 
   const onSend = useCallback(async () => {
     if (!text.trim() || sending) return;
     try {
       setSending(true);
 
-      // Use shared encryptAndSendNewMessage from services
       await encryptAndSendNewMessage(
         text.trim(),
         userPublicKey,
@@ -505,8 +697,8 @@ function Composer({
         userAccessGroupKeyName
       );
 
-      // Optimistic clear and refresh
       setText("");
+      focusInput();
       onSent && onSent();
     } catch (e) {
       console.error("Send message error", e);
@@ -516,32 +708,69 @@ function Composer({
   }, [
     text,
     sending,
-    isGroupChat,
     userPublicKey,
+    counterPartyPublicKey,
     threadAccessGroupKeyName,
+    userAccessGroupKeyName,
     onSent,
+    focusInput,
   ]);
 
+  const sendDisabled = sending || !text.trim();
+
   return (
-    <View className="flex-row items-center border-t border-slate-200 bg-white px-3 py-2">
-      <TextInput
-        className="mr-2 flex-1 rounded-full border border-slate-200 px-3 py-2 text-base text-slate-900"
-        placeholder={isGroupChat ? "Message group" : "Message"}
-        value={text}
-        onChangeText={setText}
-        multiline
-      />
-      <TouchableOpacity
-        className={`rounded-full bg-blue-600 px-3.5 py-2.5 ${
-          sending || !text.trim() ? "opacity-50" : ""
-        }`}
-        onPress={onSend}
-        disabled={sending || !text.trim()}
+    <View className="border-t border-gray-200 bg-white px-4 pb-4 pt-3">
+      <View
+        className="flex-row items-center rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2"
+        style={styles.composerShadow}
       >
-        <Text className="font-semibold text-white">
-          {sending ? "Sending" : "Send"}
-        </Text>
-      </TouchableOpacity>
+        <TextInput
+          ref={textInputRef}
+          className="flex-1 text-base leading-5 text-gray-900"
+          placeholder={isGroupChat ? "Message the group…" : "Message…"}
+          placeholderTextColor="#9ca3af"
+          value={text}
+          onChangeText={setText}
+          multiline
+          keyboardAppearance="light"
+          autoCorrect
+          autoCapitalize="sentences"
+          textAlignVertical="top"
+          returnKeyType="send"
+          blurOnSubmit={false}
+          onSubmitEditing={onSend}
+          onContentSizeChange={handleContentSizeChange}
+          style={{
+            minHeight: 40,
+            maxHeight: 120,
+            height: inputHeight,
+            paddingTop: 8,
+            paddingBottom: 8,
+          }}
+        />
+        <TouchableOpacity
+          className="ml-3"
+          onPress={onSend}
+          disabled={sendDisabled}
+          activeOpacity={0.8}
+        >
+          <View
+            className={`h-10 w-10 items-center justify-center rounded-full ${
+              sendDisabled ? "bg-blue-300" : "bg-blue-500"
+            }`}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Feather
+                name="send"
+                size={16}
+                color="#ffffff"
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

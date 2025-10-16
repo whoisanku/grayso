@@ -71,36 +71,47 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   return (
     <ScrollView
-      className="flex-1 bg-white p-3"
+      className="flex-1 bg-gray-50 p-4"
       keyboardShouldPersistTaps="handled"
     >
-      <View className="flex-row">
+      <View className="rounded-2xl bg-white p-4">
         <TextInput
-          className="min-h-[100px] flex-1 text-lg text-slate-900"
+          className="min-h-[120px] flex-1 text-base leading-6 text-gray-900"
           multiline
           placeholder="What's on your mind?"
+          placeholderTextColor="#9ca3af"
           value={text}
           onChangeText={setText}
           maxLength={MAX_LENGTH}
+          autoFocus
         />
       </View>
-      <View className="mt-2 flex-row items-center justify-between border-t border-slate-200 pt-2">
-        <TouchableOpacity onPress={pickImage} className="p-2">
-          <Text className="text-2xl">🖼️</Text>
+      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-white px-4 py-3">
+        <TouchableOpacity 
+          onPress={pickImage} 
+          className="flex-row items-center rounded-full bg-blue-50 px-4 py-2"
+          activeOpacity={0.7}
+        >
+          <Text className="mr-2 text-xl">🖼️</Text>
+          <Text className="text-sm font-medium text-blue-600">Add Photo</Text>
         </TouchableOpacity>
-        <Text className="text-sm text-gray-500">
+        <Text className="text-sm font-medium text-gray-400">
           {text.length}/{MAX_LENGTH}
         </Text>
       </View>
-      <View className="mt-3 flex-row flex-wrap">
-        {images.map((uri, index) => (
-          <Image
-            key={index}
-            source={{ uri }}
-            className="m-1.5 h-24 w-24 rounded-lg border border-slate-200"
-          />
-        ))}
-      </View>
+      {images.length > 0 && (
+        <View className="mt-3 rounded-2xl bg-white p-3">
+          <View className="flex-row flex-wrap">
+            {images.map((uri, index) => (
+              <Image
+                key={index}
+                source={{ uri }}
+                className="m-1 h-24 w-24 rounded-xl"
+              />
+            ))}
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
