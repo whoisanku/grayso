@@ -11,9 +11,11 @@ import {
   FlatList,
   KeyboardAvoidingView,
   ListRenderItem,
+  Modal,
   NativeSyntheticEvent,
   Platform,
   RefreshControl,
+  ScrollView,
   Text,
   TextInputContentSizeChangeEventData,
   View,
@@ -28,6 +30,7 @@ import {
   ChatType,
   DecryptedMessageEntryResponse,
   PublicKeyToProfileEntryResponseMap,
+  ProfileEntryResponse,
 } from "deso-protocol";
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
@@ -40,6 +43,7 @@ import {
   getProfileDisplayName,
   getProfileImageUrl,
 } from "../utils/deso";
+import { fetchAccessGroupMembers, GroupMember } from "../services/desoGraphql";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useFocusEffect } from "@react-navigation/native";
@@ -73,19 +77,161 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [profiles, setProfiles] = useState<PublicKeyToProfileEntryResponseMap>(
     {}
   );
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  const recipientProfile = useMemo<ProfileEntryResponse | null>(() => {
+    if (recipientInfo && typeof recipientInfo === "object") {
+      return (
+        (recipientInfo as { ProfileEntryResponse?: ProfileEntryResponse })
+          .ProfileEntryResponse ?? null
+      );
+    }
+    return null;
+  }, [recipientInfo]);
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
   const counterPartyPublicKey =
     partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
+  const recipientOwnerKey =
+    (recipientInfo as { OwnerPublicKeyBase58Check?: string })?.OwnerPublicKeyBase58Check;
+
+  const headerProfile =
+    profiles[counterPartyPublicKey] ?? recipientProfile ?? null;
+
+  const headerDisplayName = useMemo(() => {
+    if (title?.trim()) {
+      return title.trim();
+    }
+    return getProfileDisplayName(headerProfile, counterPartyPublicKey);
+  }, [counterPartyPublicKey, headerProfile, title]);
+
+  const headerAvatarUri = useMemo(() => {
+    if (isGroupChat) {
+      return getProfileImageUrl(
+        recipientOwnerKey ?? counterPartyPublicKey,
+        { groupChat: true }
+      );
+    }
+    return getProfileImageUrl(counterPartyPublicKey);
+  }, [counterPartyPublicKey, isGroupChat, recipientOwnerKey]);
 
   const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
   const paginationCursorRef = useRef<string | null>(null);
   const hasMoreRef = useRef(true);
   const isLoadingRef = useRef(false);
 
+  const loadGroupMembers = useCallback(async () => {
+    if (!isGroupChat || loadingMembers) return;
+
+    setLoadingMembers(true);
+    try {
+      const { members } = await fetchAccessGroupMembers({
+        accessGroupKeyName: threadAccessGroupKeyName,
+        accessGroupOwnerPublicKey: recipientOwnerKey ?? counterPartyPublicKey,
+      });
+      setGroupMembers(members);
+    } catch (error) {
+      console.error("[ConversationScreen] Failed to fetch group members", error);
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, [isGroupChat, loadingMembers, threadAccessGroupKeyName, recipientOwnerKey, counterPartyPublicKey]);
+
+  useEffect(() => {
+    if (isGroupChat) {
+      loadGroupMembers();
+    }
+  }, [isGroupChat, threadAccessGroupKeyName, recipientOwnerKey, counterPartyPublicKey]);
+
   useLayoutEffect(() => {
-    navigation.setOptions({ title: title ?? "Conversation" });
-  }, [navigation, title]);
+    navigation.setOptions({
+      headerBackVisible: false,
+      headerTitleAlign: "center",
+      headerStyle: { backgroundColor: "#fff" },
+      headerShadowVisible: false,
+      headerTintColor: "#111",
+      headerTitle: () => (
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {headerDisplayName || "Conversation"}
+        </Text>
+      ),
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+          style={styles.headerBackButton}
+          hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+        >
+          <Feather name="chevron-left" size={22} color="#111" />
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <TouchableOpacity
+          style={styles.headerRightContainer}
+          onPress={() => {
+            if (isGroupChat) {
+              setShowMembersModal(true);
+              loadGroupMembers();
+            }
+          }}
+          activeOpacity={isGroupChat ? 0.7 : 1}
+          disabled={!isGroupChat}
+        >
+          {isGroupChat && groupMembers.length > 0 ? (
+            <View style={styles.groupAvatarsContainer}>
+              {groupMembers.slice(0, 3).map((member, index) => {
+                const memberImageUrl = member.profilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                  : getProfileImageUrl(member.publicKey);
+                return (
+                  <Image
+                    key={member.publicKey}
+                    source={{ uri: memberImageUrl }}
+                    style={[
+                      styles.groupMemberAvatar,
+                      index > 0 && { marginLeft: -8 },
+                    ]}
+                    resizeMode="cover"
+                  />
+                );
+              })}
+              {groupMembers.length > 3 && (
+                <View
+                  style={[
+                    styles.groupMemberAvatar,
+                    styles.groupMemberAvatarMore,
+                    { marginLeft: -8 },
+                  ]}
+                >
+                  <Text style={styles.groupMemberAvatarMoreText}>
+                    +{groupMembers.length - 3}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View>
+              {headerAvatarUri ? (
+                <Image
+                  source={{ uri: headerAvatarUri }}
+                  style={styles.headerAvatar}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={[styles.headerAvatar, styles.headerAvatarFallback]}
+                >
+                  <Feather name="user" size={16} color="#6b7280" />
+                </View>
+              )}
+            </View>
+          )}
+        </TouchableOpacity>
+      ),
+    });
+  }, [headerAvatarUri, headerDisplayName, navigation, isGroupChat, groupMembers, loadGroupMembers, recipientOwnerKey, counterPartyPublicKey]);
 
   const mergeMessages = useCallback(
     (
@@ -147,11 +293,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
         if (isGroupChat) {
           const groupChatTimestamp =
             (lastTimestampNanos ?? Date.now() * 1_000_000) * 10;
+          const groupOwnerPublicKey =
+            recipientOwnerKey ??
+            partyGroupOwnerPublicKeyBase58Check ??
+            counterPartyPublicKey ??
+            userPublicKey;
           const payload = {
-            UserPublicKeyBase58Check:
-              recipientInfo?.OwnerPublicKeyBase58Check ??
-              messages[0]?.RecipientInfo?.OwnerPublicKeyBase58Check ??
-              userPublicKey,
+            UserPublicKeyBase58Check: groupOwnerPublicKey,
             AccessGroupKeyName: threadAccessGroupKeyName,
             MaxMessagesToFetch: PAGE_SIZE,
             StartTimeStamp: groupChatTimestamp,
@@ -161,13 +309,21 @@ export default function ConversationScreen({ navigation, route }: Props) {
           console.log("[ConversationScreen] Fetching group messages", {
             chatType,
             payload,
+            afterCursor: paginationCursorRef.current,
           });
 
-          result = await fetchPaginatedGroupThreadMessages(
+          const groupResult = await fetchPaginatedGroupThreadMessages(
             payload,
             accessGroupsRef.current,
-            userPublicKey
+            userPublicKey,
+            {
+              afterCursor: initial ? null : paginationCursorRef.current,
+              limit: PAGE_SIZE,
+              recipientAccessGroupOwnerPublicKey: groupOwnerPublicKey,
+            }
           );
+          result = groupResult;
+          pageInfo = groupResult.pageInfo;
         } else {
           const dmTimestamp = new Date().valueOf() * 1e6;
           const payload = {
@@ -233,7 +389,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           }));
         }
 
-        if (!isGroupChat && pageInfo) {
+        if (pageInfo) {
           const nextCursor = pageInfo.endCursor ?? null;
           const nextHasMore =
             Boolean(pageInfo.hasNextPage) && Boolean(nextCursor);
@@ -260,10 +416,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
       counterPartyPublicKey,
       isGroupChat,
       lastTimestampNanos,
+      partyGroupOwnerPublicKeyBase58Check,
       mergeMessages,
       threadAccessGroupKeyName,
       userAccessGroupKeyName,
       userPublicKey,
+      recipientOwnerKey,
     ]
   );
 
@@ -323,9 +481,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
     const senderProfile = profiles[senderPk];
     const displayName = getProfileDisplayName(senderProfile, senderPk);
-    const avatarUri =
-      getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ??
-      FALLBACK_PROFILE_IMAGE;
+    
+    // For group chats, try to use profile pic from GraphQL first
+    let avatarUri: string;
+    if (isGroupChat && senderProfile?.ExtraData?.LargeProfilePicURL) {
+      avatarUri = `https://node.deso.org/api/v0/get-single-profile-picture/${senderPk}?fallback=${senderProfile.ExtraData.LargeProfilePicURL}`;
+    } else {
+      avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ?? FALLBACK_PROFILE_IMAGE;
+    }
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
 
@@ -361,11 +524,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
           ) : null}
           <View
             className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${
-              isMine ? "bg-blue-500" : "bg-white"
+              isMine ? "bg-blue-500" : "bg-white border border-gray-200"
             }`}
-            style={
-              isMine ? styles.outgoingBubbleShadow : styles.incomingBubbleShadow
-            }
           >
             {!isMine && (
               <Text
@@ -446,7 +606,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const header = useMemo(() => {
     if (!error) return null;
     return (
-      <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+      <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3" style={{ transform: [{ scaleY: -1 }] }}>
         <Text className="text-sm font-medium text-red-900">{error}</Text>
       </View>
     );
@@ -455,7 +615,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const footer = useMemo(() => {
     if (!isLoading || messages.length === 0) return null;
     return (
-      <View className="py-5">
+      <View className="py-5" style={{ transform: [{ scaleY: -1 }] }}>
         <ActivityIndicator size="small" color="#3b82f6" />
       </View>
     );
@@ -484,11 +644,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 ? "flex-grow items-center justify-center px-6 pb-16"
                 : "px-4 pb-8"
             }
-            maintainVisibleContentPosition={
-              Platform.OS === "ios"
-                ? { minIndexForVisible: 0, autoscrollToTopThreshold: 40 }
-                : undefined
-            }
             onEndReachedThreshold={0.35}
             onEndReached={() => loadMessages(false)}
             keyboardShouldPersistTaps="handled"
@@ -501,9 +656,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
               />
             }
             ListEmptyComponent={() => (
-              <View className="items-center justify-center rounded-2xl border border-gray-200 bg-white px-6 py-10">
+              <View className="items-center justify-center px-6 py-12" style={{ transform: [{ scaleY: -1 }] }}>
                 {isLoading ? (
-                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <>
+                    <ActivityIndicator size="small" color="#3b82f6" />
+                    <Text className="mt-3 text-sm text-gray-500">
+                      Loading messages…
+                    </Text>
+                  </>
                 ) : (
                   <>
                     <Feather name="message-circle" size={38} color="#9ca3af" />
@@ -529,6 +689,61 @@ export default function ConversationScreen({ navigation, route }: Props) {
           onSent={() => loadMessages(true, true)}
         />
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showMembersModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Group Members</Text>
+            <TouchableOpacity
+              onPress={() => setShowMembersModal(false)}
+              style={styles.modalCloseButton}
+            >
+              <Feather name="x" size={24} color="#111" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalContent}>
+            {loadingMembers ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+            ) : (
+              groupMembers.map((member) => {
+                const memberImageUrl = member.profilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                  : getProfileImageUrl(member.publicKey);
+                return (
+                  <View key={member.publicKey} style={styles.memberItem}>
+                    <Image
+                      source={{ uri: memberImageUrl }}
+                      style={styles.memberAvatar}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberUsername}>
+                        {member.username || "Anonymous"}
+                      </Text>
+                      <Text style={styles.memberPublicKey} numberOfLines={1}>
+                        {member.publicKey}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+            {!loadingMembers && groupMembers.length === 0 && (
+              <View style={styles.modalEmptyContainer}>
+                <Feather name="users" size={48} color="#9ca3af" />
+                <Text style={styles.modalEmptyText}>No members found</Text>
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -619,26 +834,124 @@ function isSameCalendarDay(a: Date, b: Date): boolean {
 }
 
 const styles = StyleSheet.create({
-  incomingBubbleShadow: {
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+  headerBackButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
-  outgoingBubbleShadow: {
-    shadowColor: "#3b82f6",
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+  headerTitle: {
+    color: "#111",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  headerRightContainer: {
+    paddingRight: 8,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#0ea5e9",
+  },
+  headerAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  groupAvatarsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  groupMemberAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#e5e7eb",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  groupMemberAvatarMore: {
+    backgroundColor: "#3b82f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  groupMemberAvatarMoreText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
   },
   composerShadow: {
-    shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalLoadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  modalEmptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  modalEmptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#6b7280",
+  },
+  memberItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  memberAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#e5e7eb",
+  },
+  memberInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  memberUsername: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111",
+    marginBottom: 2,
+  },
+  memberPublicKey: {
+    fontSize: 12,
+    color: "#6b7280",
   },
 });
 
@@ -665,13 +978,7 @@ function Composer({
   const [inputHeight, setInputHeight] = useState(44);
   const textInputRef = useRef<TextInput>(null);
 
-  const focusInput = useCallback(() => {
-    if (Platform.OS === "ios") {
-      requestAnimationFrame(() => textInputRef.current?.focus());
-    } else {
-      textInputRef.current?.focus();
-    }
-  }, []);
+
 
   const handleContentSizeChange = useCallback(
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
@@ -698,7 +1005,7 @@ function Composer({
       );
 
       setText("");
-      focusInput();
+     
       onSent && onSent();
     } catch (e) {
       console.error("Send message error", e);
@@ -713,7 +1020,7 @@ function Composer({
     threadAccessGroupKeyName,
     userAccessGroupKeyName,
     onSent,
-    focusInput,
+
   ]);
 
   const sendDisabled = sending || !text.trim();
