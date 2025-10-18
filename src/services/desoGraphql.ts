@@ -24,6 +24,8 @@ const GRAPHQL_QUERY = `
         recipientAccessGroupOwnerPublicKey
         senderAccessGroupPublicKey
         recipientAccessGroupPublicKey
+        senderAccessGroupKeyName
+        recipientAccessGroupKeyName
         id
         isGroupChatMessage
         senderAccessGroup {
@@ -40,6 +42,37 @@ const GRAPHQL_QUERY = `
         receiver {
           username
           publicKey
+          profilePic
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
+const ACCESS_GROUPS_QUERY = `
+  query AccessGroups(
+    $filter: AccessGroupFilter
+    $first: Int
+    $after: Cursor
+  ) {
+    accessGroups(filter: $filter, first: $first, after: $after) {
+      nodes {
+        accessGroupMembers {
+          nodes {
+            member {
+              username
+              publicKey
+              profilePic
+            }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
       }
       pageInfo {
@@ -59,6 +92,8 @@ type GraphqlMessageNode = {
   recipientAccessGroupOwnerPublicKey?: string | null;
   senderAccessGroupPublicKey?: string | null;
   recipientAccessGroupPublicKey?: string | null;
+  senderAccessGroupKeyName?: string | null;
+  recipientAccessGroupKeyName?: string | null;
   senderAccessGroup?: {
     accessGroupKeyName?: string | null;
   } | null;
@@ -73,8 +108,29 @@ type GraphqlMessageNode = {
   receiver?: {
     username?: string | null;
     publicKey?: string | null;
+    profilePic?: string | null;
   } | null;
   isGroupChatMessage?: boolean | null;
+};
+
+export type GroupMember = {
+  username?: string | null;
+  publicKey: string;
+  profilePic?: string | null;
+};
+
+type AccessGroupMembersNode = {
+  member: GroupMember;
+};
+
+type AccessGroupNode = {
+  accessGroupMembers?: {
+    nodes?: AccessGroupMembersNode[];
+    pageInfo?: {
+      hasNextPage?: boolean;
+      endCursor?: string | null;
+    };
+  };
 };
 
 export function normalizeTimestampToNanos(
@@ -324,9 +380,228 @@ export async function fetchDmMessagesViaGraphql({
   };
 }
 
+type FetchGroupMessagesInput = {
+  accessGroupKeyName: string;
+  accessGroupOwnerPublicKey?: string | null;
+  limit?: number;
+  afterCursor?: string | null;
+  beforeCursor?: string | null;
+  graphqlEndpoint?: string;
+};
+
+export async function fetchGroupMessagesViaGraphql({
+  accessGroupKeyName,
+  accessGroupOwnerPublicKey,
+  limit,
+  afterCursor,
+  beforeCursor,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
+    DEFAULT_GRAPHQL_URL,
+}: FetchGroupMessagesInput): Promise<{
+  nodes: GraphqlMessageNode[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}> {
+  const filter: Record<string, unknown> = {
+    isGroupChatMessage: { equalTo: true },
+    recipientAccessGroupKeyName: { equalTo: accessGroupKeyName },
+  };
+
+  if (accessGroupOwnerPublicKey) {
+    filter.recipientAccessGroupOwnerPublicKey = {
+      equalTo: accessGroupOwnerPublicKey,
+    };
+  }
+
+  const variables: Record<string, unknown> = {
+    filter,
+    orderBy: ["TIMESTAMP_DESC"],
+  };
+
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    variables.first = limit;
+  }
+
+  if (afterCursor) {
+    variables.after = afterCursor;
+  }
+
+  if (beforeCursor) {
+    variables.before = beforeCursor;
+  }
+
+  const body = {
+    query: GRAPHQL_QUERY,
+    variables,
+  };
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchGroupMessagesViaGraphql] request payload", {
+      accessGroupKeyName,
+      accessGroupOwnerPublicKey,
+      variables: body.variables,
+    });
+  }
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}…`
+    );
+  }
+
+  const json = (await response.json()) as {
+    data?: {
+      messages?: {
+        nodes?: GraphqlMessageNode[];
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      } | null;
+    } | null;
+    errors?: Array<{ message?: string }>;
+  };
+
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
+        "GraphQL query failed"
+    );
+  }
+
+  const connection = json.data?.messages;
+  if (!connection) {
+    return {
+      nodes: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
+
+  const { nodes = [], pageInfo } = connection;
+
+  return {
+    nodes,
+    pageInfo: {
+      hasNextPage: Boolean(pageInfo?.hasNextPage),
+      endCursor:
+        typeof pageInfo?.endCursor === "string" ? pageInfo.endCursor : null,
+    },
+  };
+}
+
+export async function fetchAccessGroupMembers({
+  accessGroupKeyName,
+  accessGroupOwnerPublicKey,
+  limit = 50,
+  afterCursor,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
+    DEFAULT_GRAPHQL_URL,
+}: {
+  accessGroupKeyName: string;
+  accessGroupOwnerPublicKey: string;
+  limit?: number;
+  afterCursor?: string | null;
+  graphqlEndpoint?: string;
+}): Promise<{
+  members: GroupMember[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}> {
+  const filter: Record<string, unknown> = {
+    accessGroupKeyName: { equalTo: accessGroupKeyName },
+    accessGroupOwnerPublicKey: { equalTo: accessGroupOwnerPublicKey },
+  };
+
+  const variables: Record<string, unknown> = {
+    filter,
+  };
+
+  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+    variables.first = 1;
+  }
+
+  const body = {
+    query: ACCESS_GROUPS_QUERY,
+    variables,
+  };
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchAccessGroupMembers] request payload", {
+      accessGroupKeyName,
+      accessGroupOwnerPublicKey,
+      variables,
+    });
+  }
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}…`
+    );
+  }
+
+  const json = (await response.json()) as {
+    data?: {
+      accessGroups?: {
+        nodes?: AccessGroupNode[];
+        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+      } | null;
+    } | null;
+    errors?: Array<{ message?: string }>;  };
+
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
+        "GraphQL query failed"
+    );
+  }
+
+  const accessGroupsConnection = json.data?.accessGroups;
+  const firstAccessGroup = accessGroupsConnection?.nodes?.[0];
+  
+  if (!firstAccessGroup?.accessGroupMembers) {
+    return {
+      members: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
+
+  const membersConnection = firstAccessGroup.accessGroupMembers;
+  const memberNodes = membersConnection.nodes ?? [];
+
+  const members = memberNodes
+    .map((node) => node.member)
+    .filter((member): member is GroupMember => Boolean(member?.publicKey));
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchAccessGroupMembers] fetched members", {
+      count: members.length,
+      members,
+    });
+  }
+
+  return {
+    members,
+    pageInfo: {
+      hasNextPage: Boolean(membersConnection.pageInfo?.hasNextPage),
+      endCursor:
+        typeof membersConnection.pageInfo?.endCursor === "string"
+          ? membersConnection.pageInfo.endCursor
+          : null,
+    },
+  };
+}
+
 export function buildDefaultProfileEntry(
   publicKey: string,
-  username?: string | null
+  username?: string | null,
+  profilePic?: string | null
 ): ProfileEntryResponse {
   return {
     PublicKeyBase58Check: publicKey,
@@ -346,6 +621,6 @@ export function buildDefaultProfileEntry(
     BestExchangeRateDESOPerDAOCoin: 0,
     IsFeaturedTutorialWellKnownCreator: false,
     IsFeaturedTutorialUpAndComingCreator: false,
-    ExtraData: {},
+    ExtraData: profilePic ? { LargeProfilePicURL: profilePic } : {},
   };
 }

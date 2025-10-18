@@ -22,6 +22,7 @@ import {
 import {
   buildDefaultProfileEntry,
   fetchDmMessagesViaGraphql,
+  fetchGroupMessagesViaGraphql,
   normalizeTimestampToNanos,
 } from "./desoGraphql";
 
@@ -350,7 +351,8 @@ export async function fetchPaginatedDmThreadMessages(
           publicKeyToProfileEntryResponseMap[node.sender.publicKey] =
             buildDefaultProfileEntry(
               node.sender.publicKey,
-              node.sender.username ?? undefined
+              node.sender.username ?? undefined,
+              node.sender.profilePic ?? undefined
             );
         }
 
@@ -358,7 +360,8 @@ export async function fetchPaginatedDmThreadMessages(
           publicKeyToProfileEntryResponseMap[node.receiver.publicKey] =
             buildDefaultProfileEntry(
               node.receiver.publicKey,
-              node.receiver.username ?? undefined
+              node.receiver.username ?? undefined,
+              node.receiver.profilePic ?? undefined
             );
         }
 
@@ -552,18 +555,175 @@ export async function fetchPaginatedDmThreadMessages(
 export async function fetchPaginatedGroupThreadMessages(
   payload: GetPaginatedMessagesForGroupThreadRequest,
   accessGroups: AccessGroupEntryResponse[],
-  loggedInUserPublicKey?: string
+  loggedInUserPublicKey?: string,
+  options: {
+    afterCursor?: string | null;
+    beforeCursor?: string | null;
+    limit?: number;
+    recipientAccessGroupOwnerPublicKey?: string | null;
+  } = {}
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
 }> {
+  const {
+    afterCursor,
+    beforeCursor,
+    limit = payload.MaxMessagesToFetch ?? 10,
+    recipientAccessGroupOwnerPublicKey,
+  } = options;
+
+  const publicKeyForAccessGroups =
+    loggedInUserPublicKey || payload.UserPublicKeyBase58Check;
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedGroupThreadMessages] 🚀 Attempting GraphQL fetch", {
+      accessGroupKeyName: payload.AccessGroupKeyName,
+      recipientAccessGroupOwnerPublicKey,
+      afterCursor,
+      limit,
+    });
+  }
+
+  try {
+    const { nodes, pageInfo } = await fetchGroupMessagesViaGraphql({
+      accessGroupKeyName: payload.AccessGroupKeyName,
+      accessGroupOwnerPublicKey: recipientAccessGroupOwnerPublicKey ?? undefined,
+      limit,
+      afterCursor,
+      beforeCursor,
+    });
+
+    const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
+      {};
+
+    const rawMessages = nodes
+      .map((node) => {
+        const senderPublicKey =
+          node.senderAccessGroupOwnerPublicKey ??
+          node.sender?.publicKey ??
+          "";
+        const recipientPublicKey =
+          node.recipientAccessGroupOwnerPublicKey ??
+          node.receiver?.publicKey ??
+          "";
+
+        if (!node.encryptedText || !senderPublicKey || !recipientPublicKey) {
+          return null;
+        }
+
+        const {
+          nanos: timestampNanos,
+          nanosString: timestampNanosString,
+        } = normalizeTimestampToNanos(node.timestamp);
+
+        const senderAccessGroupKeyName =
+          node.senderAccessGroupKeyName ??
+          node.senderAccessGroup?.accessGroupKeyName ??
+          DEFAULT_KEY_MESSAGING_GROUP_NAME;
+        const recipientAccessGroupKeyName =
+          node.recipientAccessGroupKeyName ??
+          node.receiverAccessGroup?.accessGroupKeyName ??
+          payload.AccessGroupKeyName ??
+          DEFAULT_KEY_MESSAGING_GROUP_NAME;
+
+        if (node.sender?.publicKey) {
+          publicKeyToProfileEntryResponseMap[node.sender.publicKey] =
+            buildDefaultProfileEntry(
+              node.sender.publicKey,
+              node.sender.username ?? undefined,
+              node.sender.profilePic ?? undefined
+            );
+        }
+
+        if (node.receiver?.publicKey) {
+          publicKeyToProfileEntryResponseMap[node.receiver.publicKey] =
+            buildDefaultProfileEntry(
+              node.receiver.publicKey,
+              node.receiver.username ?? undefined,
+              node.receiver.profilePic ?? undefined
+            );
+        }
+
+        return {
+          ChatType: ChatType.GROUPCHAT,
+          SenderInfo: {
+            OwnerPublicKeyBase58Check: senderPublicKey,
+            AccessGroupPublicKeyBase58Check:
+              node.senderAccessGroupPublicKey ?? "",
+            AccessGroupKeyName: senderAccessGroupKeyName,
+          },
+          RecipientInfo: {
+            OwnerPublicKeyBase58Check: recipientPublicKey,
+            AccessGroupPublicKeyBase58Check:
+              node.recipientAccessGroupPublicKey ?? "",
+            AccessGroupKeyName: recipientAccessGroupKeyName,
+          },
+          MessageInfo: {
+            EncryptedText: node.encryptedText,
+            TimestampNanos: timestampNanos,
+            TimestampNanosString: timestampNanosString,
+            ExtraData: {},
+          },
+        } as NewMessageEntryResponse;
+      })
+      .filter(
+        (message): message is NewMessageEntryResponse =>
+          Boolean(message?.MessageInfo?.EncryptedText)
+      );
+
+    if (rawMessages.length === 0) {
+      return {
+        decrypted: [],
+        updatedAllAccessGroups: accessGroups,
+        publicKeyToProfileEntryResponseMap,
+        pageInfo,
+      };
+    }
+
+    const { decrypted, updatedAllAccessGroups } =
+      await decryptAccessGroupMessagesWithRetry(
+        publicKeyForAccessGroups,
+        rawMessages,
+        accessGroups
+      );
+
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.log("[fetchPaginatedGroupThreadMessages] ✅ GraphQL fetch SUCCESS", {
+        count: decrypted.length,
+        hasNextPage: pageInfo.hasNextPage,
+        endCursor: pageInfo.endCursor,
+      });
+    }
+
+    return {
+      decrypted,
+      updatedAllAccessGroups,
+      publicKeyToProfileEntryResponseMap,
+      pageInfo,
+    };
+  } catch (error) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn(
+        "[fetchPaginatedGroupThreadMessages] GraphQL query failed, falling back to REST endpoint",
+        error
+      );
+    }
+  }
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedGroupThreadMessages] 🔄 Using REST API fallback");
+  }
+
   const response = await getPaginatedMessagesForGroupThread(payload);
-  const rawMessages = (response as any).GroupChatMessages ?? response.Messages ?? (response as any).ThreadMessages ?? [];
-  
-  // Use the logged-in user's public key for fetching access groups, not the payload's UserPublicKeyBase58Check
-  const publicKeyForAccessGroups = loggedInUserPublicKey || payload.UserPublicKeyBase58Check;
-  
+  const rawMessages =
+    (response as any).GroupChatMessages ??
+    response.Messages ??
+    (response as any).ThreadMessages ??
+    [];
+
   const { decrypted, updatedAllAccessGroups } =
     await decryptAccessGroupMessagesWithRetry(
       publicKeyForAccessGroups,
@@ -571,10 +731,20 @@ export async function fetchPaginatedGroupThreadMessages(
       accessGroups
     );
 
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchPaginatedGroupThreadMessages] ✅ REST API fetch SUCCESS", {
+      count: decrypted.length,
+    });
+  }
+
   return {
     decrypted,
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
+    pageInfo: {
+      hasNextPage: false,
+      endCursor: null,
+    },
   };
 }
