@@ -291,6 +291,7 @@ export async function fetchPaginatedDmThreadMessages(
   const {
     afterCursor,
     limit = payload.MaxMessagesToFetch ?? 10,
+    fallbackBeforeTimestampNanos,
   } = options;
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
@@ -417,17 +418,88 @@ export async function fetchPaginatedDmThreadMessages(
       };
     }
 
-    const { decrypted, updatedAllAccessGroups } =
+    let { decrypted, updatedAllAccessGroups } =
       await decryptAccessGroupMessagesWithRetry(
         payload.UserGroupOwnerPublicKeyBase58Check,
         rawMessages,
         accessGroups
       );
 
+    if (
+      !pageInfo?.hasNextPage &&
+      fallbackBeforeTimestampNanos &&
+      decrypted.length > 0
+    ) {
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.log(
+          "[fetchPaginatedDmThreadMessages] GraphQL reported no next page, attempting REST fallback",
+          {
+            fallbackBeforeTimestampNanos,
+          }
+        );
+      }
+
+      const restPayload: GetPaginatedMessagesForDmThreadRequest = {
+        ...payload,
+        StartTimeStamp: fallbackBeforeTimestampNanos,
+        StartTimeStampString: String(fallbackBeforeTimestampNanos),
+        MaxMessagesToFetch: limit,
+      };
+
+      const restResponse = await getPaginatedMessagesForDmThread(restPayload);
+      const restRawMessages =
+        restResponse.Messages ?? (restResponse as any).ThreadMessages ?? [];
+      const restDecryptResult = await decryptAccessGroupMessagesWithRetry(
+        payload.UserGroupOwnerPublicKeyBase58Check,
+        restRawMessages,
+        updatedAllAccessGroups
+      );
+
+      updatedAllAccessGroups = restDecryptResult.updatedAllAccessGroups;
+
+      const dedupeMap = new Map<string, DecryptedMessageEntryResponse>();
+      const appendWithKey = (
+        msgs: DecryptedMessageEntryResponse[],
+        source: string
+      ): void => {
+        msgs.forEach((msg, idx) => {
+          const baseKey =
+            msg.MessageInfo?.TimestampNanosString ??
+            String(msg.MessageInfo?.TimestampNanos ?? "");
+          const senderKey =
+            msg.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
+          const encryptedText = msg.MessageInfo?.EncryptedText ?? "";
+          const key = `${baseKey}-${senderKey}-${encryptedText}-${source}-${idx}`;
+          dedupeMap.set(key, msg);
+        });
+      };
+
+      appendWithKey(decrypted, "graphql");
+      appendWithKey(restDecryptResult.decrypted, "rest");
+
+      decrypted = Array.from(dedupeMap.values());
+
+      Object.assign(
+        publicKeyToProfileEntryResponseMap,
+        restResponse.PublicKeyToProfileEntryResponse
+      );
+
+      let pageInfoLocal = pageInfo;
+      pageInfoLocal = {
+        hasNextPage: restDecryptResult.decrypted.length === limit,
+        endCursor:
+          restDecryptResult.decrypted.length === limit
+            ? restDecryptResult.decrypted[
+                restDecryptResult.decrypted.length - 1
+              ]?.MessageInfo?.TimestampNanosString ?? null
+            : null,
+      };
+    }
+
     if (typeof __DEV__ !== "undefined" && __DEV__) {
       console.log("[fetchPaginatedDmThreadMessages] ✅ GraphQL fetch SUCCESS", {
         count: decrypted.length,
-        decrypted,
+        pageInfo,
       });
     }
 

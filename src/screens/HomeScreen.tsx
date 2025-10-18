@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useCallback } from "react";
+import React, { useContext, useMemo, useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
+  DeviceEventEmitter,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ChatType, buildProfilePictureUrl } from "deso-protocol";
@@ -30,6 +31,7 @@ import {
 } from "../utils/deso";
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -88,6 +90,40 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const { conversations, profiles, isLoading, error, reload } =
     useConversations();
+  const [optimisticPreviews, setOptimisticPreviews] = useState<
+    Record<
+      string,
+      {
+        messageText: string;
+        timestampNanos: number;
+      }
+    >
+  >({});
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      OUTGOING_MESSAGE_EVENT,
+      (
+        payload: {
+          conversationId: string;
+          messageText: string;
+          timestampNanos: number;
+        }
+      ) => {
+        setOptimisticPreviews((prev) => ({
+          ...prev,
+          [payload.conversationId]: {
+            messageText: payload.messageText,
+            timestampNanos: payload.timestampNanos,
+          },
+        }));
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const items = useMemo<MockConversation[]>(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
@@ -136,6 +172,33 @@ export default function HomeScreen() {
       };
     });
   }, [conversations, profiles, currentUser?.PublicKeyBase58Check]);
+
+  const enhancedItems = useMemo(() => {
+    return items.map((item) => {
+      const conversationId = `${item.threadPublicKey}-${item.chatType}`;
+      const optimistic = optimisticPreviews[conversationId];
+
+      if (optimistic) {
+        const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
+        const existingTimestamp = item.lastTimestampNanos ?? 0;
+
+        if (optimistic.timestampNanos > existingTimestamp) {
+          return {
+            ...item,
+            preview: `You: ${
+              optimistic.messageText.trim() === "🚀"
+                ? "🚀"
+                : optimistic.messageText
+            }`,
+            time: formatTimestamp(optimisticTimestampMs),
+            lastTimestampNanos: optimistic.timestampNanos,
+          };
+        }
+      }
+
+      return item;
+    });
+  }, [items, optimisticPreviews]);
 
   const handlePress = useCallback(
     (item: MockConversation) => {
@@ -201,7 +264,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="flex-1">
         <FlatList
-          data={items}
+          data={enhancedItems}
           keyExtractor={(item) => item.id}
           className="flex-1"
           showsVerticalScrollIndicator={false}
