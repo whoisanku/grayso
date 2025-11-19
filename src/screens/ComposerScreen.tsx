@@ -19,8 +19,9 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
+import { buildProfilePictureUrl, submitPost, identity, constructSubmitPost } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
+import { useAuth } from "../contexts/AuthContext";
 
 const MAX_LENGTH = 280;
 
@@ -35,7 +36,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { currentUser } = React.useContext(DeSoIdentityContext);
+  const { currentUser, isSeedLogin, signAndSubmitTx } = useAuth();
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -82,26 +83,59 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     setIsPosting(true);
     
     try {
-      // 1. Get JWT for uploads/posting
-      const jwt = await identity.jwt();
+      // 1. Get JWT for uploads/posting (only needed for uploadImage if using Identity, 
+      // but for seed login we might need a different way or skip JWT if upload-image allows it?
+      // Actually upload-image requires JWT or signature. 
+      // For now let's assume identity.jwt() works if logged in via identity.
+      // If seed login, we might fail here.
+      // TODO: Handle image upload for seed login (requires signing a JWT or using a different endpoint/method).
+      // For now, let's proceed with text post logic which is critical.
       
-      // 2. Upload images if any
+      let jwt = "";
+      if (!isSeedLogin) {
+         jwt = await identity.jwt();
+      } else {
+         // For seed login, we can't easily get a JWT without signing.
+         // We'll skip image upload for seed login for this iteration or handle it later.
+         if (images.length > 0) {
+            alert("Image upload not yet supported for seed login.");
+            setIsPosting(false);
+            return;
+         }
+      }
+      
+      // 2. Upload images if any (and if not seed login)
       let imageUrls: string[] = [];
-      if (images.length > 0) {
+      if (images.length > 0 && !isSeedLogin) {
         imageUrls = await Promise.all(
           images.map(uri => uploadImageToDeso(uri, currentUser.PublicKeyBase58Check, jwt))
         );
       }
 
       // 3. Submit Post
-      await submitPost({
-        UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
-        BodyObj: {
-          Body: text,
-          ImageURLs: imageUrls,
-          VideoURLs: [],
-        },
-      });
+      if (isSeedLogin) {
+        // Manual construction and signing
+        const tx = await constructSubmitPost({
+          UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
+          BodyObj: {
+            Body: text,
+            ImageURLs: imageUrls,
+            VideoURLs: [],
+          },
+        });
+        
+        await signAndSubmitTx(tx.TransactionHex);
+      } else {
+        // Identity flow
+        await submitPost({
+          UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
+          BodyObj: {
+            Body: text,
+            ImageURLs: imageUrls,
+            VideoURLs: [],
+          },
+        });
+      }
 
       // 4. Success
       navigation.goBack();
@@ -111,7 +145,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     } finally {
       setIsPosting(false);
     }
-  }, [text, images, navigation, currentUser]);
+  }, [text, images, navigation, currentUser, isSeedLogin, signAndSubmitTx]);
 
   const onCancel = useCallback(() => {
     navigation.goBack();

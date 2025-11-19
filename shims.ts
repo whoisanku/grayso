@@ -1,3 +1,13 @@
+import "react-native-get-random-values";
+import { Buffer } from "buffer";
+import process from "process";
+
+global.Buffer = Buffer;
+global.process = process;
+
+import { polyfillWebCrypto } from "expo-standard-web-crypto";
+polyfillWebCrypto();
+
 import "./get-random-values-shim";
 
 import "@ethersproject/shims";

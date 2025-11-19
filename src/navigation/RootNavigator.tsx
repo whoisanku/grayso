@@ -5,13 +5,13 @@ import ComposerScreen from "../screens/ComposerScreen";
 import LoginScreen from "../screens/LoginScreen";
 import ConversationScreen from "../screens/ConversationScreen";
 
-import { DeSoIdentityContext } from "react-deso-protocol";
+import { useAuth } from "../contexts/AuthContext";
 import { type RootStackParamList } from "./types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
-  const { currentUser } = useContext(DeSoIdentityContext);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     console.log("RootNavigator - currentUser changed:", currentUser);

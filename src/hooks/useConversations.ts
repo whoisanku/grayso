@@ -12,10 +12,10 @@ import {
   ConversationMap,
 } from "../services/conversations";
 import { fetchAccessGroupMembers, GroupMember } from "../services/desoGraphql";
-import { DeSoIdentityContext } from "react-deso-protocol";
+import { useAuth } from "../contexts/AuthContext";
 
 export const useConversations = () => {
-  const { currentUser } = useContext(DeSoIdentityContext);
+  const { currentUser, decryptMessage } = useAuth();
   const [conversations, setConversations] = useState<ConversationMap>({});
   const [
     profiles,
@@ -44,7 +44,11 @@ export const useConversations = () => {
       ).concat(AccessGroupsMember || []);
 
       const { conversations, publicKeyToProfileEntryResponseMap } =
-        await getConversationsNewMap(currentUser.PublicKeyBase58Check, allAccessGroups);
+        await getConversationsNewMap(
+          currentUser.PublicKeyBase58Check,
+          allAccessGroups,
+          decryptMessage
+        );
 
       setConversations(conversations);
       setProfiles(publicKeyToProfileEntryResponseMap);

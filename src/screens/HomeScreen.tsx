@@ -22,7 +22,7 @@ import {
   type HomeTabParamList,
   type RootStackParamList,
 } from "../navigation/types";
-import { DeSoIdentityContext } from "react-deso-protocol";
+import { useAuth } from "../contexts/AuthContext";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../services/conversations";
 import {
   formatPublicKey,
@@ -90,7 +90,7 @@ const formatTimestamp = (timestampMs: number) => {
 
 export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
-  const { currentUser } = useContext(DeSoIdentityContext);
+  const { currentUser } = useAuth();
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();

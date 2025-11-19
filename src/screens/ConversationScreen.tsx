@@ -55,6 +55,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
+import { useAuth } from "../contexts/AuthContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -75,6 +76,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   } = route.params;
 
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
+  const { decryptMessage } = useAuth();
   const [accessGroups, setAccessGroups] = useState<AccessGroupEntryResponse[]>(
     []
   );
@@ -369,12 +371,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
           const groupResult = await fetchPaginatedGroupThreadMessages(
             payload,
             accessGroupsRef.current,
-            userPublicKey,
             {
               afterCursor: initial ? null : paginationCursorRef.current,
               limit: PAGE_SIZE,
-              recipientAccessGroupOwnerPublicKey: groupOwnerPublicKey,
-            }
+              recipientAccessGroupOwnerPublicKey: partyGroupOwnerPublicKeyBase58Check,
+            },
+            userPublicKey,
+            decryptMessage  // Pass custom decrypt function for seed users
           );
           result = groupResult;
           pageInfo = groupResult.pageInfo;
@@ -405,10 +408,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
               afterCursor: initial ? null : paginationCursorRef.current,
               limit: PAGE_SIZE,
               fallbackBeforeTimestampNanos: fallbackBeforeTimestamp,
-            }
+            },
+            decryptMessage  // Pass custom decrypt function for seed users
           );
           result = dmResult;
           pageInfo = dmResult.pageInfo;
+        }
+
+        if (result.updatedAllAccessGroups) {
+          accessGroupsRef.current = result.updatedAllAccessGroups;
         }
 
         const decryptedMessages = result.decrypted.filter(

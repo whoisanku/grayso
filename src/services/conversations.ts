@@ -41,7 +41,8 @@ export type ConversationMap = Record<string, Conversation>;
 
 export const getConversationsNewMap = async (
   userPublicKeyBase58Check: string,
-  allAccessGroups: AccessGroupEntryResponse[]
+  allAccessGroups: AccessGroupEntryResponse[],
+  decryptMessageFn?: (message: any, accessGroups: any[]) => Promise<any>
 ): Promise<{
   conversations: ConversationMap;
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
@@ -51,7 +52,11 @@ export const getConversationsNewMap = async (
     decrypted,
     publicKeyToProfileEntryResponseMap,
     updatedAllAccessGroups,
-  } = await getConversationNew(userPublicKeyBase58Check, allAccessGroups);
+  } = await getConversationNew(
+    userPublicKeyBase58Check,
+    allAccessGroups,
+    decryptMessageFn
+  );
   const conversations: ConversationMap = {};
   decrypted.forEach((dmr) => {
     const otherInfo =
@@ -88,7 +93,8 @@ export const getConversationsNewMap = async (
 
 export const getConversationNew = async (
   userPublicKeyBase58Check: string,
-  allAccessGroups: AccessGroupEntryResponse[]
+  allAccessGroups: AccessGroupEntryResponse[],
+  decryptMessageFn?: (message: any, accessGroups: any[]) => Promise<any>
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
@@ -102,7 +108,8 @@ export const getConversationNew = async (
     await decryptAccessGroupMessagesWithRetry(
       userPublicKeyBase58Check,
       rawThreads,
-      allAccessGroups
+      allAccessGroups,
+      decryptMessageFn
     );
   return {
     decrypted,
@@ -162,14 +169,16 @@ export const getConversations = async (
 export const decryptAccessGroupMessagesWithRetry = async (
   publicKeyBase58Check: string,
   messages: NewMessageEntryResponse[],
-  accessGroups: AccessGroupEntryResponse[]
+  accessGroups: AccessGroupEntryResponse[],
+  decryptMessageFn?: (message: any, accessGroups: any[]) => Promise<any>
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
 }> => {
   let decryptedMessageEntries = await decryptAccessGroupMessages(
     messages,
-    accessGroups
+    accessGroups,
+    decryptMessageFn
   );
 
   // Naive approach to figuring out which access groups we need to fetch.
@@ -185,7 +194,8 @@ export const decryptAccessGroupMessagesWithRetry = async (
     );
     decryptedMessageEntries = await decryptAccessGroupMessages(
       messages,
-      accessGroups
+      accessGroups,
+      decryptMessageFn
     );
   }
 
@@ -197,10 +207,11 @@ export const decryptAccessGroupMessagesWithRetry = async (
 
 export const decryptAccessGroupMessages = (
   messages: NewMessageEntryResponse[],
-  accessGroups: AccessGroupEntryResponse[]
+  accessGroups: AccessGroupEntryResponse[],
+  decryptMessageFn: (message: any, accessGroups: any[]) => Promise<any> = (m, ag) => identity.decryptMessage(m, ag)
 ): Promise<DecryptedMessageEntryResponse[]> => {
   return Promise.all(
-    (messages || []).map((m) => identity.decryptMessage(m, accessGroups))
+    (messages || []).map((m) => decryptMessageFn(m, accessGroups))
   );
 };
 
@@ -298,7 +309,8 @@ export async function fetchPaginatedDmThreadMessages(
     afterCursor?: string | null;
     limit?: number;
     fallbackBeforeTimestampNanos?: number;
-  } = {}
+  } = {},
+  decryptMessageFn?: (message: any, accessGroups: any[]) => Promise<any>
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
@@ -441,7 +453,8 @@ export async function fetchPaginatedDmThreadMessages(
       await decryptAccessGroupMessagesWithRetry(
         payload.UserGroupOwnerPublicKeyBase58Check,
         rawMessages,
-        accessGroups
+        accessGroups,
+        decryptMessageFn  // Pass custom decrypt function
       );
 
     if (
@@ -471,7 +484,8 @@ export async function fetchPaginatedDmThreadMessages(
       const restDecryptResult = await decryptAccessGroupMessagesWithRetry(
         payload.UserGroupOwnerPublicKeyBase58Check,
         restRawMessages,
-        updatedAllAccessGroups
+        updatedAllAccessGroups,
+        decryptMessageFn  // Pass custom decrypt function
       );
 
       updatedAllAccessGroups = restDecryptResult.updatedAllAccessGroups;
@@ -547,7 +561,8 @@ export async function fetchPaginatedDmThreadMessages(
     await decryptAccessGroupMessagesWithRetry(
       payload.UserGroupOwnerPublicKeyBase58Check,
       rawMessages,
-      accessGroups
+      accessGroups,
+      decryptMessageFn  // Pass custom decrypt function
     );
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
@@ -571,13 +586,14 @@ export async function fetchPaginatedDmThreadMessages(
 export async function fetchPaginatedGroupThreadMessages(
   payload: GetPaginatedMessagesForGroupThreadRequest,
   accessGroups: AccessGroupEntryResponse[],
-  loggedInUserPublicKey?: string,
   options: {
     afterCursor?: string | null;
     beforeCursor?: string | null;
     limit?: number;
     recipientAccessGroupOwnerPublicKey?: string | null;
-  } = {}
+  } = {},
+  loggedInUserPublicKey?: string,
+  decryptMessageFn?: (message: any, accessGroups: any[]) => Promise<any>
 ): Promise<{
   decrypted: DecryptedMessageEntryResponse[];
   updatedAllAccessGroups: AccessGroupEntryResponse[];
@@ -703,7 +719,8 @@ export async function fetchPaginatedGroupThreadMessages(
       await decryptAccessGroupMessagesWithRetry(
         publicKeyForAccessGroups,
         rawMessages,
-        accessGroups
+        accessGroups,
+        decryptMessageFn  // Pass custom decrypt function
       );
 
     if (typeof __DEV__ !== "undefined" && __DEV__) {
@@ -744,7 +761,8 @@ export async function fetchPaginatedGroupThreadMessages(
     await decryptAccessGroupMessagesWithRetry(
       publicKeyForAccessGroups,
       rawMessages,
-      accessGroups
+      accessGroups,
+      decryptMessageFn  // Pass custom decrypt function
     );
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {

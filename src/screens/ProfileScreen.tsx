@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { DeSoIdentityContext } from "react-deso-protocol";
+import { useAuth } from "../contexts/AuthContext";
 import {
   buildProfilePictureUrl,
   getSingleProfile,
@@ -43,7 +43,7 @@ const formatNumber = (value?: number | null) => {
 };
 
 export default function ProfileScreen() {
-  const { currentUser, isLoading } = useContext(DeSoIdentityContext);
+  const { currentUser, isLoading, logout } = useAuth();
   const [profileDetails, setProfileDetails] =
     useState<ProfileEntryResponse | null>(
       currentUser?.ProfileEntryResponse ?? null
@@ -136,12 +136,12 @@ export default function ProfileScreen() {
   const handleLogout = useCallback(async () => {
     try {
       console.log("Logging out...");
-      await identity.logout();
+      await logout();
       console.log("Logout successful");
     } catch (logoutError) {
       console.warn("Logout error:", logoutError);
     }
-  }, []);
+  }, [logout]);
 
   if (!currentUser && !isLoading) {
     return (

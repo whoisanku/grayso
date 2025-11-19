@@ -12,6 +12,7 @@ import * as WebBrowser from "expo-web-browser";
 import { configure, identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
 import RootNavigator from "./navigation/RootNavigator";
+import { AuthProvider } from "./contexts/AuthContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -41,13 +42,15 @@ export default function App() {
 
   return (
     <DeSoIdentityProvider>
-      <CryptoPolyfill />
-      <SafeAreaProvider>
-        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-        <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-          <RootNavigator />
-        </NavigationContainer>
-      </SafeAreaProvider>
+      <AuthProvider>
+        <CryptoPolyfill />
+        <SafeAreaProvider>
+          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+          <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+            <RootNavigator />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </AuthProvider>
     </DeSoIdentityProvider>
   );
 }
