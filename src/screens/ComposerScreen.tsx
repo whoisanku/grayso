@@ -19,7 +19,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { buildProfilePictureUrl } from "deso-protocol";
+import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
 
 const MAX_LENGTH = 280;
@@ -50,20 +50,68 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
+  const uploadImageToDeso = async (uri: string, userPublicKey: string, jwt: string): Promise<string> => {
+    const filename = uri.split('/').pop() || 'image.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+    const formData = new FormData();
+    formData.append("file", { uri, name: filename, type } as any);
+    formData.append("UserPublicKeyBase58Check", userPublicKey);
+    formData.append("JWT", jwt);
+
+    const response = await fetch("https://node.deso.org/api/v0/upload-image", {
+      method: "POST",
+      body: formData,
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to upload image");
+    }
+
+    const data = await response.json();
+    return data.ImageURL;
+  };
+
   const onPost = useCallback(async () => {
-    if (text.length === 0 && images.length === 0) return;
+    if ((text.length === 0 && images.length === 0) || !currentUser?.PublicKeyBase58Check) return;
     
     setIsPosting(true);
-    console.log("Posting:", text, images);
     
-    // Simulate network request
-    setTimeout(() => {
-      setIsPosting(false);
+    try {
+      // 1. Get JWT for uploads/posting
+      const jwt = await identity.jwt();
+      
+      // 2. Upload images if any
+      let imageUrls: string[] = [];
+      if (images.length > 0) {
+        imageUrls = await Promise.all(
+          images.map(uri => uploadImageToDeso(uri, currentUser.PublicKeyBase58Check, jwt))
+        );
+      }
+
+      // 3. Submit Post
+      await submitPost({
+        UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
+        BodyObj: {
+          Body: text,
+          ImageURLs: imageUrls,
+          VideoURLs: [],
+        },
+      });
+
+      // 4. Success
       navigation.goBack();
-    }, 1000);
-    
-    // Here you would call your API to create the post
-  }, [text, images, navigation]);
+    } catch (error) {
+      console.error("Failed to create post:", error);
+      alert("Failed to create post. Please try again.");
+    } finally {
+      setIsPosting(false);
+    }
+  }, [text, images, navigation, currentUser]);
 
   const onCancel = useCallback(() => {
     navigation.goBack();
