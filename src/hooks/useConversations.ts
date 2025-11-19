@@ -11,6 +11,7 @@ import {
   getConversationsNewMap,
   ConversationMap,
 } from "../services/conversations";
+import { fetchAccessGroupMembers, GroupMember } from "../services/desoGraphql";
 import { DeSoIdentityContext } from "react-deso-protocol";
 
 export const useConversations = () => {
@@ -20,6 +21,7 @@ export const useConversations = () => {
     profiles,
     setProfiles,
   ] = useState<PublicKeyToProfileEntryResponseMap>({});
+  const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember[]>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +48,41 @@ export const useConversations = () => {
 
       setConversations(conversations);
       setProfiles(publicKeyToProfileEntryResponseMap);
+
+      // Fetch group members for avatars
+      const groupChats = Object.values(conversations).filter(
+        (c) => c.ChatType === ChatType.GROUPCHAT
+      );
+
+      const membersMap: Record<string, GroupMember[]> = {};
+      
+      await Promise.all(
+        groupChats.map(async (chat) => {
+          const lastMsg = chat.messages[0];
+          if (!lastMsg) return;
+          
+          const accessGroupKeyName = lastMsg.RecipientInfo.AccessGroupKeyName;
+          const ownerPublicKey = lastMsg.RecipientInfo.OwnerPublicKeyBase58Check;
+          
+          if (!accessGroupKeyName || !ownerPublicKey) return;
+
+          try {
+            const { members } = await fetchAccessGroupMembers({
+              accessGroupKeyName,
+              accessGroupOwnerPublicKey: ownerPublicKey,
+              limit: 4, // Fetch just enough for the stack
+            });
+            
+            // Create a unique key for the group
+            const groupKey = `${ownerPublicKey}-${accessGroupKeyName}`;
+            membersMap[groupKey] = members;
+          } catch (err) {
+            console.warn(`Failed to fetch members for group ${accessGroupKeyName}`, err);
+          }
+        })
+      );
+
+      setGroupMembers(membersMap);
     } catch (e: any) {
         const message: string = e?.message ?? "";
         if (message.includes("Cannot decrypt messages")) {
@@ -70,6 +107,6 @@ export const useConversations = () => {
     loadConversations();
   }, [loadConversations]);
 
-  return { conversations, profiles, isLoading, error, reload: loadConversations };
+  return { conversations, profiles, groupMembers, isLoading, error, reload: loadConversations };
 };
 

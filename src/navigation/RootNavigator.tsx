@@ -35,7 +35,7 @@ export default function RootNavigator() {
             />
           </Stack.Group>
           <Stack.Group
-            screenOptions={{ presentation: "modal", headerShown: true }}
+            screenOptions={{ presentation: "modal", headerShown: false }}
           >
             <Stack.Screen name="Composer" component={ComposerScreen} />
           </Stack.Group>

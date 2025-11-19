@@ -50,9 +50,11 @@ import { fetchAccessGroupMembers, GroupMember } from "../services/desoGraphql";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useFocusEffect } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
+
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
+import { useColorScheme } from "nativewind";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -69,6 +71,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     lastTimestampNanos,
     title,
     recipientInfo,
+    initialGroupMembers,
   } = route.params;
 
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
@@ -92,7 +95,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
     | null
   >(null);
   const [loadingMembers, setLoadingMembers] = useState(false);
-  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>(
+    initialGroupMembers || []
+  );
   const [showMembersModal, setShowMembersModal] = useState(false);
   const lastRocketMessageKeyRef = useRef<string | null>(null);
   const reactionOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -108,6 +113,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
   const conversationId = useMemo(
     () => `${counterPartyPublicKey}-${chatType}`,
     [counterPartyPublicKey, chatType]
@@ -166,30 +173,106 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [isGroupChat, loadingMembers, threadAccessGroupKeyName, recipientOwnerKey, counterPartyPublicKey]);
 
   useEffect(() => {
-    if (isGroupChat) {
+    if (isGroupChat && groupMembers.length === 0) {
       loadGroupMembers();
     }
-  }, [isGroupChat, threadAccessGroupKeyName, recipientOwnerKey, counterPartyPublicKey]);
+  }, [isGroupChat, threadAccessGroupKeyName, recipientOwnerKey, counterPartyPublicKey, groupMembers.length]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerShadowVisible: true,
+      headerStyle: {
+        backgroundColor: isDark ? "#0f172a" : "#ffffff",
+      },
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ marginLeft: 0, padding: 4 }}
+        >
+          <Feather name="chevron-left" size={32} color={isDark ? "#f8fafc" : "#0f172a"} />
+        </TouchableOpacity>
+      ),
       headerTitle: () => (
-        <View style={styles.headerTitleContainer}>
-          <Image
-            source={{ uri: headerAvatarUri }}
-            style={styles.headerTitleAvatar}
-          />
+        <View style={{ alignItems: "center" }}>
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
-            style={styles.headerTitleText}
+            style={[styles.headerTitleText, isDark && { color: "#f8fafc" }]}
           >
             {headerDisplayName || "Conversation"}
           </Text>
         </View>
       ),
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => {
+            if (isGroupChat) {
+              setShowMembersModal(true);
+            }
+          }}
+          disabled={!isGroupChat}
+          activeOpacity={0.6}
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+        >
+          {isGroupChat ? (
+            <View style={{ flexDirection: 'row', marginRight: 8 }}>
+              {loadingMembers || (groupMembers.length === 0 && !headerAvatarUri) ? (
+                // Loading placeholders
+                [0, 1, 2].map((i) => (
+                  <View
+                    key={`placeholder-${i}`}
+                    style={[
+                      styles.headerTitleAvatar,
+                      {
+                        backgroundColor: isDark ? "#334155" : "#e2e8f0",
+                        marginLeft: i > 0 ? -15 : 0,
+                        zIndex: 3 - i,
+                        borderWidth: 2,
+                        borderColor: isDark ? "#0f172a" : "#ffffff",
+                        borderRadius: 18,
+                      },
+                    ]}
+                  />
+                ))
+              ) : (
+                groupMembers.slice(0, 3).map((member, index) => {
+                  const uri = member.profilePic
+                    ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                    : getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
+                  
+                  return (
+                    <View 
+                      key={member.publicKey} 
+                      style={[
+                        styles.headerTitleAvatar, 
+                        isDark && { backgroundColor: "#334155" },
+                        { 
+                          marginLeft: index > 0 ? -15 : 0,
+                          zIndex: 3 - index,
+                          borderWidth: 2,
+                          borderColor: isDark ? "#0f172a" : "#ffffff"
+                        }
+                      ]}
+                    >
+                      <Image
+                        source={{ uri }}
+                        style={{ width: '100%', height: '100%', borderRadius: 18 }}
+                      />
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          ) : (
+            <Image
+              source={{ uri: headerAvatarUri }}
+              style={[styles.headerTitleAvatar, isDark && { backgroundColor: "#334155" }]}
+            />
+          )}
+        </TouchableOpacity>
+      ),
     });
-  }, [headerAvatarUri, headerDisplayName, navigation]);
+  }, [headerAvatarUri, headerDisplayName, navigation, isGroupChat, groupMembers, isDark]);
 
   const mergeMessages = useCallback(
     (
@@ -204,7 +287,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           String(message.MessageInfo?.TimestampNanos ?? "");
         const senderKey =
           message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
-        const uniqueKey = `${timestamp}-${senderKey}-${idx}`;
+        const uniqueKey = `${timestamp}-${senderKey}`;
 
         map.set(uniqueKey, message);
       });
@@ -397,9 +480,21 @@ export default function ConversationScreen({ navigation, route }: Props) {
           hasMoreRef.current = Boolean(nextHasMore && paginationCursorRef.current);
           setHasMore(hasMoreRef.current);
         } else {
-          const nextHasMore = decryptedMessages.length === PAGE_SIZE;
-          hasMoreRef.current = nextHasMore;
-          setHasMore(nextHasMore);
+          let nextCursor = pageInfo?.endCursor ?? paginationCursorRef.current;
+          let nextHasMore = Boolean(pageInfo?.hasNextPage && nextCursor);
+
+          if (!nextHasMore && decryptedMessages.length === PAGE_SIZE) {
+            nextHasMore = true;
+            if (!nextCursor) {
+              nextCursor =
+                decryptedMessages[decryptedMessages.length - 1]?.MessageInfo
+                  ?.TimestampNanosString ?? null;
+            }
+          }
+
+          paginationCursorRef.current = nextCursor ?? null;
+          hasMoreRef.current = Boolean(nextHasMore && paginationCursorRef.current);
+          setHasMore(hasMoreRef.current);
         }
       } catch (err) {
         setError(
@@ -587,8 +682,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
         <View style={{ marginBottom: 12 }}>
           {showDayDivider ? (
             <View className="items-center py-3">
-              <View className="rounded-full bg-gray-200 px-3 py-1">
-                <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+              <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
+                <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
                   {formatDayLabel(timestamp)}
                 </Text>
               </View>
@@ -607,8 +702,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     className="h-8 w-8 rounded-full bg-gray-200"
                   />
                 ) : (
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200">
-                    <Feather name="user" size={16} color="#6b7280" />
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
                   </View>
                 )}
               </View>
@@ -646,23 +741,23 @@ export default function ConversationScreen({ navigation, route }: Props) {
       if (isOnlyMessage) return { borderRadius: 20 };
       if (isMine) {
         if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
-        if (isLastInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 4, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
+        if (isLastInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 0, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
         return { borderTopLeftRadius: 20, borderTopRightRadius: 4, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
       } else {
         if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
-        if (isLastInGroup) return { borderTopLeftRadius: 4, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
+        if (isLastInGroup) return { borderTopLeftRadius: 0, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
         return { borderTopLeftRadius: 4, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
       }
     };
 
-    const marginBottom = isLastInGroup ? 12 : 2;
+    const marginBottom = isLastInGroup ? 16 : 2;
 
     return (
       <View style={{ marginBottom }}>
         {showDayDivider ? (
           <View className="items-center py-3">
-            <View className="rounded-full bg-gray-200 px-3 py-1">
-              <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+            <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
+              <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
                 {formatDayLabel(timestamp)}
               </Text>
             </View>
@@ -681,15 +776,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   className="h-8 w-8 rounded-full bg-gray-200"
                 />
               ) : isLastInGroup ? (
-                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200">
-                  <Feather name="user" size={16} color="#6b7280" />
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                  <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
                 </View>
               ) : null}
             </View>
           ) : null}
           <View
-            className={`max-w-[75%] px-3.5 py-2.5 ${
-              isMine ? "bg-blue-500" : "bg-white"
+            className={`max-w-[75%] px-4 py-3 ${
+              isMine ? "bg-indigo-600 dark:bg-indigo-500" : "bg-white dark:bg-slate-800"
             }`}
             style={[
               getBorderRadius(),
@@ -698,22 +793,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
           >
             {!isMine && isFirstInGroup && (
               <Text
-                className="mb-1 text-[10px] font-semibold text-gray-500"
+                className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
                 numberOfLines={1}
               >
                 {displayName}
               </Text>
             )}
             <Text
-              className={`text-[15px] leading-5 ${
-                isMine ? "text-white" : "text-gray-900"
+              className={`text-[16px] leading-[22px] ${
+                isMine ? "text-white" : "text-slate-800 dark:text-slate-100"
               }`}
             >
               {messageText}
             </Text>
             {isLastInGroup && (
               <View
-                className={`mt-1 flex-row items-center ${
+                className={`mt-1.5 flex-row items-center ${
                   isMine ? "justify-end" : "justify-start"
                 }`}
               >
@@ -725,8 +820,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   <>
                     {timestamp ? (
                       <Text
-                        className={`text-[10px] ${
-                          isMine ? "text-white/80" : "text-gray-400"
+                        className={`text-[11px] ${
+                          isMine ? "text-indigo-100" : "text-slate-400 dark:text-slate-500"
                         }`}
                       >
                         {formatTimestamp(timestamp)}
@@ -770,13 +865,25 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [error]);
 
   const footer = useMemo(() => {
-    if (!isLoading || messages.length === 0) return null;
+    if (messages.length === 0) return null;
+
     return (
-      <View className="py-5" style={{ transform: [{ scaleY: -1 }] }}>
-        <ActivityIndicator size="small" color="#3b82f6" />
+      <View className="py-4 items-center" style={{ transform: [{ scaleY: -1 }] }}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#3b82f6" />
+        ) : hasMore ? (
+          <TouchableOpacity
+            onPress={() => loadMessages(false)}
+            className="bg-slate-100 px-4 py-2 rounded-full active:bg-slate-200 dark:bg-slate-800 dark:active:bg-slate-700"
+          >
+            <Text className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              Load older messages
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
-  }, [isLoading, messages.length]);
+  }, [isLoading, messages.length, hasMore, loadMessages]);
 
   const keyboardVerticalOffset = useMemo(() => {
     const offset = Number.isFinite(headerHeight) ? headerHeight : 0;
@@ -820,15 +927,20 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
         <View className="flex-1">
-          <FlatList
-            data={messages}
+          {isLoading && messages.length === 0 ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+          ) : (
+            <FlatList
+              data={messages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListHeaderComponent={header}
@@ -889,7 +1001,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
               />
             }
             ListEmptyComponent={() => (
-              <View className="items-center justify-center px-6 py-10" style={{ transform: [{ rotate: '180deg' }] }}>
+              <View className="items-center justify-center px-6 py-10" style={{ transform: [{ scaleY: -1 }] }}>
                 {isLoading ? (
                   <View className="items-center">
                     <ActivityIndicator size="large" color="#3b82f6" />
@@ -898,19 +1010,20 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                 ) : (
-                  <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10">
-                    <Feather name="message-circle" size={38} color="#9ca3af" />
-                    <Text className="mt-4 text-lg font-semibold text-gray-900">
+                  <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                    <Feather name="message-circle" size={38} color={isDark ? "#64748b" : "#9ca3af"} />
+                    <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
                       No messages yet
                     </Text>
-                    <Text className="mt-1 text-center text-sm text-gray-500">
+                    <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
                       Start the conversation and it will appear here instantly.
                     </Text>
                   </View>
                 )}
               </View>
             )}
-          />
+            />
+          )}
         </View>
 
         {isSendingMessage ? (
@@ -958,6 +1071,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           onSendingChange={setIsSendingMessage}
           bottomInset={composerBottomInset}
           androidKeyboardOffset={androidKeyboardOffset}
+          recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
         />
       </KeyboardAvoidingView>
 
@@ -1110,18 +1224,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   headerTitle: {
-    color: "#111",
-    fontSize: 18,
-    fontWeight: "600",
+    color: "#0f172a",
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: -0.3,
   },
   headerRightContainer: {
-    paddingRight: 8,
+    paddingRight: 12,
   },
   headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#0ea5e9",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#e2e8f0",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
   },
   headerAvatarFallback: {
     alignItems: "center",
@@ -1150,17 +1267,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   outgoingBubbleShadow: {
-    shadowColor: "#3b82f6",
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowColor: "#4f46e5",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   incomingBubbleShadow: {
-    shadowColor: "#000",
+    shadowColor: "#64748b",
     shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   composerContainer: {
@@ -1179,14 +1296,19 @@ const styles = StyleSheet.create({
   },
   inputShell: {
     flex: 1,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 24,
+    backgroundColor: "#ffffff",
+    borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.35)",
+    borderColor: "#e2e8f0",
+    shadowColor: "#64748b",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   composerTextInput: {
     flex: 1,
@@ -1218,14 +1340,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(148, 163, 184, 0.4)",
   },
   iconButtonSend: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#4f46e5",
   },
   sendButtonShadow: {
-    shadowColor: "#2563eb",
-    shadowOpacity: 0.45,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    shadowColor: "#4f46e5",
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   rocketIcon: {
     fontSize: 24,
@@ -1236,7 +1358,7 @@ const styles = StyleSheet.create({
   },
   rocketInlineEmoji: {
     fontSize: 28,
-    color: "#2563eb",
+    color: "#4f46e5",
   },
   rocketInlineEmojiOther: {
     fontSize: 28,
@@ -1247,17 +1369,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitleAvatar: {
-    height: 34,
-    width: 34,
-    borderRadius: 17,
-    marginRight: 10,
-    backgroundColor: "#e5e7eb",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#e2e8f0",
   },
   headerTitleText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#111827",
-    maxWidth: 180,
+    color: "#0f172a",
+  },
+  headerSubtitleText: {
+    fontSize: 12,
+    color: "#64748b",
   },
   reactionOverlay: {
     position: "absolute",
@@ -1285,15 +1409,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 6,
-    backgroundColor: "rgba(37, 99, 235, 0.08)",
+    backgroundColor: "rgba(79, 70, 229, 0.08)",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(37, 99, 235, 0.25)",
+    borderTopColor: "rgba(79, 70, 229, 0.2)",
   },
   sendingBannerText: {
     marginLeft: 8,
     fontSize: 12,
     fontWeight: "600",
-    color: "#1d4ed8",
+    color: "#4f46e5",
     letterSpacing: 0.3,
   },
   modalContainer: {
@@ -1380,6 +1504,7 @@ type ComposerProps = {
   onSendingChange?: (sending: boolean) => void;
   bottomInset?: number;
   androidKeyboardOffset?: number;
+  recipientAccessGroupPublicKeyBase58Check?: string;
 };
 
 function Composer({
@@ -1394,11 +1519,14 @@ function Composer({
   onSendingChange,
   bottomInset = 0,
   androidKeyboardOffset = 0,
+  recipientAccessGroupPublicKeyBase58Check,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [inputHeight, setInputHeight] = useState(32);
   const textInputRef = useRef<TextInput>(null);
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const focusInput = useCallback(() => {
     textInputRef.current?.focus();
@@ -1427,7 +1555,8 @@ function Composer({
         userPublicKey,
         counterPartyPublicKey,
         threadAccessGroupKeyName,
-        userAccessGroupKeyName
+        userAccessGroupKeyName,
+        recipientAccessGroupPublicKeyBase58Check
       );
 
       const timestampNanos = Math.round(Date.now() * 1e6);
@@ -1463,10 +1592,6 @@ function Composer({
     chatType,
   ]);
 
-  const sendRocket = useCallback(() => {
-    onSend("🚀");
-  }, [onSend]);
-
   const sendDisabled = sending || !text.trim();
 
   const containerPaddingBottom = bottomInset + androidKeyboardOffset;
@@ -1482,16 +1607,15 @@ function Composer({
       style={[styles.composerContainer, { paddingBottom: containerPaddingBottom }]}
     >
       <View style={styles.composerRow}>
-        <View style={styles.inputShell}>
-          <Feather name="smile" size={20} color="#60a5fa" style={styles.inputEmoji} />
+        <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b", borderColor: "#334155" }]}>
           <TextInput
             ref={textInputRef}
             placeholder={isGroupChat ? "Message the group…" : "Message…"}
-            placeholderTextColor="rgba(31, 41, 55, 0.45)"
+            placeholderTextColor={isDark ? "#94a3b8" : "rgba(31, 41, 55, 0.45)"}
             value={text}
             onChangeText={setText}
             multiline
-            keyboardAppearance="light"
+            keyboardAppearance={isDark ? "dark" : "light"}
             autoCorrect
             autoCapitalize="sentences"
             textAlignVertical="center"
@@ -1500,48 +1624,34 @@ function Composer({
             onContentSizeChange={handleContentSizeChange}
             style={[
               styles.composerTextInput,
+              isDark && { color: "#f8fafc" },
               {
                 minHeight: 32,
                 maxHeight: 80,
+                paddingLeft: 12,
               },
             ]}
           />
         </View>
         <View style={styles.trailingActions}>
-          {text.trim().length === 0 ? (
-            <TouchableOpacity
-              onPress={sendRocket}
-              disabled={sending}
-              activeOpacity={0.85}
-              style={[styles.actionTouchable, styles.rocketTouchable]}
-            >
+          <TouchableOpacity
+            onPress={() => onSend()}
+            disabled={sendDisabled}
+            activeOpacity={0.85}
+            style={styles.actionTouchable}
+          >
+            <View style={sendButtonInnerStyle as any}>
               {sending ? (
-                <ActivityIndicator size="small" color="#2563eb" />
+                <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <Text style={styles.rocketIcon}>🚀</Text>
+                <Ionicons
+                  name="arrow-up"
+                  size={20}
+                  color={sendDisabled ? "rgba(255, 255, 255, 0.5)" : "#ffffff"}
+                />
               )}
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => onSend()}
-              disabled={sendDisabled}
-              activeOpacity={0.85}
-              style={styles.actionTouchable}
-            >
-              <View style={sendButtonInnerStyle as any}>
-                {sending ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Feather
-                    name="send"
-                    size={18}
-                    color="#ffffff"
-                    style={{ marginLeft: 2 }}
-                  />
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>

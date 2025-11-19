@@ -209,11 +209,21 @@ export const encryptAndSendNewMessage = async (
   senderPublicKeyBase58Check: string,
   RecipientPublicKeyBase58Check: string,
   RecipientMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
-  SenderMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME
+  SenderMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
+  RecipientAccessGroupPublicKeyBase58Check?: string
 ): Promise<string> => {
   if (SenderMessagingKeyName !== DEFAULT_KEY_MESSAGING_GROUP_NAME) {
     return Promise.reject("sender must use default key for now");
   }
+
+  console.log("[encryptAndSendNewMessage] Inputs:", {
+    messageToSend,
+    senderPublicKeyBase58Check,
+    RecipientPublicKeyBase58Check,
+    RecipientMessagingKeyName,
+    SenderMessagingKeyName,
+    RecipientAccessGroupPublicKeyBase58Check,
+  });
 
   const response = await checkPartyAccessGroups({
     SenderPublicKeyBase58Check: senderPublicKeyBase58Check,
@@ -226,12 +236,17 @@ export const encryptAndSendNewMessage = async (
     return Promise.reject("SenderAccessGroupKeyName is undefined");
   }
 
+  console.log("[encryptAndSendNewMessage] checkPartyAccessGroups response:", response);
+
   let message: string;
   let isUnencrypted = false;
   const ExtraData: { [k: string]: string } = {};
-  if (response.RecipientAccessGroupKeyName) {
+  const effectiveRecipientGroupKeyName =
+    response.RecipientAccessGroupKeyName || RecipientMessagingKeyName;
+
+  if (effectiveRecipientGroupKeyName) {
     message = await identity.encryptMessage(
-      response.RecipientAccessGroupPublicKeyBase58Check,
+      response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || "",
       messageToSend
     );
   } else {
@@ -253,8 +268,9 @@ export const encryptAndSendNewMessage = async (
       RecipientPublicKeyBase58Check,
     RecipientAccessGroupPublicKeyBase58Check: isUnencrypted
       ? response.RecipientPublicKeyBase58Check
-      : response.RecipientAccessGroupPublicKeyBase58Check,
-    RecipientAccessGroupKeyName: response.RecipientAccessGroupKeyName,
+      : (response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || ""),
+    RecipientAccessGroupKeyName:
+      response.RecipientAccessGroupKeyName || RecipientMessagingKeyName,
     ExtraData,
     EncryptedMessageText: message,
     MinFeeRateNanosPerKB: 1000,

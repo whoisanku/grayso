@@ -12,6 +12,7 @@ export type ConversationRouteParams = {
   lastTimestampNanosString?: string;
   title?: string;
   recipientInfo?: any;
+  initialGroupMembers?: any[];
 };
 
 export type RootStackParamList = {

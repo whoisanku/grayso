@@ -28,10 +28,12 @@ import {
   formatPublicKey,
   FALLBACK_GROUP_IMAGE,
   FALLBACK_PROFILE_IMAGE,
+  getProfileImageUrl,
 } from "../utils/deso";
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
+import { useColorScheme } from "nativewind";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -65,6 +67,7 @@ type MockConversation = {
   partyGroupOwnerPublicKeyBase58Check?: string;
   lastTimestampNanos?: number;
   recipientInfo?: any; // Using any for now to match the data structure
+  isLoadingMembers?: boolean;
 };
 
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -86,9 +89,10 @@ const formatTimestamp = (timestampMs: number) => {
 };
 
 export default function HomeScreen() {
+  const { colorScheme } = useColorScheme();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const { conversations, profiles, isLoading, error, reload } =
+  const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
@@ -142,7 +146,11 @@ export default function HomeScreen() {
           ? "You"
           : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
       const isGroup = c.ChatType === ChatType.GROUPCHAT;
-      const otherPk = senderPk === userPk ? recipientPk : senderPk;
+      const otherPk = isGroup
+        ? recipientPk
+        : senderPk === userPk
+        ? recipientPk
+        : senderPk;
       const name = isGroup
         ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
         : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
@@ -153,12 +161,32 @@ export default function HomeScreen() {
             fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
           });
 
+      let stackedAvatarUris: string[] = [];
+      let isLoadingMembers = false;
+      if (isGroup) {
+        const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
+        const members = groupMembers[groupKey] || [];
+        
+        if (members.length === 0) {
+          isLoadingMembers = true;
+        }
+        
+        stackedAvatarUris = members
+          .slice(0, 3)
+          .map((m) => 
+             m.profilePic 
+              ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
+              : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
+          );
+      }
+
       return {
         id: `${c.firstMessagePublicKey}-${c.ChatType}`,
         name,
         preview,
         time,
         avatarUri,
+        stackedAvatarUris,
         isGroup,
         chatType: c.ChatType,
         threadPublicKey: otherPk,
@@ -169,9 +197,10 @@ export default function HomeScreen() {
           : DEFAULT_KEY_MESSAGING_GROUP_NAME,
         partyGroupOwnerPublicKeyBase58Check: otherPk,
         recipientInfo: last?.RecipientInfo,
+        isLoadingMembers,
       };
     });
-  }, [conversations, profiles, currentUser?.PublicKeyBase58Check]);
+  }, [conversations, profiles, groupMembers, currentUser?.PublicKeyBase58Check]);
 
   const enhancedItems = useMemo(() => {
     return items.map((item) => {
@@ -217,6 +246,12 @@ export default function HomeScreen() {
         lastTimestampNanos: item.lastTimestampNanos,
         title: item.name,
         recipientInfo: item.recipientInfo,
+        initialGroupMembers:
+          item.isGroup && item.recipientInfo
+            ? groupMembers[
+                `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
+              ]
+            : undefined,
       });
     },
     [currentUser?.PublicKeyBase58Check, navigation]
@@ -228,9 +263,9 @@ export default function HomeScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white">
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-slate-950">
         <ActivityIndicator color="#3b82f6" />
-        <Text className="mt-3 text-sm text-gray-600">
+        <Text className="mt-3 text-sm text-gray-600 dark:text-slate-400">
           Loading your conversations…
         </Text>
       </SafeAreaView>
@@ -239,10 +274,10 @@ export default function HomeScreen() {
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-white px-6 py-10">
-        <View className="flex-1 items-center justify-center rounded-3xl border border-red-200 bg-red-50 px-5 py-8">
+      <SafeAreaView className="flex-1 bg-white px-6 py-10 dark:bg-slate-950">
+        <View className="flex-1 items-center justify-center rounded-3xl border border-red-200 bg-red-50 px-5 py-8 dark:border-red-900 dark:bg-red-950/30">
           <Feather name="alert-triangle" size={28} color="#ef4444" />
-          <Text className="mt-3 text-base font-semibold text-red-900">
+          <Text className="mt-3 text-base font-semibold text-red-900 dark:text-red-200">
             We couldn't load your inbox
           </Text>
           <Text className="mt-2 text-center text-sm text-red-700">
@@ -261,7 +296,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950">
       <View className="flex-1">
         <FlatList
           data={enhancedItems}
@@ -272,7 +307,7 @@ export default function HomeScreen() {
           contentContainerClassName={
             items.length === 0
               ? "flex-grow items-center justify-center px-4 pb-20"
-              : "px-4 pb-4 pt-4"
+              : "px-4 pb-4 pt-2"
           }
           refreshControl={
             <RefreshControl
@@ -285,19 +320,48 @@ export default function HomeScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.cardShadow}
-              className="flex-row items-center rounded-2xl bg-white px-4 py-3"
+              className="flex-row items-center rounded-2xl bg-white px-5 py-4 mb-1 dark:bg-slate-900"
               activeOpacity={0.7}
               onPress={() => handlePress(item)}
             >
               <View className="mr-3">
-                {item.avatarUri ? (
+                {item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
+                  <View className="h-14 w-14 relative">
+                    {item.stackedAvatarUris.map((uri, index) => (
+                      <Image
+                        key={index}
+                        source={{ uri }}
+                        className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                        style={{
+                          top: index === 0 ? 0 : index === 1 ? 14 : 4,
+                          left: index === 0 ? 0 : index === 1 ? 14 : 24,
+                          zIndex: 3 - index,
+                        }}
+                      />
+                    ))}
+                  </View>
+                ) : item.isGroup && item.isLoadingMembers ? (
+                  <View className="h-14 w-14 relative">
+                    {[0, 1, 2].map((i) => (
+                      <View
+                        key={`placeholder-${i}`}
+                        className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                        style={{
+                          top: i === 0 ? 0 : i === 1 ? 14 : 4,
+                          left: i === 0 ? 0 : i === 1 ? 14 : 24,
+                          zIndex: 3 - i,
+                        }}
+                      />
+                    ))}
+                  </View>
+                ) : item.avatarUri ? (
                   <Image
                     source={{ uri: item.avatarUri }}
-                    className="h-14 w-14 rounded-full bg-gray-200"
+                    className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
                   />
                 ) : (
-                  <View className="h-14 w-14 items-center justify-center rounded-full bg-blue-100">
-                    <Text className="text-xl font-semibold text-blue-600">
+                  <View className="h-14 w-14 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
+                    <Text className="text-xl font-bold text-indigo-600 dark:text-indigo-300">
                       {item.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
@@ -308,52 +372,52 @@ export default function HomeScreen() {
                   <Text
                     numberOfLines={1}
                     ellipsizeMode="tail"
-                    className="flex-1 mr-2 text-base font-semibold text-gray-900"
+                    className="flex-1 mr-2 text-[16px] font-bold text-slate-900 dark:text-slate-100"
                   >
                     {item.name}
                   </Text>
                   {item.time ? (
-                    <Text className="text-xs font-medium text-gray-400 flex-shrink-0">
+                    <Text className="text-[12px] font-semibold text-slate-400 flex-shrink-0 dark:text-slate-500">
                       {item.time}
                     </Text>
                   ) : null}
                 </View>
                 <View className="mt-0.5 flex-row items-center">
                   {item.isGroup ? (
-                    <View className="mr-2 rounded-full bg-blue-50 px-2 py-0.5">
-                      <Text className="text-[10px] font-semibold uppercase text-blue-600">
+                    <View className="mr-2 rounded-full bg-indigo-50 px-2 py-0.5 border border-indigo-100 dark:bg-indigo-900/30 dark:border-indigo-800">
+                      <Text className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-300">
                         Group
                       </Text>
                     </View>
                   ) : null}
                   <Text
                     numberOfLines={1}
-                    className="flex-1 text-sm text-gray-500"
+                    className="flex-1 text-[14px] font-medium text-slate-500 dark:text-slate-400"
                   >
                     {item.preview}
                   </Text>
                 </View>
               </View>
               <View className="ml-2 flex-shrink-0">
-                <Feather name="chevron-right" size={18} color="#d1d5db" />
+                <Feather name="chevron-right" size={18} color={colorScheme === "dark" ? "#475569" : "#d1d5db"} />
               </View>
             </TouchableOpacity>
           )}
           ListEmptyComponent={() => (
-            <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12">
-              <Feather name="inbox" size={40} color="#9ca3af" />
-              <Text className="mt-4 text-lg font-semibold text-gray-900">
+            <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
+              <Feather name="inbox" size={40} color={colorScheme === "dark" ? "#64748b" : "#9ca3af"} />
+              <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
                 Your inbox is quiet
               </Text>
-              <Text className="mt-2 text-center text-sm text-gray-500">
+              <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
                 Start a new conversation and it will show up here right away.
               </Text>
               <TouchableOpacity
-                className="mt-6 rounded-full bg-blue-500 px-5 py-2.5"
+                className="mt-6 rounded-full bg-indigo-600 px-6 py-3 shadow-lg shadow-indigo-200"
                 activeOpacity={0.85}
                 onPress={handleCompose}
               >
-                <Text className="text-sm font-semibold text-white">
+                <Text className="text-sm font-bold text-white">
                   Start a message
                 </Text>
               </TouchableOpacity>
@@ -367,11 +431,11 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   cardShadow: {
-    shadowColor: "#000",
+    shadowColor: "#64748b",
     shadowOpacity: 0.06,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   searchShadow: {
     shadowColor: "#000",

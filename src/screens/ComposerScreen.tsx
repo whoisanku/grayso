@@ -4,13 +4,23 @@ import {
   Text,
   TextInput,
   ScrollView,
-  Button,
   TouchableOpacity,
   Image,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type RootStackParamList } from "../navigation/types";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColorScheme } from "nativewind";
+import { DeSoIdentityContext } from "react-deso-protocol";
+import { buildProfilePictureUrl } from "deso-protocol";
+import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
 
 const MAX_LENGTH = 280;
 
@@ -21,11 +31,38 @@ type ComposerScreenProps = {
 export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
+  const [isPosting, setIsPosting] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const { currentUser } = React.useContext(DeSoIdentityContext);
 
-  const onPost = useCallback(() => {
+  const avatarUri = React.useMemo(() => {
+    if (!currentUser?.PublicKeyBase58Check) {
+      return FALLBACK_PROFILE_IMAGE;
+    }
+    return buildProfilePictureUrl(currentUser.PublicKeyBase58Check, {
+      fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+    });
+  }, [currentUser?.PublicKeyBase58Check]);
+
+  if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+
+  const onPost = useCallback(async () => {
+    if (text.length === 0 && images.length === 0) return;
+    
+    setIsPosting(true);
     console.log("Posting:", text, images);
+    
+    // Simulate network request
+    setTimeout(() => {
+      setIsPosting(false);
+      navigation.goBack();
+    }, 1000);
+    
     // Here you would call your API to create the post
-    navigation.goBack();
   }, [text, images, navigation]);
 
   const onCancel = useCallback(() => {
@@ -34,25 +71,11 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: "New Post",
-      headerLeft: () => <Button onPress={onCancel} title="Cancel" />,
+      headerShown: false, // We'll use a custom header
     });
-  }, [navigation, onCancel]);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Button
-          onPress={onPost}
-          title="Post"
-          disabled={text.length === 0 && images.length === 0}
-        />
-      ),
-    });
-  }, [navigation, onPost, text, images]);
+  }, [navigation]);
 
   const pickImage = async () => {
-    // No permissions request is needed for launching the image library
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
@@ -60,6 +83,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     });
 
     if (!result.canceled) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setImages((prevImages) => [
         ...prevImages,
         ...result.assets.map(
@@ -69,49 +93,135 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     }
   };
 
+  const removeImage = (indexToRemove: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setImages(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const canPost = text.trim().length > 0 || images.length > 0;
+
   return (
-    <ScrollView
-      className="flex-1 bg-gray-50 p-4"
-      keyboardShouldPersistTaps="handled"
-    >
-      <View className="rounded-2xl bg-white p-4">
-        <TextInput
-          className="min-h-[120px] flex-1 text-base leading-6 text-gray-900"
-          multiline
-          placeholder="What's on your mind?"
-          placeholderTextColor="#9ca3af"
-          value={text}
-          onChangeText={setText}
-          maxLength={MAX_LENGTH}
-          autoFocus
-        />
-      </View>
-      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-white px-4 py-3">
+    <View className="flex-1 bg-white dark:bg-slate-950">
+      {/* Custom Header */}
+      <View 
+        style={{ paddingTop: Platform.OS === "android" ? insets.top + 10 : 10 }} 
+        className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 pb-3 dark:border-slate-800 dark:bg-slate-950"
+      >
         <TouchableOpacity 
-          onPress={pickImage} 
-          className="flex-row items-center rounded-full bg-blue-50 px-4 py-2"
+          onPress={onCancel}
+          className="p-2"
           activeOpacity={0.7}
         >
-          <Text className="mr-2 text-xl">🖼️</Text>
-          <Text className="text-sm font-medium text-blue-600">Add Photo</Text>
+          <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
         </TouchableOpacity>
-        <Text className="text-sm font-medium text-gray-400">
-          {text.length}/{MAX_LENGTH}
-        </Text>
+        
+        {/* Removed "New Post" title as requested */}
+        
+        <TouchableOpacity 
+          onPress={onPost}
+          disabled={!canPost || isPosting}
+          className={`rounded-full px-6 py-2.5 ${
+            canPost 
+              ? "bg-indigo-600 dark:bg-indigo-500" 
+              : "bg-slate-200 dark:bg-slate-800"
+          }`}
+          activeOpacity={0.8}
+        >
+          {isPosting ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text className={`text-base font-bold ${
+              canPost ? "text-white" : "text-slate-400 dark:text-slate-500"
+            }`}>
+              Post
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
-      {images.length > 0 && (
-        <View className="mt-3 rounded-2xl bg-white p-3">
-          <View className="flex-row flex-wrap">
-            {images.map((uri, index) => (
-              <Image
-                key={index}
-                source={{ uri }}
-                className="m-1 h-24 w-24 rounded-xl"
+
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      >
+        <ScrollView 
+          className="flex-1 px-4 pt-4"
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 80 }}
+        >
+          <View className="flex-row">
+            <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+               <Image 
+                 source={{ uri: avatarUri }} 
+                 className="h-full w-full"
+                 resizeMode="cover"
+               />
+            </View>
+            <View className="flex-1">
+              <TextInput
+                className="min-h-[100px] text-lg leading-6 text-slate-900 dark:text-slate-100"
+                multiline
+                placeholder="What's happening?"
+                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                value={text}
+                onChangeText={setText}
+                maxLength={MAX_LENGTH}
+                autoFocus
+                textAlignVertical="top"
+                style={{ paddingTop: 0 }} 
               />
-            ))}
+            </View>
+          </View>
+
+          {/* Image Previews */}
+          {images.length > 0 && (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              className="mt-4 pl-12"
+            >
+              {images.map((uri, index) => (
+                <View key={index} className="relative mr-3">
+                  <Image
+                    source={{ uri }}
+                    className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity
+                    onPress={() => removeImage(index)}
+                    className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5"
+                  >
+                    <Feather name="x" size={16} color="white" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </ScrollView>
+
+        {/* Bottom Toolbar */}
+        <View 
+          className="border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950"
+          style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+        >
+          <View className="flex-row items-center justify-between">
+            <TouchableOpacity 
+              onPress={pickImage}
+              className="rounded-full bg-indigo-50 p-3 active:bg-indigo-100 dark:bg-indigo-900/20 dark:active:bg-indigo-900/40"
+            >
+              <Feather name="image" size={24} color={isDark ? "#818cf8" : "#4f46e5"} />
+            </TouchableOpacity>
+
+            <Text className={`text-sm font-medium ${
+              text.length > MAX_LENGTH * 0.9 
+                ? "text-red-500" 
+                : "text-slate-400 dark:text-slate-600"
+            }`}>
+              {text.length} / {MAX_LENGTH}
+            </Text>
           </View>
         </View>
-      )}
-    </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }

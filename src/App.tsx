@@ -1,8 +1,10 @@
 import CryptoPolyfill from "react-native-webview-crypto";
 import "react-native-gesture-handler";
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useColorScheme } from "nativewind";
+import { StatusBar } from "expo-status-bar";
 import { DeSoIdentityProvider } from "react-deso-protocol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as AuthSession from "expo-auth-session";
@@ -35,11 +37,14 @@ configure({
 });
 
 export default function App() {
+  const { colorScheme } = useColorScheme();
+
   return (
     <DeSoIdentityProvider>
       <CryptoPolyfill />
       <SafeAreaProvider>
-        <NavigationContainer>
+        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+        <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <RootNavigator />
         </NavigationContainer>
       </SafeAreaProvider>
