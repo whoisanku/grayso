@@ -54,6 +54,28 @@ const GRAPHQL_QUERY = `
   }
 `;
 
+const FOLLOWING_QUERY = `
+  query AccountByUsername($publicKey: String!, $before: Cursor, $after: Cursor) {
+    account(publicKey: $publicKey) {
+      following(before: $before, after: $after) {
+        nodes {
+          followee {
+            username
+            profilePic
+            publicKey
+          }
+        }
+        pageInfo {
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          startCursor
+        }
+      }
+    }
+  }
+`;
+
 const ACCESS_GROUPS_QUERY = `
   query AccessGroups(
     $filter: AccessGroupFilter
@@ -378,6 +400,114 @@ export async function fetchDmMessagesViaGraphql({
       hasNextPage: Boolean(pageInfo?.hasNextPage),
       endCursor:
         typeof pageInfo?.endCursor === "string" ? pageInfo.endCursor : null,
+    },
+  };
+}
+
+export async function fetchFollowingViaGraphql({
+  publicKey,
+  limit,
+  afterCursor,
+  beforeCursor,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
+    DEFAULT_GRAPHQL_URL,
+}: {
+  publicKey: string;
+  limit?: number;
+  afterCursor?: string | null;
+  beforeCursor?: string | null;
+  graphqlEndpoint?: string;
+}): Promise<{
+  following: {
+    username?: string | null;
+    profilePic?: string | null;
+    publicKey: string;
+  }[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}> {
+  const variables: Record<string, unknown> = {
+    publicKey,
+  };
+
+  if (afterCursor) {
+    variables.after = afterCursor;
+  }
+
+  if (beforeCursor) {
+    variables.before = beforeCursor;
+  }
+
+  const body = {
+    query: FOLLOWING_QUERY,
+    variables,
+  };
+
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[fetchFollowingViaGraphql] request payload", {
+      publicKey,
+      variables,
+    });
+  }
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}…`
+    );
+  }
+
+  const json = (await response.json()) as {
+    data?: {
+      account?: {
+        following?: {
+          nodes?: {
+            followee?: {
+              username?: string | null;
+              profilePic?: string | null;
+              publicKey: string;
+            };
+          }[];
+          pageInfo?: {
+            endCursor?: string | null;
+            hasNextPage?: boolean;
+          };
+        };
+      };
+    };
+    errors?: Array<{ message?: string }>;
+  };
+
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
+        "GraphQL query failed"
+    );
+  }
+
+  const followingConnection = json.data?.account?.following;
+
+  if (!followingConnection) {
+    return {
+      following: [],
+      pageInfo: { hasNextPage: false, endCursor: null },
+    };
+  }
+
+  const nodes = followingConnection.nodes ?? [];
+  const following = nodes
+    .map((node) => node.followee)
+    .filter((followee): followee is { username?: string | null; profilePic?: string | null; publicKey: string } => Boolean(followee?.publicKey));
+
+  return {
+    following,
+    pageInfo: {
+      hasNextPage: Boolean(followingConnection.pageInfo?.hasNextPage),
+      endCursor: followingConnection.pageInfo?.endCursor ?? null,
     },
   };
 }

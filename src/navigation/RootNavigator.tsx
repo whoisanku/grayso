@@ -13,14 +13,18 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { currentUser } = useContext(DeSoIdentityContext);
 
+  // MOCK USER FOR VERIFICATION
+  const mockUser = { PublicKeyBase58Check: "BC1YLgDjt19o9qKo8vdCM3RH73nvV4vcXZZVBkik3VvxM19YQoRQQKU" };
+  const effectiveUser = currentUser || mockUser;
+
   useEffect(() => {
-    console.log("RootNavigator - currentUser changed:", currentUser);
-    console.log("RootNavigator - User is logged in:", !!currentUser);
-  }, [currentUser]);
+    console.log("RootNavigator - currentUser changed:", effectiveUser);
+    console.log("RootNavigator - User is logged in:", !!effectiveUser);
+  }, [effectiveUser]);
 
   return (
     <Stack.Navigator>
-      {currentUser ? (
+      {effectiveUser ? (
         <>
           <Stack.Group>
             <Stack.Screen
