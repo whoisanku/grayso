@@ -27,6 +27,7 @@ import {
   DeviceEventEmitter,
   Animated,
 } from "react-native";
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   AccessGroupEntryResponse,
@@ -1308,7 +1309,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconButtonDisabled: {
-    backgroundColor: "transparent",
+    backgroundColor: "#e2e8f0", // Light mode disabled
   },
   iconButtonSend: {
     backgroundColor: "#0085ff",
@@ -1512,6 +1513,7 @@ function Composer({
     const textToSend = messageText || text.trim();
     if (!textToSend || sending) return;
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setSending(true);
       onSendingChange?.(true);
 
@@ -1558,12 +1560,13 @@ function Composer({
   ]);
 
   const sendDisabled = sending || !text.trim();
+  const hasText = text.trim().length > 0;
 
   const containerPaddingBottom = bottomInset + androidKeyboardOffset;
 
   const sendButtonInnerStyle = [
     styles.iconButtonBase,
-    sendDisabled ? styles.iconButtonDisabled : styles.iconButtonSend,
+    !hasText ? styles.iconButtonDisabled : styles.iconButtonSend,
     !sendDisabled ? styles.sendButtonShadow : null,
   ];
 
@@ -1609,15 +1612,17 @@ function Composer({
             activeOpacity={0.85}
             style={{ marginLeft: 8 }}
           >
-            <View style={sendButtonInnerStyle as any}>
+            <View style={[
+              sendButtonInnerStyle as any,
+              !hasText && isDark && { backgroundColor: "#334155" } // Dark mode disabled override
+            ]}>
               {sending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                  <Ionicons
-                  name="paper-plane"
-                  size={18}
-                  color="#ffffff"
-                  style={{ marginLeft: -2 }}
+                  name="arrow-up"
+                  size={20}
+                  color={!hasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
                 />
               )}
             </View>
