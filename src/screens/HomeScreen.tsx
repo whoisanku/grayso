@@ -296,31 +296,30 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950">
+    <SafeAreaView className="flex-1 bg-white dark:bg-black">
       <View className="flex-1">
         <FlatList
           data={enhancedItems}
           keyExtractor={(item) => item.id}
           className="flex-1"
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View className="h-2" />}
+          ItemSeparatorComponent={() => null}
           contentContainerClassName={
             items.length === 0
               ? "flex-grow items-center justify-center px-4 pb-20"
-              : "px-4 pb-4 pt-2"
+              : "px-0 pb-4"
           }
           refreshControl={
             <RefreshControl
               refreshing={isLoading}
               onRefresh={reload}
-              tintColor="#3b82f6"
-              colors={["#3b82f6"]}
+              tintColor="#0085ff"
+              colors={["#0085ff"]}
             />
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.cardShadow}
-              className="flex-row items-center rounded-2xl bg-white px-5 py-4 mb-1 dark:bg-slate-900"
+              className="flex-row items-center bg-white px-4 py-3 dark:bg-black"
               activeOpacity={0.7}
               onPress={() => handlePress(item)}
             >
@@ -368,38 +367,35 @@ export default function HomeScreen() {
                 )}
               </View>
               <View className="flex-1 min-w-0">
-                <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center justify-between mb-1">
                   <Text
                     numberOfLines={1}
                     ellipsizeMode="tail"
-                    className="flex-1 mr-2 text-[16px] font-bold text-slate-900 dark:text-slate-100"
+                    className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
                   >
                     {item.name}
                   </Text>
                   {item.time ? (
-                    <Text className="text-[12px] font-semibold text-slate-400 flex-shrink-0 dark:text-slate-500">
+                    <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
                       {item.time}
                     </Text>
                   ) : null}
                 </View>
-                <View className="mt-0.5 flex-row items-center">
+                <View className="flex-row items-center">
                   {item.isGroup ? (
-                    <View className="mr-2 rounded-full bg-indigo-50 px-2 py-0.5 border border-indigo-100 dark:bg-indigo-900/30 dark:border-indigo-800">
-                      <Text className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-300">
+                    <View className="mr-2 rounded-full bg-blue-50 px-2 py-0.5 dark:bg-blue-900/30">
+                      <Text className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-300">
                         Group
                       </Text>
                     </View>
                   ) : null}
                   <Text
                     numberOfLines={1}
-                    className="flex-1 text-[14px] font-medium text-slate-500 dark:text-slate-400"
+                    className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
                   >
                     {item.preview}
                   </Text>
                 </View>
-              </View>
-              <View className="ml-2 flex-shrink-0">
-                <Feather name="chevron-right" size={18} color={colorScheme === "dark" ? "#475569" : "#d1d5db"} />
               </View>
             </TouchableOpacity>
           )}
@@ -430,13 +426,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  cardShadow: {
-    shadowColor: "#64748b",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
+  cardShadow: {},
   searchShadow: {
     shadowColor: "#000",
     shadowOpacity: 0.04,
