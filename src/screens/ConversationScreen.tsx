@@ -27,6 +27,7 @@ import {
   DeviceEventEmitter,
   Animated,
 } from "react-native";
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   AccessGroupEntryResponse,
@@ -182,18 +183,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
     navigation.setOptions({
       headerShadowVisible: true,
       headerStyle: {
-        backgroundColor: isDark ? "#0f172a" : "#ffffff",
+        backgroundColor: isDark ? "#000000" : "#ffffff",
       },
       headerLeft: () => (
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={{ marginLeft: 0, padding: 4 }}
+          style={{ marginLeft: -8, padding: 4 }}
         >
-          <Feather name="chevron-left" size={32} color={isDark ? "#f8fafc" : "#0f172a"} />
+          <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
         </TouchableOpacity>
       ),
       headerTitle: () => (
-        <View style={{ alignItems: "center" }}>
+        <View>
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -784,11 +785,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
           ) : null}
           <View
             className={`max-w-[75%] px-4 py-3 ${
-              isMine ? "bg-indigo-600 dark:bg-indigo-500" : "bg-white dark:bg-slate-800"
+              isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
             }`}
             style={[
               getBorderRadius(),
-              isMine ? styles.outgoingBubbleShadow : styles.incomingBubbleShadow
             ]}
           >
             {!isMine && isFirstInGroup && (
@@ -801,7 +801,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             )}
             <Text
               className={`text-[16px] leading-[22px] ${
-                isMine ? "text-white" : "text-slate-800 dark:text-slate-100"
+                isMine ? "text-white" : "text-[#0f172a] dark:text-white"
               }`}
             >
               {messageText}
@@ -821,19 +821,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     {timestamp ? (
                       <Text
                         className={`text-[11px] ${
-                          isMine ? "text-indigo-100" : "text-slate-400 dark:text-slate-500"
+                          isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
                         }`}
                       >
                         {formatTimestamp(timestamp)}
                       </Text>
-                    ) : null}
-                    {isMine ? (
-                      <Feather
-                        name="check"
-                        size={12}
-                        color="rgba(255,255,255,0.75)"
-                        style={{ marginLeft: 4 }}
-                      />
                     ) : null}
                   </>
                 )}
@@ -927,7 +919,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-white dark:bg-black" edges={["bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1266,49 +1258,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
-  outgoingBubbleShadow: {
-    shadowColor: "#4f46e5",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  incomingBubbleShadow: {
-    shadowColor: "#64748b",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
+  outgoingBubbleShadow: {},
+  incomingBubbleShadow: {},
   composerContainer: {
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-    elevation: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
   },
   composerRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     marginHorizontal: 12,
-    marginTop: 8,
+    marginTop: 12,
     justifyContent: "space-between",
   },
   inputShell: {
     flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 26,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#64748b",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
+    borderWidth: 0,
   },
   composerTextInput: {
     flex: 1,
@@ -1316,7 +1288,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#1e293b",
     padding: 0,
-    marginLeft: 8,
+    marginLeft: 0,
   },
   inputEmoji: {
     opacity: 0.75,
@@ -1330,25 +1302,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   iconButtonBase: {
-    height: 40,
-    width: 40,
-    borderRadius: 20,
+    height: 32,
+    width: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   iconButtonDisabled: {
-    backgroundColor: "rgba(148, 163, 184, 0.4)",
+    backgroundColor: "#e2e8f0", // Light mode disabled
   },
   iconButtonSend: {
-    backgroundColor: "#4f46e5",
+    backgroundColor: "#0085ff",
   },
-  sendButtonShadow: {
-    shadowColor: "#4f46e5",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
+  sendButtonShadow: {},
   rocketIcon: {
     fontSize: 24,
     marginLeft: 6,
@@ -1547,6 +1513,7 @@ function Composer({
     const textToSend = messageText || text.trim();
     if (!textToSend || sending) return;
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setSending(true);
       onSendingChange?.(true);
 
@@ -1593,25 +1560,32 @@ function Composer({
   ]);
 
   const sendDisabled = sending || !text.trim();
+  const hasText = text.trim().length > 0;
 
   const containerPaddingBottom = bottomInset + androidKeyboardOffset;
 
   const sendButtonInnerStyle = [
     styles.iconButtonBase,
-    sendDisabled ? styles.iconButtonDisabled : styles.iconButtonSend,
+    !hasText ? styles.iconButtonDisabled : styles.iconButtonSend,
     !sendDisabled ? styles.sendButtonShadow : null,
   ];
 
   return (
     <View
-      style={[styles.composerContainer, { paddingBottom: containerPaddingBottom }]}
+      style={[
+        styles.composerContainer,
+        {
+          paddingBottom: containerPaddingBottom,
+          borderTopColor: isDark ? "#334155" : "#e2e8f0",
+        },
+      ]}
     >
       <View style={styles.composerRow}>
-        <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b", borderColor: "#334155" }]}>
+        <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b" }]}>
           <TextInput
             ref={textInputRef}
-            placeholder={isGroupChat ? "Message the group…" : "Message…"}
-            placeholderTextColor={isDark ? "#94a3b8" : "rgba(31, 41, 55, 0.45)"}
+            placeholder={isGroupChat ? "Message the group…" : "Write a message"}
+            placeholderTextColor={isDark ? "#94a3b8" : "#64748b"}
             value={text}
             onChangeText={setText}
             multiline
@@ -1626,28 +1600,29 @@ function Composer({
               styles.composerTextInput,
               isDark && { color: "#f8fafc" },
               {
-                minHeight: 32,
+                minHeight: 24,
                 maxHeight: 80,
-                paddingLeft: 12,
+                paddingVertical: 4,
               },
             ]}
           />
-        </View>
-        <View style={styles.trailingActions}>
           <TouchableOpacity
             onPress={() => onSend()}
             disabled={sendDisabled}
             activeOpacity={0.85}
-            style={styles.actionTouchable}
+            style={{ marginLeft: 8 }}
           >
-            <View style={sendButtonInnerStyle as any}>
+            <View style={[
+              sendButtonInnerStyle as any,
+              !hasText && isDark && { backgroundColor: "#334155" } // Dark mode disabled override
+            ]}>
               {sending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <Ionicons
+                 <Ionicons
                   name="arrow-up"
                   size={20}
-                  color={sendDisabled ? "rgba(255, 255, 255, 0.5)" : "#ffffff"}
+                  color={!hasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
                 />
               )}
             </View>
