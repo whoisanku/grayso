@@ -55,9 +55,9 @@ const GRAPHQL_QUERY = `
 `;
 
 const FOLLOWING_QUERY = `
-  query AccountByUsername($publicKey: String!, $before: Cursor, $after: Cursor) {
+  query AccountByUsername($publicKey: String!, $before: Cursor, $after: Cursor, $orderBy: [AccountFollowingOrderBy!]) {
     account(publicKey: $publicKey) {
-      following(before: $before, after: $after) {
+      following(before: $before, after: $after, orderBy: $orderBy) {
         nodes {
           followee {
             username
@@ -427,6 +427,7 @@ export async function fetchFollowingViaGraphql({
 }> {
   const variables: Record<string, unknown> = {
     publicKey,
+    orderBy: ["CREATED_AT_DESC"],
   };
 
   if (afterCursor) {
