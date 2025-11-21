@@ -784,7 +784,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           ) : null}
           <View
             className={`max-w-[75%] px-4 py-3 ${
-              isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#1e2732]"
+              isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
             }`}
             style={[
               getBorderRadius(),
@@ -800,7 +800,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             )}
             <Text
               className={`text-[16px] leading-[22px] ${
-                isMine ? "text-white" : "text-[#0f172a] dark:text-slate-100"
+                isMine ? "text-white" : "text-[#0f172a] dark:text-white"
               }`}
             >
               {messageText}
@@ -1261,7 +1261,7 @@ const styles = StyleSheet.create({
   incomingBubbleShadow: {},
   composerContainer: {
     borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
+    borderTopColor: "#334155",
   },
   composerRow: {
     flexDirection: "row",
@@ -1276,8 +1276,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
     borderWidth: 0,
   },
   composerTextInput: {
@@ -1300,17 +1301,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   iconButtonBase: {
-    height: 40,
-    width: 40,
-    borderRadius: 20,
+    height: 32,
+    width: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   iconButtonDisabled: {
-    backgroundColor: "rgba(148, 163, 184, 0.4)",
+    backgroundColor: "transparent",
   },
   iconButtonSend: {
-    backgroundColor: "transparent",
+    backgroundColor: "#0085ff",
   },
   sendButtonShadow: {},
   rocketIcon: {
@@ -1568,7 +1569,13 @@ function Composer({
 
   return (
     <View
-      style={[styles.composerContainer, { paddingBottom: containerPaddingBottom }]}
+      style={[
+        styles.composerContainer,
+        {
+          paddingBottom: containerPaddingBottom,
+          borderTopColor: isDark ? "#334155" : "#e2e8f0",
+        },
+      ]}
     >
       <View style={styles.composerRow}>
         <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b" }]}>
@@ -1596,19 +1603,22 @@ function Composer({
               },
             ]}
           />
-        </View>
-        <View style={styles.trailingActions}>
           <TouchableOpacity
             onPress={() => onSend()}
             disabled={sendDisabled}
             activeOpacity={0.85}
-            style={styles.actionTouchable}
+            style={{ marginLeft: 8 }}
           >
             <View style={sendButtonInnerStyle as any}>
               {sending ? (
-                <ActivityIndicator size="small" color="#0085ff" />
+                <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <Text style={{ color: sendDisabled ? "#94a3b8" : "#0085ff", fontWeight: "600", fontSize: 16 }}>Send</Text>
+                 <Ionicons
+                  name="paper-plane"
+                  size={18}
+                  color="#ffffff"
+                  style={{ marginLeft: -2 }}
+                />
               )}
             </View>
           </TouchableOpacity>
