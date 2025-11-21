@@ -210,7 +210,8 @@ export const encryptAndSendNewMessage = async (
   RecipientPublicKeyBase58Check: string,
   RecipientMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
   SenderMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
-  RecipientAccessGroupPublicKeyBase58Check?: string
+  RecipientAccessGroupPublicKeyBase58Check?: string,
+  extraData?: { [k: string]: string }
 ): Promise<string> => {
   if (SenderMessagingKeyName !== DEFAULT_KEY_MESSAGING_GROUP_NAME) {
     return Promise.reject("sender must use default key for now");
@@ -223,6 +224,7 @@ export const encryptAndSendNewMessage = async (
     RecipientMessagingKeyName,
     SenderMessagingKeyName,
     RecipientAccessGroupPublicKeyBase58Check,
+    extraData,
   });
 
   const response = await checkPartyAccessGroups({
@@ -240,7 +242,7 @@ export const encryptAndSendNewMessage = async (
 
   let message: string;
   let isUnencrypted = false;
-  const ExtraData: { [k: string]: string } = {};
+  const ExtraData: { [k: string]: string } = { ...extraData };
   const effectiveRecipientGroupKeyName =
     response.RecipientAccessGroupKeyName || RecipientMessagingKeyName;
 
@@ -419,7 +421,7 @@ export async function fetchPaginatedDmThreadMessages(
             EncryptedText: node.encryptedText,
             TimestampNanos: timestampNanos,
             TimestampNanosString: timestampNanosString,
-            ExtraData: {},
+            ExtraData: node.extraData ?? {},
           },
         } as NewMessageEntryResponse;
       })
@@ -681,7 +683,7 @@ export async function fetchPaginatedGroupThreadMessages(
             EncryptedText: node.encryptedText,
             TimestampNanos: timestampNanos,
             TimestampNanosString: timestampNanosString,
-            ExtraData: {},
+            ExtraData: node.extraData ?? {},
           },
         } as NewMessageEntryResponse;
       })

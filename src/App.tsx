@@ -12,6 +12,7 @@ import * as WebBrowser from "expo-web-browser";
 import { configure, identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
 import RootNavigator from "./navigation/RootNavigator";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -43,10 +44,12 @@ export default function App() {
     <DeSoIdentityProvider>
       <CryptoPolyfill />
       <SafeAreaProvider>
-        <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-        <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-          <RootNavigator />
-        </NavigationContainer>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+          <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+            <RootNavigator />
+          </NavigationContainer>
+        </GestureHandlerRootView>
       </SafeAreaProvider>
     </DeSoIdentityProvider>
   );

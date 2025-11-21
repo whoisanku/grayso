@@ -27,6 +27,7 @@ import {
   DeviceEventEmitter,
   Animated,
 } from "react-native";
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -100,6 +101,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     initialGroupMembers || []
   );
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<DecryptedMessageEntryResponse | null>(null);
   const lastRocketMessageKeyRef = useRef<string | null>(null);
   const reactionOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -648,10 +650,61 @@ export default function ConversationScreen({ navigation, route }: Props) {
     });
   }, [messages]);
 
+  const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReplyToMessage(message);
+  }, []);
+
+  // Create a lookup map for fast message retrieval by ID (TimestampNanosString)
+  const messageIdMap = useMemo(() => {
+    const map = new Map<string, DecryptedMessageEntryResponse>();
+    messages.forEach((m) => {
+      if (m.MessageInfo?.TimestampNanosString) {
+        map.set(m.MessageInfo.TimestampNanosString, m);
+      }
+    });
+    return map;
+  }, [messages]);
+
   const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({
     item,
     index,
   }) => {
+    return (
+      <MessageBubble
+        item={item}
+        index={index}
+        messages={messages}
+        profiles={profiles}
+        isGroupChat={isGroupChat}
+        onReply={handleReply}
+        messageIdMap={messageIdMap}
+        isDark={isDark}
+      />
+    );
+  };
+
+  // Extracted to a separate component to use hooks/refs correctly
+  const MessageBubble = ({
+    item,
+    index,
+    messages,
+    profiles,
+    isGroupChat,
+    onReply,
+    messageIdMap,
+    isDark,
+  }: {
+    item: DecryptedMessageEntryResponse;
+    index: number;
+    messages: DecryptedMessageEntryResponse[];
+    profiles: PublicKeyToProfileEntryResponseMap;
+    isGroupChat: boolean;
+    onReply: (message: DecryptedMessageEntryResponse) => void;
+    messageIdMap: Map<string, DecryptedMessageEntryResponse>;
+    isDark: boolean;
+  }) => {
+    const swipeableRef = useRef<Swipeable>(null);
     const rawMessageText = item.DecryptedMessage?.trim();
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
@@ -677,6 +730,95 @@ export default function ConversationScreen({ navigation, route }: Props) {
     }
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
+
+    // Reply logic
+    const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
+    const repliedToMessage = repliedToMessageId
+      ? messageIdMap.get(repliedToMessageId)
+      : null;
+
+    const renderReplyPreview = () => {
+      if (!repliedToMessageId) return null;
+
+      // If we found the message locally, use it. Otherwise show placeholder or nothing.
+      const replyText = repliedToMessage?.DecryptedMessage || "Message not loaded";
+      const replySenderPk = repliedToMessage?.SenderInfo?.OwnerPublicKeyBase58Check;
+      const replySenderProfile = replySenderPk ? profiles[replySenderPk] : null;
+      const replyDisplayName = replySenderPk
+        ? getProfileDisplayName(replySenderProfile, replySenderPk)
+        : "Unknown";
+
+      return (
+        <View
+          style={{
+            backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
+            borderLeftWidth: 4,
+            borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+            borderRadius: 4,
+            padding: 6,
+            marginBottom: 6,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: "700",
+              color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+              marginBottom: 2,
+            }}
+            numberOfLines={1}
+          >
+            {replyDisplayName}
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
+            }}
+            numberOfLines={2}
+          >
+            {replyText}
+          </Text>
+        </View>
+      );
+    };
+
+    const renderSwipeAction = (
+      _progress: Animated.AnimatedInterpolation<number>,
+      dragX: Animated.AnimatedInterpolation<number>
+    ) => {
+      const scale = dragX.interpolate({
+        inputRange: [-50, 0],
+        outputRange: [1, 0],
+        extrapolate: "clamp",
+      });
+
+      return (
+        <View
+          style={{
+            justifyContent: "center",
+            alignItems: "center",
+            width: 50,
+            height: "100%",
+          }}
+        >
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: isDark ? "#334155" : "#e2e8f0",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Feather name="corner-up-left" size={18} color={isDark ? "#cbd5e1" : "#64748b"} />
+            </View>
+          </Animated.View>
+        </View>
+      );
+    };
 
     if (rawMessageText === "🚀") {
       return (
@@ -764,75 +906,88 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </View>
           </View>
         ) : null}
-        <View
-          className={`flex-row px-1 ${
-            isMine ? "justify-end" : "justify-start"
-          }`}
+        <Swipeable
+          ref={swipeableRef}
+          renderRightActions={isMine ? undefined : renderSwipeAction}
+          renderLeftActions={isMine ? renderSwipeAction : undefined}
+          onSwipeableWillOpen={() => {
+            onReply(item);
+            swipeableRef.current?.close();
+          }}
+          overshootRight={false}
+          overshootLeft={false}
         >
-          {!isMine ? (
-            <View className="mr-2" style={{ width: 32 }}>
-              {isLastInGroup && hasAvatar ? (
-                <Image
-                  source={{ uri: avatarUri }}
-                  className="h-8 w-8 rounded-full bg-gray-200"
-                />
-              ) : isLastInGroup ? (
-                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                  <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                </View>
-              ) : null}
-            </View>
-          ) : null}
           <View
-            className={`max-w-[75%] px-4 py-3 ${
-              isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+            className={`flex-row px-1 ${
+              isMine ? "justify-end" : "justify-start"
             }`}
-            style={[
-              getBorderRadius(),
-            ]}
           >
-            {!isMine && isFirstInGroup && (
-              <Text
-                className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                numberOfLines={1}
-              >
-                {displayName}
-              </Text>
-            )}
-            <Text
-              className={`text-[16px] leading-[22px] ${
-                isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+            {!isMine ? (
+              <View className="mr-2" style={{ width: 32 }}>
+                {isLastInGroup && hasAvatar ? (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    className="h-8 w-8 rounded-full bg-gray-200"
+                  />
+                ) : isLastInGroup ? (
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <View
+              className={`max-w-[75%] px-4 py-3 ${
+                isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
               }`}
+              style={[
+                getBorderRadius(),
+              ]}
             >
-              {messageText}
-            </Text>
-            {isLastInGroup && (
-              <View
-                className={`mt-1.5 flex-row items-center ${
-                  isMine ? "justify-end" : "justify-start"
+              {!isMine && isFirstInGroup && (
+                <Text
+                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                  numberOfLines={1}
+                >
+                  {displayName}
+                </Text>
+              )}
+              {renderReplyPreview()}
+              <Text
+                className={`text-[16px] leading-[22px] ${
+                  isMine ? "text-white" : "text-[#0f172a] dark:text-white"
                 }`}
               >
-                {hasError ? (
-                  <Text className="text-[10px] font-medium text-red-500">
-                    Failed to decrypt
-                  </Text>
-                ) : (
-                  <>
-                    {timestamp ? (
-                      <Text
-                        className={`text-[11px] ${
-                          isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                        }`}
-                      >
-                        {formatTimestamp(timestamp)}
-                      </Text>
-                    ) : null}
-                  </>
-                )}
-              </View>
-            )}
+                {messageText}
+              </Text>
+              {isLastInGroup && (
+                <View
+                  className={`mt-1.5 flex-row items-center ${
+                    isMine ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  {hasError ? (
+                    <Text className="text-[10px] font-medium text-red-500">
+                      Failed to decrypt
+                    </Text>
+                  ) : (
+                    <>
+                      {timestamp ? (
+                        <Text
+                          className={`text-[11px] ${
+                            isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                          }`}
+                        >
+                          {formatTimestamp(timestamp)}
+                        </Text>
+                      ) : null}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        </Swipeable>
       </View>
     );
   };
@@ -1064,6 +1219,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
           bottomInset={composerBottomInset}
           androidKeyboardOffset={androidKeyboardOffset}
           recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
+          replyToMessage={replyToMessage}
+          onCancelReply={() => setReplyToMessage(null)}
+          profiles={profiles}
         />
       </KeyboardAvoidingView>
 
@@ -1471,6 +1629,9 @@ type ComposerProps = {
   bottomInset?: number;
   androidKeyboardOffset?: number;
   recipientAccessGroupPublicKeyBase58Check?: string;
+  replyToMessage?: DecryptedMessageEntryResponse | null;
+  onCancelReply?: () => void;
+  profiles?: PublicKeyToProfileEntryResponseMap;
 };
 
 function Composer({
@@ -1486,6 +1647,9 @@ function Composer({
   bottomInset = 0,
   androidKeyboardOffset = 0,
   recipientAccessGroupPublicKeyBase58Check,
+  replyToMessage,
+  onCancelReply,
+  profiles = {},
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -1517,17 +1681,24 @@ function Composer({
       setSending(true);
       onSendingChange?.(true);
 
+      const extraData: { [k: string]: string } = {};
+      if (replyToMessage && replyToMessage.MessageInfo?.TimestampNanosString) {
+        extraData.RepliedToMessageId = replyToMessage.MessageInfo.TimestampNanosString;
+      }
+
       await encryptAndSendNewMessage(
         textToSend,
         userPublicKey,
         counterPartyPublicKey,
         threadAccessGroupKeyName,
         userAccessGroupKeyName,
-        recipientAccessGroupPublicKeyBase58Check
+        recipientAccessGroupPublicKeyBase58Check,
+        extraData
       );
 
       const timestampNanos = Math.round(Date.now() * 1e6);
       onMessageSent?.(textToSend);
+      if (onCancelReply) onCancelReply();
       DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
         conversationId,
         messageText: textToSend,
@@ -1570,6 +1741,40 @@ function Composer({
     !sendDisabled ? styles.sendButtonShadow : null,
   ];
 
+  const replyPreview = useMemo(() => {
+    if (!replyToMessage) return null;
+    const senderPk = replyToMessage.SenderInfo?.OwnerPublicKeyBase58Check;
+    const senderProfile = senderPk ? profiles[senderPk] : null;
+    const displayName = senderPk ? getProfileDisplayName(senderProfile, senderPk) : "Unknown";
+    const messageText = replyToMessage.DecryptedMessage || "Message not loaded";
+
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderTopWidth: 1,
+          borderTopColor: isDark ? '#334155' : '#e2e8f0',
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: '#3b82f6', marginBottom: 2 }}>
+            Replying to {displayName}
+          </Text>
+          <Text style={{ fontSize: 12, color: isDark ? '#cbd5e1' : '#64748b' }} numberOfLines={1}>
+            {messageText}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onCancelReply} style={{ padding: 4 }}>
+          <Feather name="x" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [replyToMessage, onCancelReply, isDark, profiles]);
+
   return (
     <View
       style={[
@@ -1580,6 +1785,7 @@ function Composer({
         },
       ]}
     >
+      {replyPreview}
       <View style={styles.composerRow}>
         <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b" }]}>
           <TextInput

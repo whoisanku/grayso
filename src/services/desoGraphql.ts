@@ -27,6 +27,7 @@ const GRAPHQL_QUERY = `
         senderAccessGroupKeyName
         recipientAccessGroupKeyName
         id
+        extraData
         isGroupChatMessage
         senderAccessGroup {
           accessGroupKeyName
@@ -94,6 +95,7 @@ type GraphqlMessageNode = {
   recipientAccessGroupPublicKey?: string | null;
   senderAccessGroupKeyName?: string | null;
   recipientAccessGroupKeyName?: string | null;
+  extraData?: Record<string, string> | null;
   senderAccessGroup?: {
     accessGroupKeyName?: string | null;
   } | null;
