@@ -63,9 +63,9 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 key={route.key}
                 onPress={() => navigation.navigate("Composer")}
                 activeOpacity={0.8}
-                className="mx-4 h-14 w-14 items-center justify-center rounded-full bg-black shadow-md shadow-slate-400 dark:bg-indigo-500 dark:shadow-slate-900"
+                className="mx-4 h-14 w-14 items-center justify-center rounded-full bg-[#0085ff] shadow-md shadow-blue-200 dark:bg-[#0085ff] dark:shadow-slate-900"
                 style={{
-                   shadowColor: isDark ? "#000" : "#000",
+                   shadowColor: isDark ? "#000" : "#0085ff",
                    shadowOffset: { width: 0, height: 4 },
                    shadowOpacity: 0.2,
                    shadowRadius: 8,

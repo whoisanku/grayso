@@ -297,6 +297,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-black">
+      <View className="px-4 pt-4 pb-3">
+        <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+          Chats
+        </Text>
+      </View>
       <View className="flex-1">
         <FlatList
           data={enhancedItems}
@@ -409,7 +414,7 @@ export default function HomeScreen() {
                 Start a new conversation and it will show up here right away.
               </Text>
               <TouchableOpacity
-                className="mt-6 rounded-full bg-indigo-600 px-6 py-3 shadow-lg shadow-indigo-200"
+                className="mt-6 rounded-full bg-[#0085ff] px-6 py-3 shadow-lg shadow-blue-200 dark:shadow-none"
                 activeOpacity={0.85}
                 onPress={handleCompose}
               >
@@ -425,13 +430,3 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  cardShadow: {},
-  searchShadow: {
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-});
