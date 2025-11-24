@@ -170,7 +170,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           disabled={!canPost || isPosting}
           className={`rounded-full px-6 py-2.5 ${
             canPost 
-              ? "bg-indigo-600 dark:bg-indigo-500" 
+              ? "bg-[#0085ff]"
               : "bg-slate-200 dark:bg-slate-800"
           }`}
           activeOpacity={0.8}
@@ -188,85 +188,87 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
       </View>
 
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
         keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
       >
-        <ScrollView 
-          className="flex-1 px-4 pt-4"
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 80 }}
-        >
-          <View className="flex-row">
-            <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-               <Image 
-                 source={{ uri: avatarUri }} 
-                 className="h-full w-full"
-                 resizeMode="cover"
-               />
+        <View className="flex-1">
+          <ScrollView
+            className="flex-1 px-4 pt-4"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
+            <View className="flex-row">
+              <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                 <Image
+                   source={{ uri: avatarUri }}
+                   className="h-full w-full"
+                   resizeMode="cover"
+                 />
+              </View>
+              <View className="flex-1">
+                <TextInput
+                  className="min-h-[100px] text-lg leading-6 text-slate-900 dark:text-slate-100"
+                  multiline
+                  placeholder="What's happening?"
+                  placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                  value={text}
+                  onChangeText={setText}
+                  maxLength={MAX_LENGTH}
+                  autoFocus
+                  textAlignVertical="top"
+                  style={{ paddingTop: 0 }}
+                />
+              </View>
             </View>
-            <View className="flex-1">
-              <TextInput
-                className="min-h-[100px] text-lg leading-6 text-slate-900 dark:text-slate-100"
-                multiline
-                placeholder="What's happening?"
-                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                value={text}
-                onChangeText={setText}
-                maxLength={MAX_LENGTH}
-                autoFocus
-                textAlignVertical="top"
-                style={{ paddingTop: 0 }} 
-              />
+
+            {/* Image Previews */}
+            {images.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mt-4 pl-12"
+              >
+                {images.map((uri, index) => (
+                  <View key={index} className="relative mr-3">
+                    <Image
+                      source={{ uri }}
+                      className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      onPress={() => removeImage(index)}
+                      className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5"
+                    >
+                      <Feather name="x" size={16} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </ScrollView>
+
+          {/* Bottom Toolbar */}
+          <View
+            className="border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950"
+            style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+          >
+            <View className="flex-row items-center justify-between">
+              <TouchableOpacity
+                onPress={pickImage}
+                className="rounded-full bg-indigo-50 p-3 active:bg-indigo-100 dark:bg-[#1e293b]"
+              >
+                <Feather name="image" size={24} color={isDark ? "#0085ff" : "#0085ff"} />
+              </TouchableOpacity>
+
+              <Text className={`text-sm font-medium ${
+                text.length > MAX_LENGTH * 0.9
+                  ? "text-red-500"
+                  : "text-slate-400 dark:text-slate-600"
+              }`}>
+                {text.length} / {MAX_LENGTH}
+              </Text>
             </View>
-          </View>
-
-          {/* Image Previews */}
-          {images.length > 0 && (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              className="mt-4 pl-12"
-            >
-              {images.map((uri, index) => (
-                <View key={index} className="relative mr-3">
-                  <Image
-                    source={{ uri }}
-                    className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    onPress={() => removeImage(index)}
-                    className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5"
-                  >
-                    <Feather name="x" size={16} color="white" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </ScrollView>
-
-        {/* Bottom Toolbar */}
-        <View 
-          className="border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950"
-          style={{ paddingBottom: Math.max(insets.bottom, 12) }}
-        >
-          <View className="flex-row items-center justify-between">
-            <TouchableOpacity 
-              onPress={pickImage}
-              className="rounded-full bg-indigo-50 p-3 active:bg-indigo-100 dark:bg-indigo-900/20 dark:active:bg-indigo-900/40"
-            >
-              <Feather name="image" size={24} color={isDark ? "#818cf8" : "#4f46e5"} />
-            </TouchableOpacity>
-
-            <Text className={`text-sm font-medium ${
-              text.length > MAX_LENGTH * 0.9 
-                ? "text-red-500" 
-                : "text-slate-400 dark:text-slate-600"
-            }`}>
-              {text.length} / {MAX_LENGTH}
-            </Text>
           </View>
         </View>
       </KeyboardAvoidingView>

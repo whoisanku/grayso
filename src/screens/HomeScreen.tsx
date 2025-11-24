@@ -297,16 +297,10 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-black">
-      <View className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex-row justify-between items-center">
-        <Text className="text-2xl font-bold text-slate-900 dark:text-white">
-          Messages
+      <View className="px-4 pt-4 pb-3">
+        <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+          Chats
         </Text>
-        <TouchableOpacity
-          onPress={handleCompose}
-          className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
-        >
-          <Feather name="edit" size={20} color={colorScheme === "dark" ? "#fff" : "#000"} />
-        </TouchableOpacity>
       </View>
       <View className="flex-1">
         <FlatList

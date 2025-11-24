@@ -145,8 +145,8 @@ export default function ProfileScreen() {
 
   if (!currentUser && !isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white p-6">
-        <Text className="text-center text-base text-slate-700">
+      <View className="flex-1 items-center justify-center bg-white p-6 dark:bg-black">
+        <Text className="text-center text-base text-slate-700 dark:text-slate-300">
           Sign in with your DeSo identity to view your profile.
         </Text>
       </View>
@@ -154,30 +154,30 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white">
+    <ScrollView className="flex-1 bg-white dark:bg-black">
       <Image
         source={{ uri: bannerUri }}
         className="h-[120px] w-full"
         resizeMode="cover"
       />
       <View className="-mt-10 flex-row items-start justify-between px-4">
-        <View className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-white">
+        <View className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-white dark:border-black dark:bg-black">
           <Image source={{ uri: avatarUri }} className="h-full w-full" />
         </View>
         <TouchableOpacity
-          className="mt-12 rounded-full bg-black px-4 py-2 opacity-30"
+          className="mt-12 rounded-full bg-black px-4 py-2 opacity-30 dark:bg-white"
           disabled
         >
-          <Text className="font-bold text-white">Follow</Text>
+          <Text className="font-bold text-white dark:text-black">Follow</Text>
         </TouchableOpacity>
       </View>
       <View className="p-4">
-        <Text className="text-2xl font-bold text-slate-900">{username}</Text>
-        <Text className="text-base text-gray-500" numberOfLines={1}>
+        <Text className="text-2xl font-bold text-slate-900 dark:text-white">{username}</Text>
+        <Text className="text-base text-gray-500 dark:text-gray-400" numberOfLines={1}>
           {publicKey}
         </Text>
         {!!description && (
-          <Text className="mt-3 text-base leading-6 text-slate-700">
+          <Text className="mt-3 text-base leading-6 text-slate-700 dark:text-slate-300">
             {description}
           </Text>
         )}
@@ -186,34 +186,34 @@ export default function ProfileScreen() {
         ) : null}
         <View className="mt-4 flex-row flex-wrap">
           <View className="mr-6 mb-3">
-            <Text className="text-lg font-bold text-slate-900">
+            <Text className="text-lg font-bold text-slate-900 dark:text-white">
               {formatNumber(coinHolders)}
             </Text>
-            <Text className="mt-0.5 text-xs text-slate-500">
+            <Text className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Coin holders
             </Text>
           </View>
           <View className="mr-6 mb-3">
-            <Text className="text-lg font-bold text-slate-900">
+            <Text className="text-lg font-bold text-slate-900 dark:text-white">
               {coinPrice.toFixed(2)}
             </Text>
-            <Text className="mt-0.5 text-xs text-slate-500">
+            <Text className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Creator coin (DESO)
             </Text>
           </View>
           <View className="mr-6 mb-3">
-            <Text className="text-lg font-bold text-slate-900">
+            <Text className="text-lg font-bold text-slate-900 dark:text-white">
               {desoBalance.toFixed(2)}
             </Text>
-            <Text className="mt-0.5 text-xs text-slate-500">
+            <Text className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Balance (DESO)
             </Text>
           </View>
           <View className="mr-6 mb-3">
-            <Text className="text-lg font-bold text-slate-900">
+            <Text className="text-lg font-bold text-slate-900 dark:text-white">
               {formatNumber(hodlersCount)}
             </Text>
-            <Text className="mt-0.5 text-xs text-slate-500">
+            <Text className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               People holding you
             </Text>
           </View>
@@ -228,8 +228,8 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
       {(isLoading || isFetchingProfile) && (
-        <View className="absolute inset-0 items-center justify-center bg-white/60">
-          <ActivityIndicator size="large" color="#000" />
+        <View className="absolute inset-0 items-center justify-center bg-white/60 dark:bg-black/60">
+          <ActivityIndicator size="large" color="#0085ff" />
         </View>
       )}
     </ScrollView>

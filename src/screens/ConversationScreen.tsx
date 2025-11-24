@@ -186,10 +186,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
       headerStyle: {
         backgroundColor: isDark ? "#000000" : "#ffffff",
       },
+      headerTitleAlign: "left",
+      headerTitleContainerStyle: { marginLeft: -16 },
       headerLeft: () => (
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={{ marginLeft: -8, padding: 4 }}
+          style={{ marginRight: 16 }}
         >
           <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
         </TouchableOpacity>
@@ -1097,7 +1099,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
-        <View className="flex-1">
+        <View className="flex-1 pb-14">
           {isLoading && messages.length === 0 ? (
             <View className="flex-1 items-center justify-center">
               <ActivityIndicator size="large" color="#3b82f6" />

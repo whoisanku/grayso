@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from "react";
-import { View, Text, Button, ActivityIndicator } from "react-native";
+import { View, Text, Button, ActivityIndicator, TouchableOpacity } from "react-native";
 import { identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "../utils/deso";
 import { DeSoIdentityContext } from "react-deso-protocol";
