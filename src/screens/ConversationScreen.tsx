@@ -22,7 +22,6 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Keyboard,
   DeviceEventEmitter,
   Animated,
@@ -200,7 +199,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
-            style={[styles.headerTitleText, isDark && { color: "#f8fafc" }]}
+            className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
           >
             {headerDisplayName || "Conversation"}
           </Text>
@@ -215,26 +214,19 @@ export default function ConversationScreen({ navigation, route }: Props) {
           }}
           disabled={!isGroupChat}
           activeOpacity={0.6}
-          style={{ flexDirection: 'row', alignItems: 'center' }}
+          className="flex-row items-center"
         >
           {isGroupChat ? (
-            <View style={{ flexDirection: 'row', marginRight: 8 }}>
+            <View className="flex-row mr-2">
               {loadingMembers || (groupMembers.length === 0 && !headerAvatarUri) ? (
                 // Loading placeholders
                 [0, 1, 2].map((i) => (
                   <View
                     key={`placeholder-${i}`}
-                    style={[
-                      styles.headerTitleAvatar,
-                      {
-                        backgroundColor: isDark ? "#334155" : "#e2e8f0",
-                        marginLeft: i > 0 ? -15 : 0,
-                        zIndex: 3 - i,
-                        borderWidth: 2,
-                        borderColor: isDark ? "#0f172a" : "#ffffff",
-                        borderRadius: 18,
-                      },
-                    ]}
+                    className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""}`}
+                    style={{
+                      zIndex: 3 - i,
+                    }}
                   />
                 ))
               ) : (
@@ -246,20 +238,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   return (
                     <View 
                       key={member.publicKey} 
-                      style={[
-                        styles.headerTitleAvatar, 
-                        isDark && { backgroundColor: "#334155" },
-                        { 
-                          marginLeft: index > 0 ? -15 : 0,
-                          zIndex: 3 - index,
-                          borderWidth: 2,
-                          borderColor: isDark ? "#0f172a" : "#ffffff"
-                        }
-                      ]}
+                      className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""}`}
+                      style={{
+                        zIndex: 3 - index,
+                      }}
                     >
                       <Image
                         source={{ uri }}
-                        style={{ width: '100%', height: '100%', borderRadius: 18 }}
+                        className="h-full w-full rounded-full"
                       />
                     </View>
                   );
@@ -269,7 +255,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           ) : (
             <Image
               source={{ uri: headerAvatarUri }}
-              style={[styles.headerTitleAvatar, isDark && { backgroundColor: "#334155" }]}
+              className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
             />
           )}
         </TouchableOpacity>
@@ -284,7 +270,19 @@ export default function ConversationScreen({ navigation, route }: Props) {
     ) => {
       const map = new Map<string, DecryptedMessageEntryResponse>();
 
-      [...prev, ...next].forEach((message, idx) => {
+      // Add new messages first (source of truth)
+      next.forEach((message) => {
+        const timestamp =
+          message.MessageInfo?.TimestampNanosString ??
+          String(message.MessageInfo?.TimestampNanos ?? "");
+        const senderKey =
+          message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
+        const uniqueKey = `${timestamp}-${senderKey}`;
+        map.set(uniqueKey, message);
+      });
+
+      // Merge previous messages, checking for duplicates
+      prev.forEach((message) => {
         const timestamp =
           message.MessageInfo?.TimestampNanosString ??
           String(message.MessageInfo?.TimestampNanos ?? "");
@@ -292,7 +290,26 @@ export default function ConversationScreen({ navigation, route }: Props) {
           message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
         const uniqueKey = `${timestamp}-${senderKey}`;
 
-        map.set(uniqueKey, message);
+        if (map.has(uniqueKey)) return;
+
+        // Fuzzy duplicate check for optimistic messages
+        // If we have a message with same content, sender, and roughly same time (5s window)
+        const isDuplicate = Array.from(map.values()).some((existing) => {
+          const timeDiff = Math.abs(
+            (existing.MessageInfo?.TimestampNanos ?? 0) -
+              (message.MessageInfo?.TimestampNanos ?? 0)
+          );
+          return (
+            existing.DecryptedMessage === message.DecryptedMessage &&
+            existing.SenderInfo?.OwnerPublicKeyBase58Check ===
+              message.SenderInfo?.OwnerPublicKeyBase58Check &&
+            timeDiff < 5000 * 1e6 // 5 seconds
+          );
+        });
+
+        if (!isDuplicate) {
+          map.set(uniqueKey, message);
+        }
       });
 
       return Array.from(map.values()).sort(
@@ -852,9 +869,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </View>
             ) : null}
             <Text
-              style={
-                isMine ? styles.rocketInlineEmoji : styles.rocketInlineEmojiOther
-              }
+              className={`text-[28px] ${
+                isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
+              }`}
             >
               🚀
             </Text>
@@ -1005,7 +1022,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const header = useMemo(() => {
     if (!error) return null;
     return (
-      <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3" style={{ transform: [{ scaleY: -1 }] }}>
+      <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
         <Text className="text-sm font-medium text-red-900">{error}</Text>
       </View>
     );
@@ -1015,7 +1032,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     if (messages.length === 0) return null;
 
     return (
-      <View className="py-4 items-center" style={{ transform: [{ scaleY: -1 }] }}>
+      <View className="py-4 items-center">
         {isLoading ? (
           <ActivityIndicator size="small" color="#3b82f6" />
         ) : hasMore ? (
@@ -1148,7 +1165,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
               />
             }
             ListEmptyComponent={() => (
-              <View className="items-center justify-center px-6 py-10" style={{ transform: [{ scaleY: -1 }] }}>
+              <View className="items-center justify-center px-6 py-10">
                 {isLoading ? (
                   <View className="items-center">
                     <ActivityIndicator size="large" color="#3b82f6" />
@@ -1174,33 +1191,30 @@ export default function ConversationScreen({ navigation, route }: Props) {
         </View>
 
         {isSendingMessage ? (
-          <View style={styles.sendingBanner}>
+          <View className="flex-row items-center justify-center py-1.5 bg-[#4f46e5]/10 border-t border-[#4f46e5]/20">
             <ActivityIndicator size="small" color="#2563eb" />
-            <Text style={styles.sendingBannerText}>Sending…</Text>
+            <Text className="ml-2 text-xs font-semibold text-[#4f46e5] tracking-wide">Sending…</Text>
           </View>
         ) : null}
 
         {reactionOverlay ? (
           <Animated.View
             pointerEvents="none"
-            style={[
-              styles.reactionOverlay,
-              reactionOverlay.isSender
-                ? styles.reactionOverlayRight
-                : styles.reactionOverlayLeft,
-              {
-                transform: [
-                  {
-                    translateX: reactionOverlayAnim.interpolate({
-                      inputRange: [-1, 1],
-                      outputRange: [-4, 4],
-                    }),
-                  },
-                ],
-              },
-            ]}
+            className={`absolute bottom-[108px] z-20 items-center elevation-8 ${
+              reactionOverlay.isSender ? "right-6" : "left-6"
+            }`}
+            style={{
+              transform: [
+                {
+                  translateX: reactionOverlayAnim.interpolate({
+                    inputRange: [-1, 1],
+                    outputRange: [-4, 4],
+                  }),
+                },
+              ],
+            }}
           >
-            <Text style={styles.reactionOverlayEmoji}>
+            <Text className="text-[42px] shadow-black/30 shadow-offset-[0px_4px] shadow-radius-8 elevation-4">
               {reactionOverlay.emoji}
             </Text>
           </Animated.View>
@@ -1231,19 +1245,19 @@ export default function ConversationScreen({ navigation, route }: Props) {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowMembersModal(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Group Members</Text>
+        <SafeAreaView className="flex-1 bg-white dark:bg-black">
+          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+            <Text className="text-xl font-bold text-[#111] dark:text-white">Group Members</Text>
             <TouchableOpacity
               onPress={() => setShowMembersModal(false)}
-              style={styles.modalCloseButton}
+              className="p-1"
             >
-              <Feather name="x" size={24} color="#111" />
+              <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.modalContent}>
+          <ScrollView className="flex-1">
             {loadingMembers ? (
-              <View style={styles.modalLoadingContainer}>
+              <View className="flex-1 items-center justify-center py-14">
                 <ActivityIndicator size="large" color="#3b82f6" />
               </View>
             ) : (
@@ -1252,17 +1266,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
                   : getProfileImageUrl(member.publicKey);
                 return (
-                  <View key={member.publicKey} style={styles.memberItem}>
+                  <View key={member.publicKey} className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
                     <Image
                       source={{ uri: memberImageUrl }}
-                      style={styles.memberAvatar}
+                      className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
                       resizeMode="cover"
                     />
-                    <View style={styles.memberInfo}>
-                      <Text style={styles.memberUsername}>
+                    <View className="ml-3 flex-1">
+                      <Text className="text-base font-semibold text-[#111] dark:text-white mb-0.5">
                         {member.username || "Anonymous"}
                       </Text>
-                      <Text style={styles.memberPublicKey} numberOfLines={1}>
+                      <Text className="text-xs text-gray-500 dark:text-gray-400" numberOfLines={1}>
                         {member.publicKey}
                       </Text>
                     </View>
@@ -1271,9 +1285,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
               })
             )}
             {!loadingMembers && groupMembers.length === 0 && (
-              <View style={styles.modalEmptyContainer}>
+              <View className="flex-1 items-center justify-center py-14">
                 <Feather name="users" size={48} color="#9ca3af" />
-                <Text style={styles.modalEmptyText}>No members found</Text>
+                <Text className="mt-4 text-base text-gray-500">No members found</Text>
               </View>
             )}
           </ScrollView>
@@ -1368,252 +1382,6 @@ function isSameCalendarDay(a: Date, b: Date): boolean {
   );
 }
 
-const styles = StyleSheet.create({
-  headerBackButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
-  headerTitle: {
-    color: "#0f172a",
-    fontSize: 17,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-  },
-  headerRightContainer: {
-    paddingRight: 12,
-  },
-  headerAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#e2e8f0",
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
-  },
-  headerAvatarFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  groupAvatarsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  groupMemberAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#e5e7eb",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  groupMemberAvatarMore: {
-    backgroundColor: "#3b82f6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  groupMemberAvatarMoreText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  outgoingBubbleShadow: {},
-  incomingBubbleShadow: {},
-  composerContainer: {
-    borderTopWidth: 1,
-    borderTopColor: "#334155",
-  },
-  composerRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    marginHorizontal: 12,
-    marginTop: 12,
-    justifyContent: "space-between",
-  },
-  inputShell: {
-    flex: 1,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
-    borderWidth: 0,
-  },
-  composerTextInput: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 20,
-    color: "#1e293b",
-    padding: 0,
-    marginLeft: 0,
-  },
-  inputEmoji: {
-    opacity: 0.75,
-  },
-  trailingActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: 10,
-  },
-  actionTouchable: {
-    marginHorizontal: 6,
-  },
-  iconButtonBase: {
-    height: 32,
-    width: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconButtonDisabled: {
-    backgroundColor: "#e2e8f0", // Light mode disabled
-  },
-  iconButtonSend: {
-    backgroundColor: "#0085ff",
-  },
-  sendButtonShadow: {},
-  rocketIcon: {
-    fontSize: 24,
-    marginLeft: 6,
-  },
-  rocketTouchable: {
-    paddingHorizontal: 6,
-  },
-  rocketInlineEmoji: {
-    fontSize: 28,
-    color: "#4f46e5",
-  },
-  rocketInlineEmojiOther: {
-    fontSize: 28,
-    color: "#0f172a",
-  },
-  headerTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  headerTitleAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#e2e8f0",
-  },
-  headerTitleText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#0f172a",
-  },
-  headerSubtitleText: {
-    fontSize: 12,
-    color: "#64748b",
-  },
-  reactionOverlay: {
-    position: "absolute",
-    bottom: 108,
-    alignItems: "center",
-    zIndex: 20,
-    elevation: 8,
-  },
-  reactionOverlayLeft: {
-    left: 24,
-  },
-  reactionOverlayRight: {
-    right: 24,
-  },
-  reactionOverlayEmoji: {
-    fontSize: 42,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  sendingBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 6,
-    backgroundColor: "rgba(79, 70, 229, 0.08)",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(79, 70, 229, 0.2)",
-  },
-  sendingBannerText: {
-    marginLeft: 8,
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4f46e5",
-    letterSpacing: 0.3,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalContent: {
-    flex: 1,
-  },
-  modalLoadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  modalEmptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  modalEmptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  memberItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  memberAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#e5e7eb",
-  },
-  memberInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  memberUsername: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111",
-    marginBottom: 2,
-  },
-  memberPublicKey: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-});
 
 
 type ComposerProps = {
@@ -1735,12 +1503,6 @@ function Composer({
 
   const containerPaddingBottom = bottomInset + androidKeyboardOffset;
 
-  const sendButtonInnerStyle = [
-    styles.iconButtonBase,
-    !hasText ? styles.iconButtonDisabled : styles.iconButtonSend,
-    !sendDisabled ? styles.sendButtonShadow : null,
-  ];
-
   const replyPreview = useMemo(() => {
     if (!replyToMessage) return null;
     const senderPk = replyToMessage.SenderInfo?.OwnerPublicKeyBase58Check;
@@ -1750,26 +1512,22 @@ function Composer({
 
     return (
       <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          borderTopWidth: 1,
-          borderTopColor: isDark ? '#334155' : '#e2e8f0',
-        }}
+        className={`flex-row items-center py-2 px-3 border-t ${
+          isDark
+            ? "bg-[#1e293b] border-[#334155]"
+            : "bg-[#f1f5f9] border-[#e2e8f0]"
+        }`}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#3b82f6', marginBottom: 2 }}>
+        <View className="flex-1">
+          <Text className="text-xs font-semibold text-[#3b82f6] mb-0.5">
             Replying to {displayName}
           </Text>
-          <Text style={{ fontSize: 12, color: isDark ? '#cbd5e1' : '#64748b' }} numberOfLines={1}>
+          <Text className={`text-xs ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
             {messageText}
           </Text>
         </View>
-        <TouchableOpacity onPress={onCancelReply} style={{ padding: 4 }}>
-          <Feather name="x" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+        <TouchableOpacity onPress={onCancelReply} className="p-1">
+          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
         </TouchableOpacity>
       </View>
     );
@@ -1777,17 +1535,18 @@ function Composer({
 
   return (
     <View
-      style={[
-        styles.composerContainer,
-        {
-          paddingBottom: containerPaddingBottom,
-          borderTopColor: isDark ? "#334155" : "#e2e8f0",
-        },
-      ]}
+      className={`border-t border-slate-200 dark:border-slate-800 ${
+         isDark ? "bg-[#000]" : "bg-[#fff]"
+      }`}
+      style={{
+        paddingBottom: containerPaddingBottom,
+      }}
     >
       {replyPreview}
-      <View style={styles.composerRow}>
-        <View style={[styles.inputShell, isDark && { backgroundColor: "#1e293b" }]}>
+      <View className="flex-row items-end mx-3 mt-3 justify-between">
+        <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${
+          isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
+        }`}>
           <TextInput
             ref={textInputRef}
             placeholder={isGroupChat ? "Message the group…" : "Write a message"}
@@ -1802,26 +1561,24 @@ function Composer({
             returnKeyType="default"
             blurOnSubmit={false}
             onContentSizeChange={handleContentSizeChange}
-            style={[
-              styles.composerTextInput,
-              isDark && { color: "#f8fafc" },
-              {
-                minHeight: 24,
-                maxHeight: 80,
-                paddingVertical: 4,
-              },
-            ]}
+            className={`flex-1 text-base leading-5 p-0 ml-0 ${
+              isDark ? "text-[#f8fafc]" : "text-[#1e293b]"
+            }`}
+            style={{
+               minHeight: 24,
+               maxHeight: 80,
+               paddingVertical: 4,
+            }}
           />
           <TouchableOpacity
             onPress={() => onSend()}
             disabled={sendDisabled}
             activeOpacity={0.85}
-            style={{ marginLeft: 8 }}
+            className="ml-2"
           >
-            <View style={[
-              sendButtonInnerStyle as any,
-              !hasText && isDark && { backgroundColor: "#334155" } // Dark mode disabled override
-            ]}>
+            <View className={`h-8 w-8 rounded-full items-center justify-center ${
+               !hasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : "bg-[#0085ff]"
+            }`}>
               {sending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
