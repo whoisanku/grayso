@@ -87,7 +87,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
     {}
   );
   const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
   const [reactionOverlay, setReactionOverlay] = useState<
     | {
         emoji: string;
@@ -187,7 +186,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
         backgroundColor: isDark ? "#000000" : "#ffffff",
       },
       headerTitleAlign: "left",
-      headerTitleContainerStyle: { marginLeft: -16 },
       headerLeft: () => (
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -197,7 +195,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         </TouchableOpacity>
       ),
       headerTitle: () => (
-        <View>
+        <View style={{ marginLeft: Platform.OS === 'android' ? -16 : 0 }}>
           <Text
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -581,28 +579,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
     threadAccessGroupKeyName,
   ]);
 
-  useEffect(() => {
-    if (Platform.OS !== "android") {
-      return;
-    }
-
-    const handleShow = (event: any) => {
-      const height = event?.endCoordinates?.height ?? 0;
-      setAndroidKeyboardOffset(Math.max(0, height - insets.bottom));
-    };
-
-    const handleHide = () => {
-      setAndroidKeyboardOffset(0);
-    };
-
-    const showSub = Keyboard.addListener("keyboardDidShow", handleShow);
-    const hideSub = Keyboard.addListener("keyboardDidHide", handleHide);
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [insets.bottom]);
 
   useEffect(() => {
     return () => {
@@ -843,7 +819,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
       return (
         <View style={{ marginBottom: 12 }}>
           {showDayDivider ? (
-            <View className="items-center py-3">
+            <View className="items-center py-1">
               <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
                 <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
                   {formatDayLabel(timestamp)}
@@ -917,7 +893,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return (
       <View style={{ marginBottom }}>
         {showDayDivider ? (
-          <View className="items-center py-3">
+          <View className="items-center py-1">
             <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
               <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
                 {formatDayLabel(timestamp)}
@@ -1233,7 +1209,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
           onMessageSent={handleComposerMessageSent}
           onSendingChange={setIsSendingMessage}
           bottomInset={composerBottomInset}
-          androidKeyboardOffset={androidKeyboardOffset}
           recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
           replyToMessage={replyToMessage}
           onCancelReply={() => setReplyToMessage(null)}
@@ -1397,7 +1372,6 @@ type ComposerProps = {
   onMessageSent?: (messageText: string) => void;
   onSendingChange?: (sending: boolean) => void;
   bottomInset?: number;
-  androidKeyboardOffset?: number;
   recipientAccessGroupPublicKeyBase58Check?: string;
   replyToMessage?: DecryptedMessageEntryResponse | null;
   onCancelReply?: () => void;
@@ -1415,7 +1389,6 @@ function Composer({
   onMessageSent,
   onSendingChange,
   bottomInset = 0,
-  androidKeyboardOffset = 0,
   recipientAccessGroupPublicKeyBase58Check,
   replyToMessage,
   onCancelReply,
@@ -1503,7 +1476,7 @@ function Composer({
   const sendDisabled = sending || !text.trim();
   const hasText = text.trim().length > 0;
 
-  const containerPaddingBottom = bottomInset + androidKeyboardOffset;
+  const containerPaddingBottom = bottomInset;
 
   const replyPreview = useMemo(() => {
     if (!replyToMessage) return null;
