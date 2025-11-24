@@ -1,8 +1,9 @@
 import React, { useContext, useState, useEffect } from "react";
-import { View, Text, Button, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import { identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "../utils/deso";
 import { DeSoIdentityContext } from "react-deso-protocol";
+import AppLogo from "../assets/app-logo.svg";
 
 const LoginScreen = () => {
   const { currentUser, isLoading } = useContext(DeSoIdentityContext);
@@ -44,9 +45,8 @@ const LoginScreen = () => {
   return (
     <View className="flex-1 items-center justify-center bg-white p-5 dark:bg-black">
       <View className="mb-10 items-center">
-        {/* Placeholder for Logo - in a real app use Image with asset */}
-        <View className="h-24 w-24 items-center justify-center rounded-3xl bg-[#0085ff] shadow-xl shadow-blue-300 dark:shadow-none">
-          <Text className="text-4xl font-bold text-white">D</Text>
+        <View className="h-24 w-24 items-center justify-center overflow-hidden rounded-3xl shadow-xl shadow-blue-300 dark:shadow-none">
+          <AppLogo width="100%" height="100%" />
         </View>
         <Text className="mt-6 text-3xl font-bold text-slate-900 dark:text-white">
           DeSo Chat

@@ -13,6 +13,7 @@ import { configure, identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
 import RootNavigator from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -45,10 +46,12 @@ export default function App() {
       <CryptoPolyfill />
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-          <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-            <RootNavigator />
-          </NavigationContainer>
+          <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+            <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+              <RootNavigator />
+            </NavigationContainer>
+          </KeyboardProvider>
         </GestureHandlerRootView>
       </SafeAreaProvider>
     </DeSoIdentityProvider>

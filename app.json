@@ -8,6 +8,7 @@
       "ios",
       "android"
     ],
+    "icon": "./assets/app-icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "runtimeVersion": {
@@ -27,7 +28,8 @@
       "expo-web-browser"
     ],
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/app-icon.png"
     }
   }
 }

@@ -9,7 +9,6 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
   ListRenderItem,
   Modal,
   NativeSyntheticEvent,
@@ -56,6 +55,8 @@ import { useHeaderHeight } from "@react-navigation/elements";
 
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
+import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller";
+import { runOnJS } from "react-native-reanimated";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -105,6 +106,23 @@ export default function ConversationScreen({ navigation, route }: Props) {
     null
   );
   const reactionOverlayAnim = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
+  const scrollOffsetRef = useRef(0);
+
+  const checkAndScrollToBottom = useCallback(() => {
+    if (scrollOffsetRef.current < 50) {
+       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, []);
+
+  useKeyboardHandler({
+     onStart: (e) => {
+        "worklet";
+        if (e.height > 0) {
+           runOnJS(checkAndScrollToBottom)();
+        }
+     }
+  }, [checkAndScrollToBottom]);
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
   const counterPartyPublicKey =
@@ -1082,6 +1100,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </View>
           ) : (
             <FlatList
+              ref={flatListRef}
               data={messages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
@@ -1115,7 +1134,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               // For inverted list, scrolling up means contentOffset.y increases
               const distanceFromTop = contentOffset.y;
-              
+              scrollOffsetRef.current = distanceFromTop;
+
               console.log("[ConversationScreen] Scroll event", {
                 contentOffsetY: contentOffset.y,
                 contentHeight: contentSize.height,
