@@ -46,7 +46,7 @@ export default function App() {
       <CryptoPolyfill />
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
+          <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
             <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
             <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
               <RootNavigator />
