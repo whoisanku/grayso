@@ -1075,7 +1075,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
-        <View className="flex-1 pb-14">
+        <View className="flex-1">
           {isLoading && messages.length === 0 ? (
             <View className="flex-1 items-center justify-center">
               <ActivityIndicator size="large" color="#3b82f6" />
@@ -1092,7 +1092,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             contentContainerClassName={
               messages.length === 0
                 ? "flex-grow items-center justify-center px-6 pb-16"
-                : "px-4 pb-8"
+                : "px-4 pb-3"
             }
             maintainVisibleContentPosition={
               Platform.OS === "ios"
