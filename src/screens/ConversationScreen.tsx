@@ -24,6 +24,7 @@ import {
   Keyboard,
   DeviceEventEmitter,
   Animated,
+  Alert,
 } from "react-native";
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import * as Haptics from 'expo-haptics';
@@ -109,6 +110,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const reactionOverlayAnim = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef<FlatList>(null);
   const scrollOffsetRef = useRef(0);
+  const itemHeights = useRef<Map<string, number>>(new Map());
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const checkAndScrollToBottom = useCallback(() => {
     if (scrollOffsetRef.current < 50) {
@@ -669,6 +672,64 @@ export default function ConversationScreen({ navigation, route }: Props) {
     setReplyToMessage(message);
   }, []);
 
+  const handleReplyJump = useCallback((messageId: string) => {
+    const index = messages.findIndex((m) => {
+      const mId = m.MessageInfo?.TimestampNanosString;
+      return mId === messageId;
+    });
+
+    if (index !== -1) {
+      flatListRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      setHighlightedMessageId(messageId);
+      // Reset highlight is handled in the bubble or we can do it here
+      setTimeout(() => setHighlightedMessageId(null), 1500);
+    } else {
+      Alert.alert(
+        "Message not found",
+        "The message you are looking for is not currently loaded."
+      );
+    }
+  }, [messages]);
+
+  const getItemLayout = useCallback((data: any, index: number) => {
+    const length = 80; // Default estimate
+    if (!data) return { length, offset: 0, index };
+
+    let offset = 0;
+    // Iterate to calculate offset based on measured heights
+    for (let i = 0; i < index; i++) {
+      const item = data[i];
+      // Reuse keyExtractor logic roughly
+      const id = item.MessageInfo?.TimestampNanosString ??
+                 `${item.MessageInfo?.TimestampNanos ?? "unknown"}-${i}`;
+      const h = itemHeights.current.get(id);
+      offset += (h || length);
+    }
+
+    const currentItem = data[index];
+    const currentId = currentItem?.MessageInfo?.TimestampNanosString ??
+                      `${currentItem?.MessageInfo?.TimestampNanos ?? "unknown"}-${index}`;
+    const currentLength = itemHeights.current.get(currentId) || length;
+
+    return { length: currentLength, offset, index };
+  }, []);
+
+  const onScrollToIndexFailed = useCallback((info: {
+    index: number;
+    highestMeasuredFrameIndex: number;
+    averageItemLength: number;
+  }) => {
+    console.warn("Scroll to index failed", info);
+    const wait = new Promise(resolve => setTimeout(resolve, 500));
+    wait.then(() => {
+      flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+    });
+  }, []);
+
   // Create a lookup map for fast message retrieval by ID (TimestampNanosString)
   const messageIdMap = useMemo(() => {
     const map = new Map<string, DecryptedMessageEntryResponse>();
@@ -684,6 +745,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     item,
     index,
   }) => {
+    const messageId = item.MessageInfo?.TimestampNanosString;
     return (
       <MessageBubble
         item={item}
@@ -692,8 +754,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
         profiles={profiles}
         isGroupChat={isGroupChat}
         onReply={handleReply}
+        onReplyJump={handleReplyJump}
         messageIdMap={messageIdMap}
         isDark={isDark}
+        highlighted={highlightedMessageId === messageId}
+        onLayout={(height) => {
+          const id = item.MessageInfo?.TimestampNanosString ??
+                     `${item.MessageInfo?.TimestampNanos ?? "unknown"}-${index}`;
+          itemHeights.current.set(id, height);
+        }}
       />
     );
   };
@@ -706,8 +775,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles,
     isGroupChat,
     onReply,
+    onReplyJump,
     messageIdMap,
     isDark,
+    highlighted,
+    onLayout,
   }: {
     item: DecryptedMessageEntryResponse;
     index: number;
@@ -715,10 +787,33 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles: PublicKeyToProfileEntryResponseMap;
     isGroupChat: boolean;
     onReply: (message: DecryptedMessageEntryResponse) => void;
+    onReplyJump: (messageId: string) => void;
     messageIdMap: Map<string, DecryptedMessageEntryResponse>;
     isDark: boolean;
+    highlighted: boolean;
+    onLayout: (height: number) => void;
   }) => {
     const swipeableRef = useRef<Swipeable>(null);
+    const highlightAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      if (highlighted) {
+        Animated.sequence([
+          Animated.timing(highlightAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: false,
+          }),
+          Animated.delay(500),
+          Animated.timing(highlightAnim, {
+            toValue: 0,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+        ]).start();
+      }
+    }, [highlighted, highlightAnim]);
+
     const rawMessageText = item.DecryptedMessage?.trim();
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
@@ -765,37 +860,42 @@ export default function ConversationScreen({ navigation, route }: Props) {
         : "Replied Message";
 
       return (
-        <View
-          style={{
-            backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
-            borderLeftWidth: 4,
-            borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
-            borderRadius: 4,
-            padding: 6,
-            marginBottom: 6,
-          }}
+        <TouchableOpacity
+          onPress={() => onReplyJump(repliedToMessageId)}
+          activeOpacity={0.7}
         >
-          <Text
+          <View
             style={{
-              fontSize: 11,
-              fontWeight: "700",
-              color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
-              marginBottom: 2,
+              backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
+              borderLeftWidth: 4,
+              borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+              borderRadius: 4,
+              padding: 6,
+              marginBottom: 6,
             }}
-            numberOfLines={1}
           >
-            {replyDisplayName}
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
-            }}
-            numberOfLines={2}
-          >
-            {replyText}
-          </Text>
-        </View>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+                marginBottom: 2,
+              }}
+              numberOfLines={1}
+            >
+              {replyDisplayName}
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
+              }}
+              numberOfLines={2}
+            >
+              {replyText}
+            </Text>
+          </View>
+        </TouchableOpacity>
       );
     };
 
@@ -838,7 +938,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
     if (rawMessageText === "🚀") {
       return (
-        <View style={{ marginBottom: 12 }}>
+        <View
+          style={{ marginBottom: 12 }}
+          onLayout={(e) => onLayout(e.nativeEvent.layout.height)}
+        >
           {showDayDivider ? (
             <View className="items-center py-1">
               <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
@@ -912,7 +1015,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const marginBottom = isLastInGroup ? 16 : 2;
 
     return (
-      <View style={{ marginBottom }}>
+      <View
+        style={{ marginBottom }}
+        onLayout={(e) => onLayout(e.nativeEvent.layout.height)}
+      >
         {showDayDivider ? (
           <View className="items-center py-1">
             <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
@@ -952,55 +1058,66 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 ) : null}
               </View>
             ) : null}
-            <View
-              className={`max-w-[75%] px-4 py-3 ${
-                isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
-              }`}
-              style={[
-                getBorderRadius(),
-              ]}
-            >
-              {!isMine && isFirstInGroup && (
-                <Text
-                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-              )}
-              {renderReplyPreview()}
-              <Text
-                className={`text-[16px] leading-[22px] ${
-                  isMine ? "text-white" : "text-[#0f172a] dark:text-white"
-                }`}
+            <View>
+              <Animated.View
+                style={[
+                  getBorderRadius(),
+                  {
+                    backgroundColor: highlightAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [
+                        isMine ? "#0085ff" : (isDark ? "#161e27" : "#f1f3f5"),
+                        isMine ? "#4f46e5" : (isDark ? "#334155" : "#cbd5e1")
+                      ]
+                    }),
+                    maxWidth: "75%",
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                  }
+                ]}
               >
-                {messageText}
-              </Text>
-              {isLastInGroup && (
-                <View
-                  className={`mt-1.5 flex-row items-center ${
-                    isMine ? "justify-end" : "justify-start"
+                {!isMine && isFirstInGroup && (
+                  <Text
+                    className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                )}
+                {renderReplyPreview()}
+                <Text
+                  className={`text-[16px] leading-[22px] ${
+                    isMine ? "text-white" : "text-[#0f172a] dark:text-white"
                   }`}
                 >
-                  {hasError ? (
-                    <Text className="text-[10px] font-medium text-red-500">
-                      Failed to decrypt
-                    </Text>
-                  ) : (
-                    <>
-                      {timestamp ? (
-                        <Text
-                          className={`text-[11px] ${
-                            isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                          }`}
-                        >
-                          {formatTimestamp(timestamp)}
-                        </Text>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-              )}
+                  {messageText}
+                </Text>
+                {isLastInGroup && (
+                  <View
+                    className={`mt-1.5 flex-row items-center ${
+                      isMine ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    {hasError ? (
+                      <Text className="text-[10px] font-medium text-red-500">
+                        Failed to decrypt
+                      </Text>
+                    ) : (
+                      <>
+                        {timestamp ? (
+                          <Text
+                            className={`text-[11px] ${
+                              isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                          >
+                            {formatTimestamp(timestamp)}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                )}
+              </Animated.View>
             </View>
           </View>
         </Swipeable>
@@ -1105,23 +1222,25 @@ export default function ConversationScreen({ navigation, route }: Props) {
             <FlatList
               ref={flatListRef}
               data={messages}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            ListHeaderComponent={header}
-            ListFooterComponent={footer}
-            inverted
-            showsVerticalScrollIndicator={false}
-            contentContainerClassName={
-              messages.length === 0
-                ? "flex-grow items-center justify-center px-6 pb-16"
-                : "px-4 pb-3"
-            }
-            maintainVisibleContentPosition={
-              Platform.OS === "ios"
-                ? { minIndexForVisible: 0, autoscrollToTopThreshold: 40 }
-                : undefined
-            }
-            onEndReachedThreshold={2}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              ListHeaderComponent={header}
+              ListFooterComponent={footer}
+              getItemLayout={getItemLayout}
+              onScrollToIndexFailed={onScrollToIndexFailed}
+              inverted
+              showsVerticalScrollIndicator={false}
+              contentContainerClassName={
+                messages.length === 0
+                  ? "flex-grow items-center justify-center px-6 pb-16"
+                  : "px-4 pb-3"
+              }
+              maintainVisibleContentPosition={
+                Platform.OS === "ios"
+                  ? { minIndexForVisible: 0, autoscrollToTopThreshold: 40 }
+                  : undefined
+              }
+              onEndReachedThreshold={2}
             onEndReached={() => {
               console.log("[ConversationScreen] onEndReached triggered", {
                 hasMore: hasMoreRef.current,

@@ -219,8 +219,9 @@ export const decryptAccessGroupMessages = async (
             MessageInfo: {
               ...d.MessageInfo,
               EncryptedText: encryptedReply,
+              ExtraData: d.MessageInfo?.ExtraData || {},
             },
-          } as NewMessageEntryResponse; // Casting because d has extra fields
+          } as unknown as NewMessageEntryResponse; // Casting because d has extra fields
 
           const decryptedReply = await identity.decryptMessage(
             fakeMessage,
@@ -230,7 +231,7 @@ export const decryptAccessGroupMessages = async (
           if (decryptedReply.DecryptedMessage) {
             // Mutate the original message's ExtraData to include the decrypted text
             if (!d.MessageInfo) {
-              d.MessageInfo = { EncryptedText: "", TimestampNanos: 0, TimestampNanosString: "" };
+              d.MessageInfo = { EncryptedText: "", TimestampNanos: 0, TimestampNanosString: "", ExtraData: {} };
             }
             if (!d.MessageInfo.ExtraData) {
               d.MessageInfo.ExtraData = {};
