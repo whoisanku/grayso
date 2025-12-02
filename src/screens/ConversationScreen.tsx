@@ -77,6 +77,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   } = route.params;
 
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [accessGroups, setAccessGroups] = useState<AccessGroupEntryResponse[]>(
     []
   );
@@ -1136,6 +1137,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
               const distanceFromTop = contentOffset.y;
               scrollOffsetRef.current = distanceFromTop;
 
+              // Show scroll-to-bottom button if we are more than 400px up
+              if (distanceFromTop > 400) {
+                if (!showScrollToBottom) setShowScrollToBottom(true);
+              } else {
+                if (showScrollToBottom) setShowScrollToBottom(false);
+              }
+
               console.log("[ConversationScreen] Scroll event", {
                 contentOffsetY: contentOffset.y,
                 contentHeight: contentSize.height,
@@ -1185,6 +1193,21 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </View>
             )}
             />
+          )}
+          {showScrollToBottom && (
+            <TouchableOpacity
+              onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+              className="absolute bottom-4 right-4 h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600 z-10"
+              style={{
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 4
+              }}
+            >
+              <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+            </TouchableOpacity>
           )}
         </View>
 
