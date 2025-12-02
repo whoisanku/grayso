@@ -24,9 +24,12 @@ import {
   Keyboard,
   DeviceEventEmitter,
   Animated,
+  TouchableWithoutFeedback,
+  Pressable,
 } from "react-native";
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   AccessGroupEntryResponse,
@@ -102,6 +105,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
   );
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+
+  const [editingMessage, setEditingMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+  const [messageOptionsModalVisible, setMessageOptionsModalVisible] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+
   const lastRocketMessageKeyRef = useRef<string | null>(null);
   const reactionOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -339,6 +347,54 @@ export default function ConversationScreen({ navigation, route }: Props) {
     },
     []
   );
+
+  // Logic to process messages and apply edits
+  const processedMessages = useMemo(() => {
+    const editMap = new Map<string, DecryptedMessageEntryResponse>();
+    messages.forEach(msg => {
+      const extraData = msg.MessageInfo?.ExtraData;
+      if (extraData?.edited === "true" && extraData?.originalMessageId) {
+        const targetId = extraData.originalMessageId;
+        const existingEdit = editMap.get(targetId);
+        if (!existingEdit || (msg.MessageInfo?.TimestampNanos || 0) > (existingEdit.MessageInfo?.TimestampNanos || 0)) {
+           editMap.set(targetId, msg);
+        }
+      }
+    });
+
+    const result: DecryptedMessageEntryResponse[] = [];
+    messages.forEach(msg => {
+       const extraData = msg.MessageInfo?.ExtraData;
+       const isEditCommand = extraData?.edited === "true" && extraData?.originalMessageId;
+
+       if (isEditCommand) {
+         return;
+       }
+
+       const msgId = msg.MessageInfo?.TimestampNanosString;
+       if (msgId && editMap.has(msgId)) {
+         const editMsg = editMap.get(msgId)!;
+         const newContent = editMsg.MessageInfo?.ExtraData?.editedMessage || editMsg.DecryptedMessage;
+
+         const updatedMsg = {
+           ...msg,
+           DecryptedMessage: newContent,
+           MessageInfo: {
+             ...msg.MessageInfo,
+             ExtraData: {
+               ...msg.MessageInfo?.ExtraData,
+               isEditedDisplay: "true"
+             }
+           }
+         } as DecryptedMessageEntryResponse;
+
+         result.push(updatedMsg);
+       } else {
+         result.push(msg);
+       }
+    });
+    return result;
+  }, [messages]);
 
   const loadMessages = useCallback(
     async (initial = false, isPullToRefresh = false) => {
@@ -667,6 +723,27 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReplyToMessage(message);
+    setEditingMessage(null);
+  }, []);
+
+  const handleLongPress = useCallback((message: DecryptedMessageEntryResponse) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setSelectedMessage(message);
+    setMessageOptionsModalVisible(true);
+  }, []);
+
+  const handleEdit = useCallback((message: DecryptedMessageEntryResponse) => {
+    setMessageOptionsModalVisible(false);
+    setEditingMessage(message);
+    setReplyToMessage(null);
+  }, []);
+
+  const handleCopy = useCallback(async (message: DecryptedMessageEntryResponse) => {
+    setMessageOptionsModalVisible(false);
+    if (message.DecryptedMessage) {
+       await Clipboard.setStringAsync(message.DecryptedMessage);
+       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
   }, []);
 
   // Create a lookup map for fast message retrieval by ID (TimestampNanosString)
@@ -688,10 +765,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
       <MessageBubble
         item={item}
         index={index}
-        messages={messages}
+        messages={processedMessages}
         profiles={profiles}
         isGroupChat={isGroupChat}
         onReply={handleReply}
+        onLongPress={handleLongPress}
         messageIdMap={messageIdMap}
         isDark={isDark}
       />
@@ -706,6 +784,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles,
     isGroupChat,
     onReply,
+    onLongPress,
     messageIdMap,
     isDark,
   }: {
@@ -715,6 +794,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles: PublicKeyToProfileEntryResponseMap;
     isGroupChat: boolean;
     onReply: (message: DecryptedMessageEntryResponse) => void;
+    onLongPress: (message: DecryptedMessageEntryResponse) => void;
     messageIdMap: Map<string, DecryptedMessageEntryResponse>;
     isDark: boolean;
   }) => {
@@ -744,6 +824,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
     }
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
+
+    const isEdited = item.MessageInfo?.ExtraData?.isEditedDisplay === "true";
 
     // Reply logic
     const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
@@ -952,56 +1034,63 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 ) : null}
               </View>
             ) : null}
-            <View
-              className={`max-w-[75%] px-4 py-3 ${
-                isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
-              }`}
-              style={[
-                getBorderRadius(),
-              ]}
-            >
-              {!isMine && isFirstInGroup && (
-                <Text
-                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-              )}
-              {renderReplyPreview()}
-              <Text
-                className={`text-[16px] leading-[22px] ${
-                  isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+            <TouchableWithoutFeedback onLongPress={() => onLongPress(item)}>
+              <View
+                className={`max-w-[75%] px-4 py-3 ${
+                  isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
                 }`}
+                style={[
+                  getBorderRadius(),
+                ]}
               >
-                {messageText}
-              </Text>
-              {isLastInGroup && (
-                <View
-                  className={`mt-1.5 flex-row items-center ${
-                    isMine ? "justify-end" : "justify-start"
+                {!isMine && isFirstInGroup && (
+                  <Text
+                    className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                )}
+                {renderReplyPreview()}
+                <Text
+                  className={`text-[16px] leading-[22px] ${
+                    isMine ? "text-white" : "text-[#0f172a] dark:text-white"
                   }`}
                 >
-                  {hasError ? (
-                    <Text className="text-[10px] font-medium text-red-500">
-                      Failed to decrypt
-                    </Text>
-                  ) : (
-                    <>
-                      {timestamp ? (
-                        <Text
-                          className={`text-[11px] ${
-                            isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                          }`}
-                        >
-                          {formatTimestamp(timestamp)}
-                        </Text>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-              )}
-            </View>
+                  {messageText}
+                </Text>
+                {isLastInGroup && (
+                  <View
+                    className={`mt-1.5 flex-row items-center ${
+                      isMine ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    {hasError ? (
+                      <Text className="text-[10px] font-medium text-red-500">
+                        Failed to decrypt
+                      </Text>
+                    ) : (
+                      <>
+                        {timestamp ? (
+                          <Text
+                            className={`text-[11px] ${
+                              isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                          >
+                            {formatTimestamp(timestamp)}
+                            {isEdited && (
+                              <Text className={isMine ? "text-blue-200" : "text-slate-500"}>
+                                {" "}(edited)
+                              </Text>
+                            )}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
           </View>
         </Swipeable>
       </View>
@@ -1075,6 +1164,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
         MessageInfo: {
           TimestampNanos: timestampNanos,
           TimestampNanosString: String(timestampNanos),
+          ExtraData: editingMessage ? {
+            edited: "true",
+            originalMessageId: editingMessage.MessageInfo?.TimestampNanosString,
+            editedMessage: messageText
+          } : {}
         },
         SenderInfo: {
           OwnerPublicKeyBase58Check: userPublicKey,
@@ -1083,8 +1177,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
       } as DecryptedMessageEntryResponse;
 
       setMessages((prev) => mergeMessages(prev, [optimisticMessage]));
+      setEditingMessage(null);
     },
-    [chatType, mergeMessages, userPublicKey]
+    [chatType, mergeMessages, userPublicKey, editingMessage]
   );
 
   const composerBottomInset = Math.max(insets.bottom, 8);
@@ -1104,7 +1199,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           ) : (
             <FlatList
               ref={flatListRef}
-              data={messages}
+              data={processedMessages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListHeaderComponent={header}
@@ -1257,6 +1352,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
           recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
           replyToMessage={replyToMessage}
           onCancelReply={() => setReplyToMessage(null)}
+          editingMessage={editingMessage}
+          onCancelEdit={() => setEditingMessage(null)}
           profiles={profiles}
         />
       </KeyboardAvoidingView>
@@ -1315,6 +1412,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      <MessageOptionsModal
+        visible={messageOptionsModalVisible}
+        onClose={() => setMessageOptionsModalVisible(false)}
+        message={selectedMessage}
+        isMine={Boolean(selectedMessage?.IsSender)}
+        onReply={() => selectedMessage && handleReply(selectedMessage)}
+        onEdit={() => selectedMessage && handleEdit(selectedMessage)}
+        onCopy={() => selectedMessage && handleCopy(selectedMessage)}
+        isDark={isDark}
+      />
     </SafeAreaView>
   );
 }
@@ -1404,6 +1512,79 @@ function isSameCalendarDay(a: Date, b: Date): boolean {
   );
 }
 
+type MessageOptionsModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  message: DecryptedMessageEntryResponse | null;
+  isMine: boolean;
+  onReply: () => void;
+  onEdit: () => void;
+  onCopy: () => void;
+  isDark: boolean;
+};
+
+function MessageOptionsModal({
+  visible,
+  onClose,
+  message,
+  isMine,
+  onReply,
+  onEdit,
+  onCopy,
+  isDark,
+}: MessageOptionsModalProps) {
+  if (!message) return null;
+
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable className="flex-1 bg-black/60 justify-center items-center px-8" onPress={onClose}>
+        <View className={`w-full max-w-sm rounded-2xl overflow-hidden ${isDark ? "bg-[#1e293b]" : "bg-white"}`}>
+          <View>
+            <TouchableOpacity
+              className={`flex-row items-center px-4 py-3.5 border-b ${isDark ? "border-slate-700 active:bg-slate-700" : "border-gray-100 active:bg-gray-50"}`}
+              onPress={() => { onClose(); onReply(); }}
+            >
+              <Feather name="corner-up-left" size={20} color={isDark ? "#e2e8f0" : "#334155"} />
+              <Text className={`ml-3 text-base font-medium ${isDark ? "text-white" : "text-slate-700"}`}>Reply</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className={`flex-row items-center px-4 py-3.5 border-b ${isDark ? "border-slate-700 active:bg-slate-700" : "border-gray-100 active:bg-gray-50"}`}
+              onPress={() => { onClose(); onCopy(); }}
+            >
+              <Feather name="copy" size={20} color={isDark ? "#e2e8f0" : "#334155"} />
+              <Text className={`ml-3 text-base font-medium ${isDark ? "text-white" : "text-slate-700"}`}>Copy</Text>
+            </TouchableOpacity>
+
+            {isMine && (
+              <TouchableOpacity
+                className={`flex-row items-center px-4 py-3.5 border-b ${isDark ? "border-slate-700 active:bg-slate-700" : "border-gray-100 active:bg-gray-50"}`}
+                onPress={() => { onClose(); onEdit(); }}
+              >
+                <Feather name="edit-2" size={20} color={isDark ? "#e2e8f0" : "#334155"} />
+                <Text className={`ml-3 text-base font-medium ${isDark ? "text-white" : "text-slate-700"}`}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
+             <TouchableOpacity
+              className={`flex-row items-center px-4 py-3.5 border-b ${isDark ? "border-slate-700 active:bg-slate-700" : "border-gray-100 active:bg-gray-50"}`}
+              onPress={onClose}
+            >
+              <Feather name="info" size={20} color={isDark ? "#e2e8f0" : "#334155"} />
+              <Text className={`ml-3 text-base font-medium ${isDark ? "text-white" : "text-slate-700"}`}>Info</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
 
 
 type ComposerProps = {
@@ -1420,6 +1601,8 @@ type ComposerProps = {
   recipientAccessGroupPublicKeyBase58Check?: string;
   replyToMessage?: DecryptedMessageEntryResponse | null;
   onCancelReply?: () => void;
+  editingMessage?: DecryptedMessageEntryResponse | null;
+  onCancelEdit?: () => void;
   profiles?: PublicKeyToProfileEntryResponseMap;
 };
 
@@ -1437,6 +1620,8 @@ function Composer({
   recipientAccessGroupPublicKeyBase58Check,
   replyToMessage,
   onCancelReply,
+  editingMessage,
+  onCancelEdit,
   profiles = {},
 }: ComposerProps) {
   const [text, setText] = useState("");
@@ -1445,6 +1630,15 @@ function Composer({
   const textInputRef = useRef<TextInput>(null);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+
+  // Pre-fill text when editing
+  useEffect(() => {
+    if (editingMessage) {
+      setText(editingMessage.DecryptedMessage || "");
+      // Focus input
+      setTimeout(() => textInputRef.current?.focus(), 100);
+    }
+  }, [editingMessage]);
 
   const focusInput = useCallback(() => {
     textInputRef.current?.focus();
@@ -1470,7 +1664,12 @@ function Composer({
       onSendingChange?.(true);
 
       const extraData: { [k: string]: string } = {};
-      if (replyToMessage && replyToMessage.MessageInfo?.TimestampNanosString) {
+
+      if (editingMessage) {
+        extraData.edited = "true";
+        extraData.originalMessageId = editingMessage.MessageInfo?.TimestampNanosString || "";
+        extraData.editedMessage = textToSend;
+      } else if (replyToMessage && replyToMessage.MessageInfo?.TimestampNanosString) {
         extraData.RepliedToMessageId = replyToMessage.MessageInfo.TimestampNanosString;
         if (replyToMessage.MessageInfo.EncryptedText) {
           extraData.RepliedToMessageEncryptedText = replyToMessage.MessageInfo.EncryptedText;
@@ -1490,6 +1689,8 @@ function Composer({
       const timestampNanos = Math.round(Date.now() * 1e6);
       onMessageSent?.(textToSend);
       if (onCancelReply) onCancelReply();
+      if (onCancelEdit) onCancelEdit();
+
       DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
         conversationId,
         messageText: textToSend,
@@ -1498,6 +1699,7 @@ function Composer({
         threadPublicKey: counterPartyPublicKey,
         threadAccessGroupKeyName,
         userAccessGroupKeyName,
+        ExtraData: extraData,
       });
       setText("");
       focusInput();
@@ -1519,6 +1721,8 @@ function Composer({
     focusInput,
     conversationId,
     chatType,
+    editingMessage,
+    replyToMessage
   ]);
 
   const sendDisabled = sending || !text.trim();
@@ -1556,6 +1760,31 @@ function Composer({
     );
   }, [replyToMessage, onCancelReply, isDark, profiles]);
 
+  const editPreview = useMemo(() => {
+    if (!editingMessage) return null;
+    return (
+      <View
+        className={`flex-row items-center py-2 px-3 border-t ${
+          isDark
+            ? "bg-[#1e293b] border-[#334155]"
+            : "bg-[#f1f5f9] border-[#e2e8f0]"
+        }`}
+      >
+        <View className="flex-1">
+          <Text className="text-xs font-semibold text-[#3b82f6] mb-0.5">
+            Editing Message
+          </Text>
+          <Text className={`text-xs ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
+            {editingMessage.DecryptedMessage}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onCancelEdit} className="p-1">
+          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [editingMessage, onCancelEdit, isDark]);
+
   return (
     <View
       className={`border-t border-slate-200 dark:border-slate-800 ${
@@ -1566,6 +1795,7 @@ function Composer({
       }}
     >
       {replyPreview}
+      {editPreview}
       <View className="flex-row items-end mx-3 mt-3 justify-between">
         <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${
           isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
@@ -1606,7 +1836,7 @@ function Composer({
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                  <Ionicons
-                  name="arrow-up"
+                  name={editingMessage ? "checkmark" : "arrow-up"}
                   size={20}
                   color={!hasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
                 />
