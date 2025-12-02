@@ -195,13 +195,57 @@ export const decryptAccessGroupMessagesWithRetry = async (
   };
 };
 
-export const decryptAccessGroupMessages = (
+export const decryptAccessGroupMessages = async (
   messages: NewMessageEntryResponse[],
   accessGroups: AccessGroupEntryResponse[]
 ): Promise<DecryptedMessageEntryResponse[]> => {
-  return Promise.all(
+  const decrypted = await Promise.all(
     (messages || []).map((m) => identity.decryptMessage(m, accessGroups))
   );
+
+  // Attempt to decrypt embedded reply messages if present
+  await Promise.all(
+    decrypted.map(async (d) => {
+      const encryptedReply =
+        d.MessageInfo?.ExtraData?.RepliedToMessageEncryptedText;
+
+      if (encryptedReply && !d.MessageInfo?.ExtraData?.RepliedToMessageDecryptedText) {
+        try {
+          // Construct a temporary message object using the parent's metadata
+          // but with the embedded encrypted text.
+          // We assume the reply was encrypted with the same access group context.
+          const fakeMessage: NewMessageEntryResponse = {
+            ...d,
+            MessageInfo: {
+              ...d.MessageInfo,
+              EncryptedText: encryptedReply,
+            },
+          } as NewMessageEntryResponse; // Casting because d has extra fields
+
+          const decryptedReply = await identity.decryptMessage(
+            fakeMessage,
+            accessGroups
+          );
+
+          if (decryptedReply.DecryptedMessage) {
+            // Mutate the original message's ExtraData to include the decrypted text
+            if (!d.MessageInfo) {
+              d.MessageInfo = { EncryptedText: "", TimestampNanos: 0, TimestampNanosString: "" };
+            }
+            if (!d.MessageInfo.ExtraData) {
+              d.MessageInfo.ExtraData = {};
+            }
+            d.MessageInfo.ExtraData.RepliedToMessageDecryptedText =
+              decryptedReply.DecryptedMessage;
+          }
+        } catch (e) {
+          console.warn("Failed to decrypt embedded reply:", e);
+        }
+      }
+    })
+  );
+
+  return decrypted;
 };
 
 export const encryptAndSendNewMessage = async (

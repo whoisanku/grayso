@@ -754,13 +754,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const renderReplyPreview = () => {
       if (!repliedToMessageId) return null;
 
-      // If we found the message locally, use it. Otherwise show placeholder or nothing.
-      const replyText = repliedToMessage?.DecryptedMessage || "Message not loaded";
+      // If we found the message locally, use it. Otherwise try fallback from ExtraData.
+      const fallbackText = item.MessageInfo?.ExtraData?.RepliedToMessageDecryptedText;
+      const replyText = repliedToMessage?.DecryptedMessage || fallbackText || "Message not loaded";
+
       const replySenderPk = repliedToMessage?.SenderInfo?.OwnerPublicKeyBase58Check;
       const replySenderProfile = replySenderPk ? profiles[replySenderPk] : null;
       const replyDisplayName = replySenderPk
         ? getProfileDisplayName(replySenderProfile, replySenderPk)
-        : "Unknown";
+        : "Replied Message";
 
       return (
         <View
@@ -802,8 +804,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
       dragX: Animated.AnimatedInterpolation<number>
     ) => {
       const scale = dragX.interpolate({
-        inputRange: [-50, 0],
-        outputRange: [1, 0],
+        inputRange: [-50, 0, 50],
+        outputRange: [1, 0, 1],
         extrapolate: "clamp",
       });
 
@@ -922,8 +924,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
         ) : null}
         <Swipeable
           ref={swipeableRef}
-          renderRightActions={isMine ? undefined : renderSwipeAction}
-          renderLeftActions={isMine ? renderSwipeAction : undefined}
+          renderRightActions={isMine ? renderSwipeAction : undefined}
+          renderLeftActions={isMine ? undefined : renderSwipeAction}
           onSwipeableWillOpen={() => {
             onReply(item);
             swipeableRef.current?.close();
@@ -1470,6 +1472,9 @@ function Composer({
       const extraData: { [k: string]: string } = {};
       if (replyToMessage && replyToMessage.MessageInfo?.TimestampNanosString) {
         extraData.RepliedToMessageId = replyToMessage.MessageInfo.TimestampNanosString;
+        if (replyToMessage.MessageInfo.EncryptedText) {
+          extraData.RepliedToMessageEncryptedText = replyToMessage.MessageInfo.EncryptedText;
+        }
       }
 
       await encryptAndSendNewMessage(
