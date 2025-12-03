@@ -21,6 +21,7 @@ import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
+import ScreenWrapper from "../components/ScreenWrapper";
 
 const MAX_LENGTH = 280;
 
@@ -78,13 +79,13 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   const onPost = useCallback(async () => {
     if ((text.length === 0 && images.length === 0) || !currentUser?.PublicKeyBase58Check) return;
-    
+
     setIsPosting(true);
-    
+
     try {
       // 1. Get JWT for uploads/posting
       const jwt = await identity.jwt();
-      
+
       // 2. Upload images if any
       let imageUrls: string[] = [];
       if (images.length > 0) {
@@ -149,49 +150,45 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const canPost = text.trim().length > 0 || images.length > 0;
 
   return (
-    <View className="flex-1 bg-white dark:bg-slate-950">
-      {/* Custom Header */}
-      <View 
-        style={{ paddingTop: Platform.OS === "android" ? insets.top + 10 : 10 }} 
-        className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 pb-3 dark:border-slate-800 dark:bg-slate-950"
-      >
-        <TouchableOpacity 
-          onPress={onCancel}
-          className="p-2"
-          activeOpacity={0.7}
+    <ScreenWrapper
+      edges={['top', 'left', 'right']} // Bottom handled by toolbar padding
+      keyboardAvoiding={true}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      backgroundColor={isDark ? "#020617" : "#ffffff"}
+    >
+      <View className="flex-1">
+        {/* Custom Header */}
+        <View
+          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 pb-3 pt-2 dark:border-slate-800 dark:bg-slate-950"
         >
-          <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
-        </TouchableOpacity>
-        
-        {/* Removed "New Post" title as requested */}
-        
-        <TouchableOpacity 
-          onPress={onPost}
-          disabled={!canPost || isPosting}
-          className={`rounded-full px-6 py-2.5 ${
-            canPost 
+          <TouchableOpacity
+            onPress={onCancel}
+            className="p-2"
+            activeOpacity={0.7}
+          >
+            <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={onPost}
+            disabled={!canPost || isPosting}
+            className={`rounded-full px-6 py-2.5 ${canPost
               ? "bg-[#0085ff]"
               : "bg-slate-200 dark:bg-slate-800"
-          }`}
-          activeOpacity={0.8}
-        >
-          {isPosting ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text className={`text-base font-bold ${
-              canPost ? "text-white" : "text-slate-400 dark:text-slate-500"
-            }`}>
-              Post
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
+              }`}
+            activeOpacity={0.8}
+          >
+            {isPosting ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text className={`text-base font-bold ${canPost ? "text-white" : "text-slate-400 dark:text-slate-500"
+                }`}>
+                Post
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-      >
         <View className="flex-1">
           <ScrollView
             className="flex-1 px-4 pt-4"
@@ -200,11 +197,11 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           >
             <View className="flex-row">
               <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                 <Image
-                   source={{ uri: avatarUri }}
-                   className="h-full w-full"
-                   resizeMode="cover"
-                 />
+                <Image
+                  source={{ uri: avatarUri }}
+                  className="h-full w-full"
+                  resizeMode="cover"
+                />
               </View>
               <View className="flex-1">
                 <TextInput
@@ -261,17 +258,16 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                 <Feather name="image" size={24} color={isDark ? "#0085ff" : "#0085ff"} />
               </TouchableOpacity>
 
-              <Text className={`text-sm font-medium ${
-                text.length > MAX_LENGTH * 0.9
-                  ? "text-red-500"
-                  : "text-slate-400 dark:text-slate-600"
-              }`}>
+              <Text className={`text-sm font-medium ${text.length > MAX_LENGTH * 0.9
+                ? "text-red-500"
+                : "text-slate-400 dark:text-slate-600"
+                }`}>
                 {text.length} / {MAX_LENGTH}
               </Text>
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
-    </View>
+      </View>
+    </ScreenWrapper>
   );
 }

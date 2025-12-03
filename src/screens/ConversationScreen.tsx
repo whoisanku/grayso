@@ -57,6 +57,7 @@ import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
 import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller";
 import { runOnJS } from "react-native-reanimated";
+import ScreenWrapper from "../components/ScreenWrapper";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -91,9 +92,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [reactionOverlay, setReactionOverlay] = useState<
     | {
-        emoji: string;
-        isSender: boolean;
-      }
+      emoji: string;
+      isSender: boolean;
+    }
     | null
   >(null);
   const [loadingMembers, setLoadingMembers] = useState(false);
@@ -112,17 +113,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const checkAndScrollToBottom = useCallback(() => {
     if (scrollOffsetRef.current < 50) {
-       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }
   }, []);
 
   useKeyboardHandler({
-     onStart: (e) => {
-        "worklet";
-        if (e.height > 0) {
-           runOnJS(checkAndScrollToBottom)();
-        }
-     }
+    onStart: (e) => {
+      "worklet";
+      if (e.height > 0) {
+        runOnJS(checkAndScrollToBottom)();
+      }
+    }
   }, [checkAndScrollToBottom]);
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
@@ -141,7 +142,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   );
 
   const headerProfile = profiles[counterPartyPublicKey];
-  
+
   const headerDisplayName = useMemo(() => {
     if (title?.trim()) {
       return title.trim();
@@ -200,87 +201,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShadowVisible: true,
-      headerStyle: {
-        backgroundColor: isDark ? "#000000" : "#ffffff",
-      },
-      headerTitleAlign: "left",
-      headerLeft: () => (
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={{ marginRight: 16 }}
-        >
-          <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
-        </TouchableOpacity>
-      ),
-      headerTitle: () => (
-        <View style={{ marginLeft: Platform.OS === 'android' ? -16 : 0 }}>
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
-          >
-            {headerDisplayName || "Conversation"}
-          </Text>
-        </View>
-      ),
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => {
-            if (isGroupChat) {
-              setShowMembersModal(true);
-            }
-          }}
-          disabled={!isGroupChat}
-          activeOpacity={0.6}
-          className="flex-row items-center"
-        >
-          {isGroupChat ? (
-            <View className="flex-row mr-2">
-              {loadingMembers || (groupMembers.length === 0 && !headerAvatarUri) ? (
-                // Loading placeholders
-                [0, 1, 2].map((i) => (
-                  <View
-                    key={`placeholder-${i}`}
-                    className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""}`}
-                    style={{
-                      zIndex: 3 - i,
-                    }}
-                  />
-                ))
-              ) : (
-                groupMembers.slice(0, 3).map((member, index) => {
-                  const uri = member.profilePic
-                    ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
-                    : getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
-                  
-                  return (
-                    <View 
-                      key={member.publicKey} 
-                      className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""}`}
-                      style={{
-                        zIndex: 3 - index,
-                      }}
-                    >
-                      <Image
-                        source={{ uri }}
-                        className="h-full w-full rounded-full"
-                      />
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          ) : (
-            <Image
-              source={{ uri: headerAvatarUri }}
-              className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
-            />
-          )}
-        </TouchableOpacity>
-      ),
+      headerShown: false,
     });
-  }, [headerAvatarUri, headerDisplayName, navigation, isGroupChat, groupMembers, isDark]);
+  }, [navigation]);
 
   const mergeMessages = useCallback(
     (
@@ -316,12 +239,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
         const isDuplicate = Array.from(map.values()).some((existing) => {
           const timeDiff = Math.abs(
             (existing.MessageInfo?.TimestampNanos ?? 0) -
-              (message.MessageInfo?.TimestampNanos ?? 0)
+            (message.MessageInfo?.TimestampNanos ?? 0)
           );
           return (
             existing.DecryptedMessage === message.DecryptedMessage &&
             existing.SenderInfo?.OwnerPublicKeyBase58Check ===
-              message.SenderInfo?.OwnerPublicKeyBase58Check &&
+            message.SenderInfo?.OwnerPublicKeyBase58Check &&
             timeDiff < 5000 * 1e6 // 5 seconds
           );
         });
@@ -467,10 +390,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
         setMessages((prev) => {
           const nextMessages = initial
             ? [...decryptedMessages].sort(
-                (a, b) =>
-                  (b.MessageInfo?.TimestampNanos ?? 0) -
-                  (a.MessageInfo?.TimestampNanos ?? 0)
-              )
+              (a, b) =>
+                (b.MessageInfo?.TimestampNanos ?? 0) -
+                (a.MessageInfo?.TimestampNanos ?? 0)
+            )
             : mergeMessages(prev, decryptedMessages);
 
           const oldest =
@@ -649,8 +572,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
     const key =
       latest.MessageInfo?.TimestampNanosString ??
-      `${latest.MessageInfo?.TimestampNanos ?? ""}-${
-        latest.SenderInfo?.OwnerPublicKeyBase58Check ?? ""
+      `${latest.MessageInfo?.TimestampNanos ?? ""}-${latest.SenderInfo?.OwnerPublicKeyBase58Check ?? ""
       }`;
 
     if (!key || lastRocketMessageKeyRef.current === key) {
@@ -734,7 +656,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
     const senderProfile = profiles[senderPk];
     const displayName = getProfileDisplayName(senderProfile, senderPk);
-    
+
     // For group chats, try to use profile pic from GraphQL first
     let avatarUri: string;
     if (isGroupChat && senderProfile?.ExtraData?.LargeProfilePicURL) {
@@ -849,9 +771,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </View>
           ) : null}
           <View
-            className={`flex-row px-1 ${
-              isMine ? "justify-end" : "justify-start"
-            }`}
+            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
+              }`}
           >
             {!isMine ? (
               <View className="mr-2" style={{ width: 32 }}>
@@ -868,9 +789,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </View>
             ) : null}
             <Text
-              className={`text-[28px] ${
-                isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
-              }`}
+              className={`text-[28px] ${isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
+                }`}
             >
               🚀
             </Text>
@@ -882,7 +802,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     // Determine message grouping for curved edges
     const isNextMessageFromSameSender = nextMessage?.IsSender === item.IsSender;
     const isPreviousMessageFromSameSender = previousMessage?.IsSender === item.IsSender;
-    
+
     // Check if messages are within 1 minute of each other for grouping
     const isNextMessageClose = nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
       ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) < 60_000_000_000
@@ -934,9 +854,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
           overshootLeft={false}
         >
           <View
-            className={`flex-row px-1 ${
-              isMine ? "justify-end" : "justify-start"
-            }`}
+            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
+              }`}
           >
             {!isMine ? (
               <View className="mr-2" style={{ width: 32 }}>
@@ -953,9 +872,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </View>
             ) : null}
             <View
-              className={`max-w-[75%] px-4 py-3 ${
-                isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
-              }`}
+              className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+                }`}
               style={[
                 getBorderRadius(),
               ]}
@@ -970,17 +888,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
               )}
               {renderReplyPreview()}
               <Text
-                className={`text-[16px] leading-[22px] ${
-                  isMine ? "text-white" : "text-[#0f172a] dark:text-white"
-                }`}
+                className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+                  }`}
               >
                 {messageText}
               </Text>
               {isLastInGroup && (
                 <View
-                  className={`mt-1.5 flex-row items-center ${
-                    isMine ? "justify-end" : "justify-start"
-                  }`}
+                  className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                    }`}
                 >
                   {hasError ? (
                     <Text className="text-[10px] font-medium text-red-500">
@@ -990,9 +906,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     <>
                       {timestamp ? (
                         <Text
-                          className={`text-[11px] ${
-                            isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                          }`}
+                          className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                            }`}
                         >
                           {formatTimestamp(timestamp)}
                         </Text>
@@ -1090,21 +1005,98 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black" edges={["bottom"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={keyboardVerticalOffset}
-      >
-        <View className="flex-1">
-          {isLoading && messages.length === 0 ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#3b82f6" />
+    <ScreenWrapper
+      edges={['top', 'left', 'right', 'bottom']}
+      keyboardAvoiding={true}
+      keyboardVerticalOffset={0}
+      backgroundColor={isDark ? "#000000" : "#ffffff"}
+      useKeyboardController={true}
+    >
+      {/* Custom Header */}
+      <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-black">
+        <View className="flex-row items-center flex-1">
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            className="mr-3"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
+          </TouchableOpacity>
+
+          <View className="flex-1">
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
+            >
+              {headerDisplayName || "Conversation"}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => {
+            if (isGroupChat) {
+              setShowMembersModal(true);
+            }
+          }}
+          disabled={!isGroupChat}
+          activeOpacity={0.6}
+          className="flex-row items-center ml-2"
+        >
+          {isGroupChat ? (
+            <View className="flex-row">
+              {loadingMembers || (groupMembers.length === 0 && !headerAvatarUri) ? (
+                // Loading placeholders
+                [0, 1, 2].map((i) => (
+                  <View
+                    key={`placeholder-${i}`}
+                    className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""}`}
+                    style={{
+                      zIndex: 3 - i,
+                    }}
+                  />
+                ))
+              ) : (
+                groupMembers.slice(0, 3).map((member, index) => {
+                  const uri = member.profilePic
+                    ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                    : getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
+
+                  return (
+                    <View
+                      key={member.publicKey}
+                      className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""}`}
+                      style={{
+                        zIndex: 3 - index,
+                      }}
+                    >
+                      <Image
+                        source={{ uri }}
+                        className="h-full w-full rounded-full"
+                      />
+                    </View>
+                  );
+                })
+              )}
             </View>
           ) : (
-            <FlatList
-              ref={flatListRef}
-              data={messages}
+            <Image
+              source={{ uri: headerAvatarUri }}
+              className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
+            />
+          )}
+        </TouchableOpacity>
+      </View>
+      <View className="flex-1">
+        {isLoading && messages.length === 0 ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="large" color="#3b82f6" />
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             ListHeaderComponent={header}
@@ -1152,7 +1144,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 layoutHeight: layoutMeasurement.height,
                 distanceFromTop,
               });
-              
+
               if (distanceFromTop > 200 && !isLoadingRef.current && hasMoreRef.current) {
                 console.log("[ConversationScreen] Manual scroll pagination trigger", {
                   distanceFromTop,
@@ -1194,72 +1186,70 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 )}
               </View>
             )}
-            />
-          )}
-          {showScrollToBottom && (
-            <TouchableOpacity
-              onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
-              className="absolute bottom-4 right-4 h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600 z-10"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 4
-              }}
-            >
-              <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {isSendingMessage ? (
-          <View className="flex-row items-center justify-center py-1.5 bg-[#4f46e5]/10 border-t border-[#4f46e5]/20">
-            <ActivityIndicator size="small" color="#2563eb" />
-            <Text className="ml-2 text-xs font-semibold text-[#4f46e5] tracking-wide">Sending…</Text>
-          </View>
-        ) : null}
-
-        {reactionOverlay ? (
-          <Animated.View
-            pointerEvents="none"
-            className={`absolute bottom-[108px] z-20 items-center elevation-8 ${
-              reactionOverlay.isSender ? "right-6" : "left-6"
-            }`}
+          />
+        )}
+        {showScrollToBottom && (
+          <TouchableOpacity
+            onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+            className="absolute bottom-4 right-4 h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600 z-10"
             style={{
-              transform: [
-                {
-                  translateX: reactionOverlayAnim.interpolate({
-                    inputRange: [-1, 1],
-                    outputRange: [-4, 4],
-                  }),
-                },
-              ],
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 4
             }}
           >
-            <Text className="text-[42px] shadow-black/30 shadow-offset-[0px_4px] shadow-radius-8 elevation-4">
-              {reactionOverlay.emoji}
-            </Text>
-          </Animated.View>
-        ) : null}
+            <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+          </TouchableOpacity>
+        )}
+      </View>
 
-        <Composer
-          isGroupChat={isGroupChat}
-          userPublicKey={userPublicKey}
-          counterPartyPublicKey={counterPartyPublicKey}
-          threadAccessGroupKeyName={threadAccessGroupKeyName}
-          userAccessGroupKeyName={userAccessGroupKeyName}
-          conversationId={conversationId}
-          chatType={chatType}
-          onMessageSent={handleComposerMessageSent}
-          onSendingChange={setIsSendingMessage}
-          bottomInset={composerBottomInset}
-          recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
-          replyToMessage={replyToMessage}
-          onCancelReply={() => setReplyToMessage(null)}
-          profiles={profiles}
-        />
-      </KeyboardAvoidingView>
+      {isSendingMessage ? (
+        <View className="flex-row items-center justify-center py-1.5 bg-[#4f46e5]/10 border-t border-[#4f46e5]/20">
+          <ActivityIndicator size="small" color="#2563eb" />
+          <Text className="ml-2 text-xs font-semibold text-[#4f46e5] tracking-wide">Sending…</Text>
+        </View>
+      ) : null}
+
+      {reactionOverlay ? (
+        <Animated.View
+          pointerEvents="none"
+          className={`absolute bottom-[108px] z-20 items-center elevation-8 ${reactionOverlay.isSender ? "right-6" : "left-6"
+            }`}
+          style={{
+            transform: [
+              {
+                translateX: reactionOverlayAnim.interpolate({
+                  inputRange: [-1, 1],
+                  outputRange: [-4, 4],
+                }),
+              },
+            ],
+          }}
+        >
+          <Text className="text-[42px] shadow-black/30 shadow-offset-[0px_4px] shadow-radius-8 elevation-4">
+            {reactionOverlay.emoji}
+          </Text>
+        </Animated.View>
+      ) : null}
+
+      <Composer
+        isGroupChat={isGroupChat}
+        userPublicKey={userPublicKey}
+        counterPartyPublicKey={counterPartyPublicKey}
+        threadAccessGroupKeyName={threadAccessGroupKeyName}
+        userAccessGroupKeyName={userAccessGroupKeyName}
+        conversationId={conversationId}
+        chatType={chatType}
+        onMessageSent={handleComposerMessageSent}
+        onSendingChange={setIsSendingMessage}
+        bottomInset={composerBottomInset}
+        recipientAccessGroupPublicKeyBase58Check={recipientInfo?.AccessGroupPublicKeyBase58Check}
+        replyToMessage={replyToMessage}
+        onCancelReply={() => setReplyToMessage(null)}
+        profiles={profiles}
+      />
 
       <Modal
         visible={showMembersModal}
@@ -1315,7 +1305,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </ScreenWrapper>
   );
 }
 
@@ -1535,11 +1525,10 @@ function Composer({
 
     return (
       <View
-        className={`flex-row items-center py-2 px-3 border-t ${
-          isDark
-            ? "bg-[#1e293b] border-[#334155]"
-            : "bg-[#f1f5f9] border-[#e2e8f0]"
-        }`}
+        className={`flex-row items-center py-2 px-3 border-t ${isDark
+          ? "bg-[#1e293b] border-[#334155]"
+          : "bg-[#f1f5f9] border-[#e2e8f0]"
+          }`}
       >
         <View className="flex-1">
           <Text className="text-xs font-semibold text-[#3b82f6] mb-0.5">
@@ -1558,18 +1547,16 @@ function Composer({
 
   return (
     <View
-      className={`border-t border-slate-200 dark:border-slate-800 ${
-         isDark ? "bg-[#000]" : "bg-[#fff]"
-      }`}
+      className={`border-t border-slate-200 dark:border-slate-800 ${isDark ? "bg-[#000]" : "bg-[#fff]"
+        }`}
       style={{
         paddingBottom: containerPaddingBottom,
       }}
     >
       {replyPreview}
       <View className="flex-row items-end mx-3 mt-3 justify-between">
-        <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${
-          isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
-        }`}>
+        <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
+          }`}>
           <TextInput
             ref={textInputRef}
             placeholder={isGroupChat ? "Message the group…" : "Write a message"}
@@ -1584,13 +1571,12 @@ function Composer({
             returnKeyType="default"
             blurOnSubmit={false}
             onContentSizeChange={handleContentSizeChange}
-            className={`flex-1 text-base leading-5 p-0 ml-0 ${
-              isDark ? "text-[#f8fafc]" : "text-[#1e293b]"
-            }`}
+            className={`flex-1 text-base leading-5 p-0 ml-0 ${isDark ? "text-[#f8fafc]" : "text-[#1e293b]"
+              }`}
             style={{
-               minHeight: 24,
-               maxHeight: 80,
-               paddingVertical: 4,
+              minHeight: 24,
+              maxHeight: 80,
+              paddingVertical: 4,
             }}
           />
           <TouchableOpacity
@@ -1599,13 +1585,12 @@ function Composer({
             activeOpacity={0.85}
             className="ml-2"
           >
-            <View className={`h-8 w-8 rounded-full items-center justify-center ${
-               !hasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : "bg-[#0085ff]"
-            }`}>
+            <View className={`h-8 w-8 rounded-full items-center justify-center ${!hasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : "bg-[#0085ff]"
+              }`}>
               {sending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                 <Ionicons
+                <Ionicons
                   name="arrow-up"
                   size={20}
                   color={!hasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
