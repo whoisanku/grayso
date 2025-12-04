@@ -9,10 +9,12 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   ListRenderItem,
   Modal,
   NativeSyntheticEvent,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -27,11 +29,21 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
+import Reanimated, { 
+  useAnimatedStyle, 
+  useSharedValue, 
+  withSpring, 
+  interpolate, 
+  runOnJS,
+  Extrapolation,
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
+} from "react-native-reanimated";
 import { Easing } from "react-native";
 import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -61,7 +73,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
 import { useKeyboardHandler, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
-import { runOnJS } from "react-native-reanimated";
+
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import {
   AUTO_LOAD_DELAY_MS,
@@ -660,7 +672,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
       layout?: { x: number; y: number; width: number; height: number }
     ) => {
       // Trigger haptic immediately for responsive feel
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
 
       // Get layout immediately to avoid delays
       const messageId = getMessageId(message);
@@ -1004,7 +1016,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
           )}
         </TouchableOpacity>
       </View>
-      <View className="flex-1">
+      <Pressable 
+        style={{ flex: 1 }} 
+        onPress={() => Keyboard.dismiss()}
+      >
         {isLoading && messages.length === 0 ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#3b82f6" />
@@ -1020,11 +1035,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
             inverted
             showsVerticalScrollIndicator={false}
             // Performance optimizations
-            removeClippedSubviews={Platform.OS === 'android'}
-            windowSize={10}
-            maxToRenderPerBatch={8}
-            updateCellsBatchingPeriod={50}
-            initialNumToRender={15}
+            removeClippedSubviews={true}
+            windowSize={5}
+            maxToRenderPerBatch={5}
+            updateCellsBatchingPeriod={100}
+            initialNumToRender={10}
             contentContainerClassName={
               messages.length === 0
                 ? "flex-grow items-center justify-center px-6 pb-16"
@@ -1060,9 +1075,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 loadMessages(false);
               }
             }}
-            scrollEventThrottle={200}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
+            scrollEventThrottle={100}
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="on-drag"
+            onScrollBeginDrag={() => Keyboard.dismiss()}
             refreshControl={
               <RefreshControl
                 tintColor="#3b82f6"
@@ -1132,7 +1148,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </Animated.View>
         )}
-      </View>
+      </Pressable>
 
       {isSendingMessage ? (
         <View className="flex-row items-center justify-center py-1.5 bg-[#4f46e5]/10 border-t border-[#4f46e5]/20">
@@ -1395,7 +1411,7 @@ function MessageBubble({
   messageIdMap,
   isDark,
 }: MessageBubbleProps) {
-  const swipeableRef = useRef<Swipeable>(null);
+  // Removed swipeableRef - now using Reanimated gesture handler
   const bubbleContainerRef = useRef<View>(null);
   const extraData = item.MessageInfo?.ExtraData || {};
   const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
@@ -1484,42 +1500,79 @@ function MessageBubble({
     );
   };
 
-  const renderSwipeAction = (
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>
-  ) => {
-    const scale = dragX.interpolate({
-      inputRange: [-50, 0, 50],
-      outputRange: [1, 0, 1],
-      extrapolate: "clamp",
+  // === SWIPE-TO-REPLY WITH SPRING PHYSICS ===
+  const SWIPE_THRESHOLD = 50; // px threshold to trigger reply
+  const MAX_SWIPE = 80; // max translation
+  const translateX = useSharedValue(0);
+  const hasTriggeredHaptic = useSharedValue(false);
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const triggerReply = () => {
+    onReply(item);
+  };
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px to avoid conflict with scroll
+    .onUpdate((event) => {
+      // For sent messages (isMine), swipe left (negative); for received, swipe right (positive)
+      const clampedValue = isMine
+        ? Math.max(-MAX_SWIPE, Math.min(0, event.translationX))
+        : Math.min(MAX_SWIPE, Math.max(0, event.translationX));
+      
+      translateX.value = clampedValue;
+
+      // Trigger haptic when crossing threshold
+      const absValue = Math.abs(clampedValue);
+      if (absValue >= SWIPE_THRESHOLD && !hasTriggeredHaptic.value) {
+        hasTriggeredHaptic.value = true;
+        runOnJS(triggerHaptic)();
+      } else if (absValue < SWIPE_THRESHOLD && hasTriggeredHaptic.value) {
+        hasTriggeredHaptic.value = false;
+      }
+    })
+    .onEnd(() => {
+      const absValue = Math.abs(translateX.value);
+      if (absValue >= SWIPE_THRESHOLD) {
+        runOnJS(triggerReply)();
+      }
+      // Spring back with bounce effect
+      translateX.value = withSpring(0, {
+        damping: 15,
+        stiffness: 400,
+        mass: 0.5,
+        overshootClamping: false,
+      });
+      hasTriggeredHaptic.value = false;
     });
 
-    return (
-      <View
-        style={{
-          justifyContent: "center",
-          alignItems: "center",
-          width: 50,
-          height: "100%",
-        }}
-      >
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: isDark ? "#334155" : "#e2e8f0",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <Feather name="corner-up-left" size={18} color={isDark ? "#cbd5e1" : "#64748b"} />
-          </View>
-        </Animated.View>
-      </View>
+  const animatedRowStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+    };
+  });
+
+  const animatedIconStyle = useAnimatedStyle(() => {
+    const absValue = Math.abs(translateX.value);
+    const scale = interpolate(
+      absValue,
+      [0, SWIPE_THRESHOLD / 2, SWIPE_THRESHOLD],
+      [0.3, 0.8, 1],
+      Extrapolation.CLAMP
     );
-  };
+    const opacity = interpolate(
+      absValue,
+      [0, 20, SWIPE_THRESHOLD],
+      [0, 0.5, 1],
+      Extrapolation.CLAMP
+    );
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
 
   if (rawMessageText === "🚀") {
     return (
@@ -1616,107 +1669,121 @@ function MessageBubble({
           </View>
         </View>
       ) : null}
-      <Swipeable
-        ref={swipeableRef}
-        renderRightActions={isMine ? renderSwipeAction : undefined}
-        renderLeftActions={isMine ? undefined : renderSwipeAction}
-        onSwipeableWillOpen={() => {
-          onReply(item);
-          swipeableRef.current?.close();
-        }}
-        overshootRight={false}
-        overshootLeft={false}
+      
+      {/* Reply Icon - positioned behind the bubble */}
+      <Reanimated.View
+        style={[
+          {
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            justifyContent: 'center',
+            alignItems: 'center',
+            width: 50,
+          },
+          isMine ? { right: -50 } : { left: -50 },
+          animatedIconStyle,
+        ]}
+        pointerEvents="none"
       >
-        <TouchableWithoutFeedback
-          onLongPress={() => {
-            bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
-              if (width > 0 && height > 0) {
-                if (messageId) {
-                  onBubbleMeasure?.(messageId, { x, y, width, height });
-                }
-                onLongPress(item, { x, y, width, height });
-              } else {
-                onLongPress(item);
-              }
-            });
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: isDark ? '#334155' : '#e2e8f0',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
-          delayLongPress={80}
         >
-          <View
-            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-              }`}
+          <Feather name="corner-up-left" size={18} color={isDark ? '#cbd5e1' : '#64748b'} />
+        </View>
+      </Reanimated.View>
+
+      {/* Swipeable message row */}
+      <GestureDetector gesture={panGesture}>
+        <Reanimated.View style={animatedRowStyle}>
+          <TouchableWithoutFeedback
+            onPress={() => Keyboard.dismiss()}
+            onLongPress={() => onLongPress(item)}
+            delayLongPress={200}
           >
-            {!isMine ? (
-              <View className="mr-2" style={{ width: 32 }}>
-                {isLastInGroup && hasAvatar ? (
-                  <Image
-                    source={{ uri: avatarUri }}
-                    className="h-8 w-8 rounded-full bg-gray-200"
-                  />
-                ) : isLastInGroup ? (
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
             <View
-              className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+              className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                 }`}
-              style={[
-                getBorderRadius(),
-              ]}
             >
-              {!isMine && isFirstInGroup && (
-                <Text
-                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-              )}
-              {renderReplyPreview()}
-              <Text
-                className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+              {!isMine ? (
+                <View className="mr-2" style={{ width: 32 }}>
+                  {isLastInGroup && hasAvatar ? (
+                    <Image
+                      source={{ uri: avatarUri }}
+                      className="h-8 w-8 rounded-full bg-gray-200"
+                    />
+                  ) : isLastInGroup ? (
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                      <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              <View
+                className={`max-w-[80%] px-3.5 py-2.5 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
                   }`}
+                style={[
+                  getBorderRadius(),
+                ]}
               >
-                {messageText}
-              </Text>
-              {isLastInGroup && (
-                <View
-                  className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                {!isMine && isFirstInGroup && (
+                  <Text
+                    className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                )}
+                {renderReplyPreview()}
+                <Text
+                  className={`text-[15px] leading-[21px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
                     }`}
                 >
-                  {hasError ? (
-                    <Text className="text-[10px] font-medium text-red-500">
-                      Failed to decrypt
-                    </Text>
-                  ) : (
-                    <>
-                      {isEditedMessage ? (
-                        <Text
-                          className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
-                            }`}
-                        >
-                          Edited
-                        </Text>
-                      ) : null}
-                      {timestamp ? (
-                        <Text
-                          className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                            }`}
-                        >
-                          {formatTimestamp(timestamp)}
-                        </Text>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-              )}
+                  {messageText}
+                </Text>
+                {isLastInGroup && (
+                  <View
+                    className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                      }`}
+                  >
+                    {hasError ? (
+                      <Text className="text-[10px] font-medium text-red-500">
+                        Failed to decrypt
+                      </Text>
+                    ) : (
+                      <>
+                        {isEditedMessage ? (
+                          <Text
+                            className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
+                              }`}
+                          >
+                            Edited
+                          </Text>
+                        ) : null}
+                        {timestamp ? (
+                          <Text
+                            className={`text-[10px] opacity-70 ${isMine ? "text-white/70" : "text-slate-500 dark:text-slate-400"
+                              }`}
+                          >
+                            {formatTimestamp(timestamp)}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Swipeable>
+          </TouchableWithoutFeedback>
+        </Reanimated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -2246,15 +2313,15 @@ function Composer({
     textInputRef.current?.focus();
   }, []);
 
-  // Auto-focus when entering edit mode
+  // Auto-focus when entering edit mode or reply mode
   useEffect(() => {
-    if (editingMessage) {
-      // Small delay to ensure the component has rendered
-      setTimeout(() => {
+    if (editingMessage || replyToMessage) {
+      // Use requestAnimationFrame for immediate snappy focus
+      requestAnimationFrame(() => {
         focusInput();
-      }, 100);
+      });
     }
-  }, [editingMessage, focusInput]);
+  }, [editingMessage, replyToMessage, focusInput]);
 
   const handleContentSizeChange = useCallback(
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
@@ -2332,6 +2399,14 @@ function Composer({
 
   const containerPaddingBottom = bottomInset;
 
+  // Handle cancel reply with keyboard dismiss and haptic
+  const handleCancelReply = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+    onCancelReply?.();
+  }, [onCancelReply]);
+
+  // Reply preview - no animation, just appears
   const replyPreview = useMemo(() => {
     if (!replyToMessage) return null;
     const senderPk = replyToMessage.SenderInfo?.OwnerPublicKeyBase58Check;
@@ -2341,51 +2416,118 @@ function Composer({
 
     return (
       <View
-        className={`flex-row items-center py-2 px-3 border-t ${isDark
-          ? "bg-[#1e293b] border-[#334155]"
-          : "bg-[#f1f5f9] border-[#e2e8f0]"
+        className={`flex-row items-center py-3 px-4 ${isDark
+          ? "bg-[#0f1419]"
+          : "bg-[#f1f5f9]"
           }`}
       >
+        {/* Left accent bar */}
+        <View 
+          style={{
+            width: 3,
+            height: '100%',
+            minHeight: 40,
+            backgroundColor: '#1DB7A4',
+            borderRadius: 2,
+            marginRight: 12,
+          }}
+        />
         <View className="flex-1">
-          <Text className="text-xs font-semibold text-[#3b82f6] mb-0.5">
-            Replying to {displayName}
+          <Text 
+            className="text-base font-semibold mb-1"
+            style={{ color: '#1DB7A4' }}
+            numberOfLines={1}
+          >
+            {displayName}
           </Text>
-          <Text className={`text-xs ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
+          <Text 
+            className={`text-sm ${isDark ? "text-[#8899a6]" : "text-[#64748b]"}`} 
+            numberOfLines={1}
+          >
             {messageText}
           </Text>
         </View>
-        <TouchableOpacity onPress={onCancelReply} className="p-1">
-          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+        <TouchableOpacity 
+          onPress={handleCancelReply} 
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            borderWidth: 2,
+            borderColor: isDark ? '#4a5568' : '#cbd5e1',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 12,
+          }}
+        >
+          <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
         </TouchableOpacity>
       </View>
     );
-  }, [replyToMessage, onCancelReply, isDark, profiles]);
+  }, [replyToMessage, handleCancelReply, isDark, profiles]);
+
+  // Handle cancel edit with keyboard dismiss and haptic
+  const handleCancelEdit = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+    onCancelEdit?.();
+  }, [onCancelEdit]);
 
   const editPreview = useMemo(() => {
     if (!editingMessage) return null;
     const messageText = getDisplayedMessageText(editingMessage) || "Message";
 
     return (
-      <View
-        className={`flex-row items-center py-2 px-3 border-t ${isDark
-          ? "bg-[#1e293b] border-[#334155]"
-          : "bg-[#f1f5f9] border-[#e2e8f0]"
+      <Reanimated.View
+        entering={FadeInDown.springify().damping(18).stiffness(250)}
+        exiting={FadeOutUp.duration(200)}
+        layout={LinearTransition.springify().damping(18)}
+        className={`flex-row items-center py-3 px-4 ${isDark
+          ? "bg-[#1e293b]"
+          : "bg-[#f1f5f9]"
           }`}
       >
+        {/* Left accent bar - amber for edit mode */}
+        <View 
+          style={{
+            width: 3,
+            height: '100%',
+            minHeight: 40,
+            backgroundColor: '#f59e0b',
+            borderRadius: 2,
+            marginRight: 12,
+          }}
+        />
         <View className="flex-1">
-          <Text className="text-xs font-semibold text-[#f59e0b] mb-0.5">
+          <Text className="text-base font-semibold text-[#f59e0b] mb-1">
             Editing message
           </Text>
-          <Text className={`text-xs ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
+          <Text className={`text-sm ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
             {messageText}
           </Text>
         </View>
-        <TouchableOpacity onPress={onCancelEdit} className="p-1">
-          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+        <TouchableOpacity 
+          onPress={handleCancelEdit}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            borderWidth: 2,
+            borderColor: isDark ? '#4a5568' : '#cbd5e1',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 12,
+          }}
+        >
+          <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
         </TouchableOpacity>
-      </View>
+      </Reanimated.View>
     );
-  }, [editingMessage, onCancelEdit, isDark]);
+  }, [editingMessage, handleCancelEdit, isDark]);
 
   const isEditMode = Boolean(editingMessage);
   const currentText = isEditMode ? editDraft : text;
