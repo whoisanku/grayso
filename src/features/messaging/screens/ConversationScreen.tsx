@@ -27,6 +27,7 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
+import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import { Easing } from "react-native";
 import { BlurView } from "expo-blur";
 import * as Clipboard from "expo-clipboard";
@@ -59,7 +60,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
-import { useKeyboardHandler } from "react-native-keyboard-controller";
+import { useKeyboardHandler, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { runOnJS } from "react-native-reanimated";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import {
@@ -660,22 +661,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
     ) => {
       // Trigger haptic immediately for responsive feel
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      
+
       // Get layout immediately to avoid delays
       const messageId = getMessageId(message);
       let bubbleLayout = layout;
-      
+
       if (!bubbleLayout && messageId) {
         bubbleLayout = bubbleLayoutsRef.current.get(messageId) || undefined;
       }
-      
+
       const finalLayout = bubbleLayout || getFallbackBubbleLayout();
-      
+
       // Batch all state updates together for better performance
       // This prevents multiple re-renders
       setSelectedMessage(message);
       setSelectedBubbleLayout(finalLayout);
-      
+
       // Start animation immediately after state is set
       requestAnimationFrame(() => {
         animateOpenActions();
@@ -1177,6 +1178,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
         replyToMessage={replyToMessage}
         onCancelReply={() => setReplyToMessage(null)}
         profiles={profiles}
+        editingMessage={editingMessage}
+        editDraft={editDraft}
+        onEditDraftChange={setEditDraft}
+        onCancelEdit={handleCancelEdit}
+        onSaveEdit={handleSaveEdit}
+        isSavingEdit={isSavingEdit}
       />
 
       <Modal
@@ -1217,8 +1224,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
           {selectedMessage && selectedBubbleLayout ? (() => {
             const positions = computeModalPositions(
-              selectedBubbleLayout, 
-              composerBottomInset, 
+              selectedBubbleLayout,
+              composerBottomInset,
               Boolean(selectedMessage?.IsSender)
             );
             return (
@@ -1292,80 +1299,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
               </>
             );
           })() : null}
-        </View>
-      </Modal>
-
-      <Modal
-        visible={Boolean(editingMessage)}
-        transparent
-        animationType="slide"
-        onRequestClose={handleCancelEdit}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.4)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={{ flex: 1 }}
-            onPress={handleCancelEdit}
-          />
-          <View
-            className={`${isDark ? "bg-[#0f172a]" : "bg-white"} mx-4 mb-4 rounded-2xl border ${isDark ? "border-slate-800" : "border-slate-200"
-              }`}
-            style={{
-              padding: 16,
-              paddingBottom: composerBottomInset + 12,
-            }}
-          >
-            <Text className={`text-base font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
-              Edit message
-            </Text>
-            <TextInput
-              value={editDraft}
-              onChangeText={setEditDraft}
-              multiline
-              autoFocus
-              keyboardAppearance={isDark ? "dark" : "light"}
-              placeholder="Update your message"
-              placeholderTextColor={isDark ? "#94a3b8" : "#94a3b8"}
-              className={`mt-3 rounded-xl border px-3 py-2 text-base ${isDark
-                ? "border-slate-700 bg-[#111827] text-slate-100"
-                : "border-slate-200 bg-slate-50 text-slate-900"
-                }`}
-              style={{
-                maxHeight: 140,
-              }}
-            />
-            <View className="mt-3 flex-row justify-end">
-              <TouchableOpacity
-                onPress={handleCancelEdit}
-                className="px-3 py-2 mr-2 rounded-full border border-slate-300 dark:border-slate-700"
-              >
-                <Text className={`text-sm font-semibold ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSaveEdit}
-                disabled={!editDraft.trim() || isSavingEdit}
-                className={`px-4 py-2 rounded-full ${!editDraft.trim() || isSavingEdit
-                  ? "bg-slate-300 dark:bg-slate-700"
-                  : "bg-[#0085ff]"
-                  }`}
-                activeOpacity={0.85}
-              >
-                {isSavingEdit ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text className="text-sm font-semibold text-white">Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
         </View>
       </Modal>
 
@@ -1944,7 +1877,7 @@ function SelectedBubblePreview({
   const timestamp = message.MessageInfo?.TimestampNanos;
 
   // Get profile image URL for non-sender messages
-  const avatarUri = senderPk 
+  const avatarUri = senderPk
     ? getProfileImageUrl(senderPk) || FALLBACK_PROFILE_IMAGE
     : FALLBACK_PROFILE_IMAGE;
 
@@ -2115,14 +2048,14 @@ function computeModalPositions(
   const headerHeight = 60; // Approximate header height
   const minTop = headerHeight + 8;
   const maxBottom = WINDOW.height - bottomInset - 20;
-  
+
   // Total space needed: bubble height + gap + action sheet height
   const totalNeededHeight = layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET + ESTIMATED_ACTION_HEIGHT;
-  
+
   // Calculate where bubble and action sheet would go if placed at original position
   let bubbleTop = layout.y;
   let actionTop = layout.y + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
-  
+
   // Check if action sheet would go below screen bottom
   const actionBottom = actionTop + ESTIMATED_ACTION_HEIGHT;
   if (actionBottom > maxBottom) {
@@ -2132,13 +2065,13 @@ function computeModalPositions(
     bubbleTop = Math.max(minTop, bubbleTop - overflow);
     actionTop = bubbleTop + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
   }
-  
+
   // Ensure bubble doesn't go above header
   if (bubbleTop < minTop) {
     bubbleTop = minTop;
     actionTop = bubbleTop + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
   }
-  
+
   // Calculate left position - align with the bubble content (after profile image for received)
   let actionLeft: number;
   if (isSender) {
@@ -2151,7 +2084,7 @@ function computeModalPositions(
     const desiredLeft = layout.x;
     actionLeft = clamp(desiredLeft, 12, WINDOW.width - ACTION_SHEET_WIDTH - 12);
   }
-  
+
   return { bubbleTop, actionTop, actionLeft };
 }
 
@@ -2266,6 +2199,12 @@ type ComposerProps = {
   replyToMessage?: DecryptedMessageEntryResponse | null;
   onCancelReply?: () => void;
   profiles?: PublicKeyToProfileEntryResponseMap;
+  editingMessage?: DecryptedMessageEntryResponse | null;
+  editDraft?: string;
+  onEditDraftChange?: (text: string) => void;
+  onCancelEdit?: () => void;
+  onSaveEdit?: () => void;
+  isSavingEdit?: boolean;
 };
 
 function Composer({
@@ -2283,6 +2222,12 @@ function Composer({
   replyToMessage,
   onCancelReply,
   profiles = {},
+  editingMessage,
+  editDraft = "",
+  onEditDraftChange,
+  onCancelEdit,
+  onSaveEdit,
+  isSavingEdit = false,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -2291,9 +2236,25 @@ function Composer({
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
+  // Use keyboard controller for dynamic keyboard height
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const animatedComposerStyle = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(keyboardHeight.value, bottomInset),
+  }));
+
   const focusInput = useCallback(() => {
     textInputRef.current?.focus();
   }, []);
+
+  // Auto-focus when entering edit mode
+  useEffect(() => {
+    if (editingMessage) {
+      // Small delay to ensure the component has rendered
+      setTimeout(() => {
+        focusInput();
+      }, 100);
+    }
+  }, [editingMessage, focusInput]);
 
   const handleContentSizeChange = useCallback(
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
@@ -2400,24 +2361,73 @@ function Composer({
     );
   }, [replyToMessage, onCancelReply, isDark, profiles]);
 
+  const editPreview = useMemo(() => {
+    if (!editingMessage) return null;
+    const messageText = getDisplayedMessageText(editingMessage) || "Message";
+
+    return (
+      <View
+        className={`flex-row items-center py-2 px-3 border-t ${isDark
+          ? "bg-[#1e293b] border-[#334155]"
+          : "bg-[#f1f5f9] border-[#e2e8f0]"
+          }`}
+      >
+        <View className="flex-1">
+          <Text className="text-xs font-semibold text-[#f59e0b] mb-0.5">
+            Editing message
+          </Text>
+          <Text className={`text-xs ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
+            {messageText}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onCancelEdit} className="p-1">
+          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+        </TouchableOpacity>
+      </View>
+    );
+  }, [editingMessage, onCancelEdit, isDark]);
+
+  const isEditMode = Boolean(editingMessage);
+  const currentText = isEditMode ? editDraft : text;
+  const currentHasText = currentText.trim().length > 0;
+
+  const handleTextChange = (newText: string) => {
+    if (isEditMode) {
+      onEditDraftChange?.(newText);
+    } else {
+      setText(newText);
+    }
+  };
+
+  const handleSendOrSave = () => {
+    if (isEditMode) {
+      onSaveEdit?.();
+    } else {
+      onSend();
+    }
+  };
+
+  const isDisabled = isEditMode
+    ? (!currentText.trim() || isSavingEdit)
+    : (sending || !currentText.trim());
+
   return (
-    <View
+    <Reanimated.View
       className={`border-t border-slate-200 dark:border-slate-800 ${isDark ? "bg-[#000]" : "bg-[#fff]"
         }`}
-      style={{
-        paddingBottom: containerPaddingBottom,
-      }}
+      style={animatedComposerStyle}
     >
+      {editPreview}
       {replyPreview}
       <View className="flex-row items-end mx-3 mt-3 justify-between">
         <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
           }`}>
           <TextInput
             ref={textInputRef}
-            placeholder={isGroupChat ? "Message the group…" : "Write a message"}
+            placeholder={isEditMode ? "Update your message" : (isGroupChat ? "Message the group…" : "Write a message")}
             placeholderTextColor={isDark ? "#94a3b8" : "#64748b"}
-            value={text}
-            onChangeText={setText}
+            value={currentText}
+            onChangeText={handleTextChange}
             multiline
             keyboardAppearance={isDark ? "dark" : "light"}
             autoCorrect
@@ -2435,26 +2445,26 @@ function Composer({
             }}
           />
           <TouchableOpacity
-            onPress={() => onSend()}
-            disabled={sendDisabled}
+            onPress={handleSendOrSave}
+            disabled={isDisabled}
             activeOpacity={0.85}
             className="ml-2"
           >
-            <View className={`h-8 w-8 rounded-full items-center justify-center ${!hasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : "bg-[#0085ff]"
+            <View className={`h-8 w-8 rounded-full items-center justify-center ${!currentHasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : (isEditMode ? "bg-[#f59e0b]" : "bg-[#0085ff]")
               }`}>
-              {sending ? (
+              {(sending || isSavingEdit) ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <Ionicons
-                  name="arrow-up"
+                  name={isEditMode ? "checkmark" : "arrow-up"}
                   size={20}
-                  color={!hasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
+                  color={!currentHasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
                 />
               )}
             </View>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </Reanimated.View>
   );
 }
