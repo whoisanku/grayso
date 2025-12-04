@@ -21,7 +21,7 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  Keyboard,
+  TouchableWithoutFeedback,
   DeviceEventEmitter,
   Animated,
 } from "react-native";
@@ -55,7 +55,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
-import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller";
+import { useKeyboardHandler } from "react-native-keyboard-controller";
 import { runOnJS } from "react-native-reanimated";
 import ScreenWrapper from "../components/ScreenWrapper";
 
@@ -79,6 +79,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
   const [accessGroups, setAccessGroups] = useState<AccessGroupEntryResponse[]>(
     []
   );
@@ -103,6 +104,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
   );
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+  const [editingMessage, setEditingMessage] = useState<DecryptedMessageEntryResponse | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const lastRocketMessageKeyRef = useRef<string | null>(null);
   const reactionOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -254,11 +259,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         }
       });
 
-      return Array.from(map.values()).sort(
-        (a, b) =>
-          (b.MessageInfo?.TimestampNanos ?? 0) -
-          (a.MessageInfo?.TimestampNanos ?? 0)
-      );
+      return normalizeAndSortMessages(Array.from(map.values()));
     },
     []
   );
@@ -389,11 +390,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
         setMessages((prev) => {
           const nextMessages = initial
-            ? [...decryptedMessages].sort(
-              (a, b) =>
-                (b.MessageInfo?.TimestampNanos ?? 0) -
-                (a.MessageInfo?.TimestampNanos ?? 0)
-            )
+            ? normalizeAndSortMessages([...decryptedMessages])
             : mergeMessages(prev, decryptedMessages);
 
           const oldest =
@@ -565,7 +562,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     }
 
     const latest = messages[0];
-    const messageText = latest.DecryptedMessage?.trim();
+    const messageText = getDisplayedMessageText(latest)?.trim();
     if (messageText !== "🚀") {
       return;
     }
@@ -591,6 +588,113 @@ export default function ConversationScreen({ navigation, route }: Props) {
     setReplyToMessage(message);
   }, []);
 
+  const handleMessageLongPress = useCallback((message: DecryptedMessageEntryResponse) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedMessage(message);
+  }, []);
+
+  const handleCloseMessageActions = useCallback(() => {
+    setSelectedMessage(null);
+  }, []);
+
+  const handleActionReply = useCallback(() => {
+    if (!selectedMessage) return;
+    handleReply(selectedMessage);
+    setSelectedMessage(null);
+  }, [selectedMessage, handleReply]);
+
+  const startEditingMessage = useCallback(
+    (message?: DecryptedMessageEntryResponse | null) => {
+      const target = message ?? selectedMessage;
+      if (!target || !target.IsSender) return;
+      if (!getMessageId(target)) return;
+      const draft =
+        getDisplayedMessageText(target) ||
+        target.DecryptedMessage ||
+        "";
+      setEditDraft(draft);
+      setEditingMessage(target);
+      setSelectedMessage(null);
+    },
+    [selectedMessage]
+  );
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessage(null);
+    setEditDraft("");
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingMessage) return;
+
+    const trimmed = editDraft.trim();
+    const messageId = getMessageId(editingMessage);
+    if (!trimmed || !messageId) {
+      return;
+    }
+
+    const currentText = getDisplayedMessageText(editingMessage)?.trim() || "";
+    if (trimmed === currentText) {
+      handleCancelEdit();
+      return;
+    }
+
+    try {
+      setIsSavingEdit(true);
+      const extraData = {
+        edited: "true",
+        editedMessage: trimmed,
+        editedMessageId: messageId,
+      };
+
+      await encryptAndSendNewMessage(
+        trimmed,
+        userPublicKey,
+        counterPartyPublicKey,
+        threadAccessGroupKeyName,
+        userAccessGroupKeyName,
+        recipientInfo?.AccessGroupPublicKeyBase58Check,
+        extraData
+      );
+
+      setMessages((prev) =>
+        normalizeAndSortMessages(
+          prev.map((msg) => {
+            const id = getMessageId(msg);
+            if (id !== messageId) return msg;
+
+            const nextExtraData = {
+              ...(msg.MessageInfo?.ExtraData || {}),
+              ...extraData,
+            };
+
+            return {
+              ...msg,
+              MessageInfo: {
+                ...(msg.MessageInfo || {}),
+                ExtraData: nextExtraData,
+              },
+            };
+          })
+        )
+      );
+      handleCancelEdit();
+    } catch (error) {
+      console.error("[ConversationScreen] Failed to edit message", error);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }, [
+    counterPartyPublicKey,
+    editDraft,
+    editingMessage,
+    handleCancelEdit,
+    threadAccessGroupKeyName,
+    userAccessGroupKeyName,
+    userPublicKey,
+    recipientInfo?.AccessGroupPublicKeyBase58Check,
+  ]);
+
   // Create a lookup map for fast message retrieval by ID (TimestampNanosString)
   const messageIdMap = useMemo(() => {
     const map = new Map<string, DecryptedMessageEntryResponse>();
@@ -614,6 +718,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         profiles={profiles}
         isGroupChat={isGroupChat}
         onReply={handleReply}
+        onLongPress={handleMessageLongPress}
         messageIdMap={messageIdMap}
         isDark={isDark}
       />
@@ -628,6 +733,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles,
     isGroupChat,
     onReply,
+    onLongPress,
     messageIdMap,
     isDark,
   }: {
@@ -637,17 +743,28 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles: PublicKeyToProfileEntryResponseMap;
     isGroupChat: boolean;
     onReply: (message: DecryptedMessageEntryResponse) => void;
+    onLongPress: (message: DecryptedMessageEntryResponse) => void;
     messageIdMap: Map<string, DecryptedMessageEntryResponse>;
     isDark: boolean;
   }) => {
     const swipeableRef = useRef<Swipeable>(null);
-    const rawMessageText = item.DecryptedMessage?.trim();
+    const extraData = item.MessageInfo?.ExtraData || {};
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
-    const messageText =
+    const editedMessageText =
+      typeof (extraData as any).editedMessage === "string"
+        ? (extraData as any).editedMessage
+        : undefined;
+    const isEditedMessage =
+      isEditedValue(extraData?.edited) || Boolean(editedMessageText);
+    const baseMessageText =
       item.DecryptedMessage ||
       (hasError ? "Unable to decrypt this message." : "Decrypting…");
+    const messageText =
+      (isEditedMessage && editedMessageText ? editedMessageText : baseMessageText) ||
+      baseMessageText;
+    const rawMessageText = messageText?.trim();
     const timestamp = item.MessageInfo?.TimestampNanos;
     const previousTimestamp =
       messages[index + 1]?.MessageInfo?.TimestampNanos ?? undefined;
@@ -678,7 +795,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
       // If we found the message locally, use it. Otherwise try fallback from ExtraData.
       const fallbackText = item.MessageInfo?.ExtraData?.RepliedToMessageDecryptedText;
-      const replyText = repliedToMessage?.DecryptedMessage || fallbackText || "Message not loaded";
+      const replyText = getDisplayedMessageText(repliedToMessage) || fallbackText || "Message not loaded";
 
       const replySenderPk = repliedToMessage?.SenderInfo?.OwnerPublicKeyBase58Check;
       const replySenderProfile = replySenderPk ? profiles[replySenderPk] : null;
@@ -853,71 +970,84 @@ export default function ConversationScreen({ navigation, route }: Props) {
           overshootRight={false}
           overshootLeft={false}
         >
-          <View
-            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-              }`}
+          <TouchableWithoutFeedback
+            onLongPress={() => onLongPress(item)}
+            delayLongPress={250}
           >
-            {!isMine ? (
-              <View className="mr-2" style={{ width: 32 }}>
-                {isLastInGroup && hasAvatar ? (
-                  <Image
-                    source={{ uri: avatarUri }}
-                    className="h-8 w-8 rounded-full bg-gray-200"
-                  />
-                ) : isLastInGroup ? (
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
             <View
-              className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+              className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                 }`}
-              style={[
-                getBorderRadius(),
-              ]}
             >
-              {!isMine && isFirstInGroup && (
-                <Text
-                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-              )}
-              {renderReplyPreview()}
-              <Text
-                className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+              {!isMine ? (
+                <View className="mr-2" style={{ width: 32 }}>
+                  {isLastInGroup && hasAvatar ? (
+                    <Image
+                      source={{ uri: avatarUri }}
+                      className="h-8 w-8 rounded-full bg-gray-200"
+                    />
+                  ) : isLastInGroup ? (
+                    <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                      <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              <View
+                className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
                   }`}
+                style={[
+                  getBorderRadius(),
+                ]}
               >
-                {messageText}
-              </Text>
-              {isLastInGroup && (
-                <View
-                  className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                {!isMine && isFirstInGroup && (
+                  <Text
+                    className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                )}
+                {renderReplyPreview()}
+                <Text
+                  className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
                     }`}
                 >
+                  {messageText}
+                </Text>
+                {isLastInGroup && (
+                  <View
+                    className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                      }`}
+                  >
                   {hasError ? (
                     <Text className="text-[10px] font-medium text-red-500">
                       Failed to decrypt
                     </Text>
                   ) : (
                     <>
+                      {isEditedMessage ? (
+                        <Text
+                          className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
+                            }`}
+                        >
+                          Edited
+                        </Text>
+                      ) : null}
                       {timestamp ? (
                         <Text
                           className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
                             }`}
                         >
-                          {formatTimestamp(timestamp)}
-                        </Text>
-                      ) : null}
-                    </>
-                  )}
-                </View>
-              )}
+                            {formatTimestamp(timestamp)}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </Swipeable>
       </View>
     );
@@ -1133,7 +1263,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
               // Show scroll-to-bottom button if we are more than 400px up
               if (distanceFromTop > 400) {
-                if (!showScrollToBottom) setShowScrollToBottom(true);
+                if (!showScrollToBottom) {
+                  scrollToBottomAnim.setValue(1); // Reset opacity when showing
+                  setShowScrollToBottom(true);
+                }
               } else {
                 if (showScrollToBottom) setShowScrollToBottom(false);
               }
@@ -1189,19 +1322,41 @@ export default function ConversationScreen({ navigation, route }: Props) {
           />
         )}
         {showScrollToBottom && (
-          <TouchableOpacity
-            onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
-            className="absolute bottom-4 right-4 h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600 z-10"
+          <Animated.View
             style={{
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 4
+              position: 'absolute',
+              bottom: 16,
+              right: 16,
+              zIndex: 10,
+              opacity: scrollToBottomAnim,
             }}
           >
-            <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                // Fade out animation
+                Animated.timing(scrollToBottomAnim, {
+                  toValue: 0,
+                  duration: 200,
+                  useNativeDriver: true,
+                }).start(() => {
+                  // Hide button after animation
+                  setShowScrollToBottom(false);
+                });
+                // Scroll to bottom
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              className="h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600"
+              style={{
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 4
+              }}
+            >
+              <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </View>
 
@@ -1250,6 +1405,150 @@ export default function ConversationScreen({ navigation, route }: Props) {
         onCancelReply={() => setReplyToMessage(null)}
         profiles={profiles}
       />
+
+      <Modal
+        visible={Boolean(selectedMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseMessageActions}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{ flex: 1 }}
+            onPress={handleCloseMessageActions}
+          />
+          <View
+            className={`${isDark ? "bg-[#0f172a]" : "bg-white"} mx-4 mb-4 rounded-2xl shadow-lg border ${isDark ? "border-slate-800" : "border-slate-200"
+              }`}
+            style={{
+              paddingBottom: composerBottomInset + 8,
+            }}
+          >
+            <View className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+              <Text className={`text-sm font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
+                Message actions
+              </Text>
+              {selectedMessage ? (
+                <Text
+                  className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}
+                  numberOfLines={2}
+                >
+                  {getDisplayedMessageText(selectedMessage) || "Message"}
+                </Text>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              onPress={handleActionReply}
+              className="flex-row items-center px-4 py-3 active:opacity-70"
+            >
+              <Feather
+                name="corner-up-left"
+                size={18}
+                color={isDark ? "#e2e8f0" : "#0f172a"}
+              />
+              <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                Reply
+              </Text>
+            </TouchableOpacity>
+            {selectedMessage?.IsSender ? (
+              <TouchableOpacity
+                onPress={() => startEditingMessage(selectedMessage)}
+                className="flex-row items-center px-4 py-3 active:opacity-70"
+              >
+                <Feather
+                  name="edit-2"
+                  size={18}
+                  color={isDark ? "#e2e8f0" : "#0f172a"}
+                />
+                <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                  Edit message
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(editingMessage)}
+        transparent
+        animationType="slide"
+        onRequestClose={handleCancelEdit}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{ flex: 1 }}
+            onPress={handleCancelEdit}
+          />
+          <View
+            className={`${isDark ? "bg-[#0f172a]" : "bg-white"} mx-4 mb-4 rounded-2xl border ${isDark ? "border-slate-800" : "border-slate-200"
+              }`}
+            style={{
+              padding: 16,
+              paddingBottom: composerBottomInset + 12,
+            }}
+          >
+            <Text className={`text-base font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
+              Edit message
+            </Text>
+            <TextInput
+              value={editDraft}
+              onChangeText={setEditDraft}
+              multiline
+              autoFocus
+              keyboardAppearance={isDark ? "dark" : "light"}
+              placeholder="Update your message"
+              placeholderTextColor={isDark ? "#94a3b8" : "#94a3b8"}
+              className={`mt-3 rounded-xl border px-3 py-2 text-base ${isDark
+                ? "border-slate-700 bg-[#111827] text-slate-100"
+                : "border-slate-200 bg-slate-50 text-slate-900"
+                }`}
+              style={{
+                maxHeight: 140,
+              }}
+            />
+            <View className="mt-3 flex-row justify-end">
+              <TouchableOpacity
+                onPress={handleCancelEdit}
+                className="px-3 py-2 mr-2 rounded-full border border-slate-300 dark:border-slate-700"
+              >
+                <Text className={`text-sm font-semibold ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveEdit}
+                disabled={!editDraft.trim() || isSavingEdit}
+                className={`px-4 py-2 rounded-full ${!editDraft.trim() || isSavingEdit
+                  ? "bg-slate-300 dark:bg-slate-700"
+                  : "bg-[#0085ff]"
+                  }`}
+                activeOpacity={0.85}
+              >
+                {isSavingEdit ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-sm font-semibold text-white">Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showMembersModal}
@@ -1307,6 +1606,143 @@ export default function ConversationScreen({ navigation, route }: Props) {
       </Modal>
     </ScreenWrapper>
   );
+}
+
+function getMessageId(message?: DecryptedMessageEntryResponse | null): string {
+  if (!message?.MessageInfo) return "";
+  return (
+    message.MessageInfo.TimestampNanosString ??
+    (message.MessageInfo.TimestampNanos != null
+      ? String(message.MessageInfo.TimestampNanos)
+      : "")
+  );
+}
+
+function isEditedValue(value: any): boolean {
+  return value === true || value === "true" || value === "1";
+}
+
+function normalizeEditedMessages(
+  messages: DecryptedMessageEntryResponse[]
+): DecryptedMessageEntryResponse[] {
+  const messageIds = new Set<string>();
+  const edits: Record<
+    string,
+    {
+      editedMessage?: string;
+      isEdited: boolean;
+      timestamp?: number;
+    }
+  > = {};
+
+  messages.forEach((msg) => {
+    const id = getMessageId(msg);
+    if (id) {
+      messageIds.add(id);
+    }
+
+    const extra = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
+    const targetId =
+      typeof extra?.editedMessageId === "string"
+        ? extra.editedMessageId
+        : extra?.editedMessageId != null
+          ? String(extra.editedMessageId)
+          : undefined;
+
+    if (
+      targetId &&
+      targetId !== id &&
+      typeof extra?.editedMessage === "string"
+    ) {
+      const ts = msg.MessageInfo?.TimestampNanos ?? 0;
+      const existing = edits[targetId];
+      const editedFlag =
+        isEditedValue(extra?.edited) || Boolean(extra?.editedMessage);
+
+      if (!existing || (existing.timestamp ?? 0) < ts) {
+        edits[targetId] = {
+          editedMessage: extra.editedMessage,
+          isEdited: editedFlag,
+          timestamp: ts,
+        };
+      }
+    }
+  });
+
+  const updatedMessages = messages.map((msg) => {
+    const id = getMessageId(msg);
+    const edit = id ? edits[id] : undefined;
+    if (!edit) return msg;
+
+    const nextExtra = { ...(msg.MessageInfo?.ExtraData || {}) };
+    if (edit.isEdited) {
+      nextExtra.edited = "true";
+    }
+    if (edit.editedMessage) {
+      nextExtra.editedMessage = edit.editedMessage;
+    }
+
+    return {
+      ...msg,
+      MessageInfo: {
+        ...(msg.MessageInfo || {}),
+        ExtraData: nextExtra,
+      },
+    };
+  });
+
+  const filteredMessages = updatedMessages.filter((msg) => {
+    const extra = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
+    const id = getMessageId(msg);
+    const targetId =
+      typeof extra?.editedMessageId === "string"
+        ? extra.editedMessageId
+        : extra?.editedMessageId != null
+          ? String(extra.editedMessageId)
+          : undefined;
+
+    if (targetId && targetId !== id && messageIds.has(targetId)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return filteredMessages;
+}
+
+function sortMessagesDescending(
+  messages: DecryptedMessageEntryResponse[]
+): DecryptedMessageEntryResponse[] {
+  return [...messages].sort(
+    (a, b) =>
+      (b.MessageInfo?.TimestampNanos ?? 0) -
+      (a.MessageInfo?.TimestampNanos ?? 0)
+  );
+}
+
+function normalizeAndSortMessages(
+  messages: DecryptedMessageEntryResponse[]
+): DecryptedMessageEntryResponse[] {
+  return sortMessagesDescending(normalizeEditedMessages(messages));
+}
+
+function getDisplayedMessageText(
+  message?: DecryptedMessageEntryResponse | null
+): string | undefined {
+  if (!message) return undefined;
+
+  const extraData = message.MessageInfo?.ExtraData as Record<string, any> | undefined;
+  const editedText =
+    typeof extraData?.editedMessage === "string" ? extraData.editedMessage : undefined;
+
+  const isEdited = isEditedValue(extraData?.edited) || Boolean(editedText);
+
+  if (isEdited && editedText) {
+    return editedText;
+  }
+
+  return message.DecryptedMessage || undefined;
 }
 
 function formatTimestamp(timestampNanos: number): string {
@@ -1521,7 +1957,7 @@ function Composer({
     const senderPk = replyToMessage.SenderInfo?.OwnerPublicKeyBase58Check;
     const senderProfile = senderPk ? profiles[senderPk] : null;
     const displayName = senderPk ? getProfileDisplayName(senderProfile, senderPk) : "Unknown";
-    const messageText = replyToMessage.DecryptedMessage || "Message not loaded";
+    const messageText = getDisplayedMessageText(replyToMessage) || "Message not loaded";
 
     return (
       <View
