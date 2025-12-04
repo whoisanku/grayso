@@ -50,3 +50,11 @@ Guidelines for keeping the app fast, stable, and consistent across iOS and Andro
 ## Git & Change Hygiene
 - Small, focused commits with clear messages.
 - Keep PRs scoped: feature or refactor, not both. Remove dead code and unused imports in the same pass.
+
+## Styling (NativeWind)
+- **Always use NativeWind `className`** for styling instead of `StyleSheet.create`. This ensures consistency and leverages Tailwind utility classes.
+- Use `className` props directly on components (e.g., `className="flex-1 bg-white dark:bg-black"`).
+- For dynamic styles, combine `className` with conditional logic: ``className={`text-base ${isActive ? "text-blue-500" : "text-gray-500"}`}``.
+- Only use inline `style` prop when passing dynamic values that can't be expressed as Tailwind classes (e.g., animated values, computed dimensions).
+- `StyleSheet.absoluteFill` and `StyleSheet.absoluteFillObject` are acceptable as React Native utilities for modal overlays.
+- Always support both light and dark mode using Tailwind's `dark:` prefix.

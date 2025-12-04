@@ -7,7 +7,6 @@ import {
   Image,
   ActivityIndicator,
   RefreshControl,
-  StyleSheet,
   DeviceEventEmitter,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -263,11 +262,15 @@ export default function HomeScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-slate-950">
-        <ActivityIndicator color="#3b82f6" />
-        <Text className="mt-3 text-sm text-gray-600 dark:text-slate-400">
-          Loading your conversations…
-        </Text>
+      <SafeAreaView className="flex-1 bg-white dark:bg-black">
+        <View className="px-4 pt-4 pb-3">
+          <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+            Chats
+          </Text>
+        </View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#0085ff" />
+        </View>
       </SafeAreaView>
     );
   }

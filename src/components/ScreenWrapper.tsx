@@ -3,15 +3,12 @@ import {
     KeyboardAvoidingView as RNKeyboardAvoidingView,
     Platform,
     ScrollView,
-    StyleSheet,
     View,
     ViewStyle,
-    StatusBar as RNStatusBar,
 } from "react-native";
 import {
     SafeAreaView,
     Edge,
-    SafeAreaProviderProps,
 } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { KeyboardAvoidingView as KeyboardControllerView } from "react-native-keyboard-controller";
@@ -49,30 +46,26 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
             ? "#000000"
             : "#ffffff";
 
-    const containerStyle = [
-        styles.container,
-        { backgroundColor: defaultBackgroundColor },
-        style,
-    ];
-
     const content = scrollable ? (
         <ScrollView
-            contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
+            contentContainerStyle={contentContainerStyle}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            className="flex-grow"
         >
             {children}
         </ScrollView>
     ) : (
-        <View style={[styles.content, contentContainerStyle]}>{children}</View>
+        <View style={contentContainerStyle} className="flex-1">
+            {children}
+        </View>
     );
 
     const Wrapper = (
-        <SafeAreaView style={containerStyle} edges={edges}>
-            {/* 
-        StatusBar placeholder for Android if needed, 
-        though Expo StatusBar usually handles this.
-      */}
+        <SafeAreaView
+            style={[{ flex: 1, backgroundColor: defaultBackgroundColor }, style]}
+            edges={edges}
+        >
             {content}
         </SafeAreaView>
     );
@@ -81,7 +74,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
         if (useKeyboardController) {
             return (
                 <KeyboardControllerView
-                    style={styles.keyboardAvoiding}
+                    className="flex-1"
                     behavior={Platform.OS === "ios" ? "padding" : "height"}
                     keyboardVerticalOffset={keyboardVerticalOffset}
                 >
@@ -92,7 +85,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
 
         return (
             <RNKeyboardAvoidingView
-                style={styles.keyboardAvoiding}
+                className="flex-1"
                 behavior={
                     keyboardBehavior ?? (Platform.OS === "ios" ? "padding" : "height")
                 }
@@ -106,19 +99,5 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
     return Wrapper;
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    keyboardAvoiding: {
-        flex: 1,
-    },
-    scrollContent: {
-        flexGrow: 1,
-    },
-    content: {
-        flex: 1,
-    },
-});
-
 export default ScreenWrapper;
+
