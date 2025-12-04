@@ -6,11 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   LayoutAnimation,
   UIManager,
+  StyleSheet,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,6 +22,23 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../../../utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
+import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
+import { BlurView } from "expo-blur";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+
+// Check if iOS 26+ for Liquid Glass support
+const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
+
+// Conditionally import LiquidGlassView only on iOS 26+
+let LiquidGlassView: React.ComponentType<any> | null = null;
+if (isIOS26OrAbove) {
+  try {
+    LiquidGlassView = require("@callstack/liquid-glass").LiquidGlassView;
+  } catch (e) {
+    LiquidGlassView = null;
+  }
+}
 
 const MAX_LENGTH = 280;
 
@@ -37,6 +54,13 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { currentUser } = React.useContext(DeSoIdentityContext);
+
+  // Keyboard animation for toolbar positioning
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  
+  const toolbarAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: keyboardHeight.value }],
+  }));
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -83,10 +107,8 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     setIsPosting(true);
 
     try {
-      // 1. Get JWT for uploads/posting
       const jwt = await identity.jwt();
 
-      // 2. Upload images if any
       let imageUrls: string[] = [];
       if (images.length > 0) {
         imageUrls = await Promise.all(
@@ -94,7 +116,6 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
         );
       }
 
-      // 3. Submit Post
       await submitPost({
         UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
         BodyObj: {
@@ -104,7 +125,6 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
         },
       });
 
-      // 4. Success
       navigation.goBack();
     } catch (error) {
       console.error("Failed to create post:", error);
@@ -120,7 +140,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerShown: false, // We'll use a custom header
+      headerShown: false,
     });
   }, [navigation]);
 
@@ -142,6 +162,24 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     }
   };
 
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      alert('Camera permission is required to take photos');
+      return;
+    }
+
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setImages((prevImages) => [...prevImages, result.assets[0].uri]);
+    }
+  };
+
   const removeImage = (indexToRemove: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setImages(prev => prev.filter((_, index) => index !== indexToRemove));
@@ -149,11 +187,95 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   const canPost = text.trim().length > 0 || images.length > 0;
 
+  // Toolbar action button component
+  const ToolbarButton = ({ 
+    icon, 
+    onPress, 
+    disabled = false 
+  }: { 
+    icon: keyof typeof Feather.glyphMap; 
+    onPress: () => void; 
+    disabled?: boolean;
+  }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      className={`rounded-full p-2.5 ${disabled ? 'opacity-40' : 'active:opacity-70'}`}
+      style={{
+        backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : 'rgba(99, 102, 241, 0.1)',
+      }}
+    >
+      <Feather 
+        name={icon} 
+        size={20} 
+        color={disabled ? (isDark ? '#475569' : '#94a3b8') : '#0085ff'} 
+      />
+    </TouchableOpacity>
+  );
+
+  // Glass container styles
+  const glassContainerStyle = {
+    borderWidth: 1,
+    borderColor: isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.08)",
+    borderRadius: 24,
+    shadowColor: isDark ? "#000" : "#64748b",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: isDark ? 0.3 : 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  };
+
+  // Toolbar wrapper style with matching background
+  const toolbarWrapperStyle = {
+    backgroundColor: isDark ? "#020617" : "#ffffff",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  };
+
+  // Render glass toolbar
+  const renderToolbar = () => {
+    const toolbarContent = (
+      <View style={styles.toolbarContent}>
+        <View style={styles.toolbarActions}>
+          <ToolbarButton icon="image" onPress={pickImage} />
+          <ToolbarButton icon="camera" onPress={takePhoto} />
+        </View>
+        <CircularProgressIndicator current={text.length} max={MAX_LENGTH} size={26} />
+      </View>
+    );
+
+    if (LiquidGlassView) {
+      return (
+        <View style={toolbarWrapperStyle}>
+          <LiquidGlassView
+            effect="regular"
+            style={[styles.glassToolbar, glassContainerStyle]}
+          >
+            {toolbarContent}
+          </LiquidGlassView>
+        </View>
+      );
+    }
+
+    // Fallback to BlurView
+    return (
+      <View style={toolbarWrapperStyle}>
+        <BlurView
+          intensity={Platform.OS === "ios" ? 60 : 100}
+          tint={isDark ? "dark" : "light"}
+          style={[styles.blurToolbar, glassContainerStyle]}
+        >
+          {toolbarContent}
+        </BlurView>
+      </View>
+    );
+  };
+
   return (
     <ScreenWrapper
-      edges={['top', 'left', 'right']} // Bottom handled by toolbar padding
-      keyboardAvoiding={true}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      edges={['top', 'left', 'right']}
+      keyboardAvoiding={false}
       backgroundColor={isDark ? "#020617" : "#ffffff"}
     >
       <View className="flex-1">
@@ -177,6 +299,13 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
               : "bg-slate-200 dark:bg-slate-800"
               }`}
             activeOpacity={0.8}
+            style={canPost ? {
+              shadowColor: "#0085ff",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 5,
+            } : undefined}
           >
             {isPosting ? (
               <ActivityIndicator size="small" color="white" />
@@ -211,7 +340,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                   placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                   value={text}
                   onChangeText={setText}
-                  maxLength={MAX_LENGTH}
+                  maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
                   autoFocus
                   textAlignVertical="top"
                   style={{ paddingTop: 0 }}
@@ -225,6 +354,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 className="mt-4 pl-12"
+                contentContainerStyle={{ paddingRight: 16 }}
               >
                 {images.map((uri, index) => (
                   <View key={index} className="relative mr-3">
@@ -235,7 +365,10 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                     />
                     <TouchableOpacity
                       onPress={() => removeImage(index)}
-                      className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5"
+                      className="absolute right-2 top-2 rounded-full p-2"
+                      style={{
+                        backgroundColor: "rgba(0,0,0,0.6)",
+                      }}
                     >
                       <Feather name="x" size={16} color="white" />
                     </TouchableOpacity>
@@ -244,30 +377,60 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
               </ScrollView>
             )}
           </ScrollView>
-
-          {/* Bottom Toolbar */}
-          <View
-            className="border-t border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950"
-            style={{ paddingBottom: Math.max(insets.bottom, 12) }}
-          >
-            <View className="flex-row items-center justify-between">
-              <TouchableOpacity
-                onPress={pickImage}
-                className="rounded-full bg-indigo-50 p-3 active:bg-indigo-100 dark:bg-[#1e293b]"
-              >
-                <Feather name="image" size={24} color={isDark ? "#0085ff" : "#0085ff"} />
-              </TouchableOpacity>
-
-              <Text className={`text-sm font-medium ${text.length > MAX_LENGTH * 0.9
-                ? "text-red-500"
-                : "text-slate-400 dark:text-slate-600"
-                }`}>
-                {text.length} / {MAX_LENGTH}
-              </Text>
-            </View>
-          </View>
         </View>
+
+        {/* Toolbar at bottom - animated to move with keyboard */}
+        <Animated.View 
+          style={[
+            { 
+              position: 'absolute', 
+              bottom: 0, 
+              left: 0, 
+              right: 0,
+              backgroundColor: isDark ? "#020617" : "#ffffff",
+            },
+            toolbarAnimatedStyle
+          ]}
+        >
+          {renderToolbar()}
+        </Animated.View>
       </View>
     </ScreenWrapper>
   );
 }
+
+const styles = StyleSheet.create({
+  toolbarWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  glassToolbar: {
+    width: '100%',
+    borderRadius: 24,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  blurToolbar: {
+    width: '100%',
+    borderRadius: 24,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  toolbarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toolbarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+});
