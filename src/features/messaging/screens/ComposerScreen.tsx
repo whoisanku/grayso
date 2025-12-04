@@ -14,14 +14,14 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { type RootStackParamList } from "../navigation/types";
+import { type RootStackParamList } from "../../../navigation/types";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
-import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
-import ScreenWrapper from "../components/ScreenWrapper";
+import { FALLBACK_PROFILE_IMAGE } from "../../../utils/deso";
+import ScreenWrapper from "../../../components/ScreenWrapper";
 
 const MAX_LENGTH = 280;
 

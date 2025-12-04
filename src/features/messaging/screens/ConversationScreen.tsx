@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useRef,
   useState,
-  memo,
 } from "react";
 import {
   ActivityIndicator,
@@ -41,8 +40,8 @@ import {
   PublicKeyToProfileEntryResponseMap,
   ProfileEntryResponse,
 } from "deso-protocol";
+import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../constants/messaging";
 import {
-  DEFAULT_KEY_MESSAGING_GROUP_NAME,
   encryptAndSendNewMessage,
   fetchPaginatedDmThreadMessages,
   fetchPaginatedGroupThreadMessages,
@@ -51,11 +50,10 @@ import {
   FALLBACK_PROFILE_IMAGE,
   getProfileDisplayName,
   getProfileImageUrl,
-} from "../utils/deso";
+} from "../../../utils/deso";
 import { fetchAccessGroupMembers, GroupMember } from "../services/desoGraphql";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../navigation/types";
-import { useFocusEffect } from "@react-navigation/native";
+import type { RootStackParamList } from "../../../navigation/types";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useHeaderHeight } from "@react-navigation/elements";
 
@@ -63,11 +61,16 @@ import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
 import { useKeyboardHandler } from "react-native-keyboard-controller";
 import { runOnJS } from "react-native-reanimated";
-import ScreenWrapper from "../components/ScreenWrapper";
+import ScreenWrapper from "../../../components/ScreenWrapper";
+import {
+  AUTO_LOAD_DELAY_MS,
+  MESSAGE_GROUPING_WINDOW_NS,
+  MESSAGE_PAGE_SIZE,
+  SCROLL_PAGINATION_TRIGGER,
+  SCROLL_TO_BOTTOM_THRESHOLD,
+} from "../constants/messaging";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
-
-const PAGE_SIZE = 10;
 
 export default function ConversationScreen({ navigation, route }: Props) {
   const {
@@ -86,9 +89,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
-  const [accessGroups, setAccessGroups] = useState<AccessGroupEntryResponse[]>(
-    []
-  );
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -277,19 +277,23 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const loadMessages = useCallback(
     async (initial = false, isPullToRefresh = false) => {
-      console.log("[ConversationScreen] loadMessages called", {
-        initial,
-        isPullToRefresh,
-        hasMore: hasMoreRef.current,
-        isLoading: isLoadingRef.current,
-        cursor: paginationCursorRef.current,
-      });
+      if (__DEV__) {
+        console.log("[ConversationScreen] loadMessages called", {
+          initial,
+          isPullToRefresh,
+          hasMore: hasMoreRef.current,
+          isLoading: isLoadingRef.current,
+          cursor: paginationCursorRef.current,
+        });
+      }
 
       if (isLoadingRef.current || (!initial && !hasMoreRef.current)) {
-        console.log("[ConversationScreen] loadMessages SKIPPED", {
-          isLoading: isLoadingRef.current,
-          hasMore: hasMoreRef.current,
-        });
+        if (__DEV__) {
+          console.log("[ConversationScreen] loadMessages SKIPPED", {
+            isLoading: isLoadingRef.current,
+            hasMore: hasMoreRef.current,
+          });
+        }
         return;
       }
 
@@ -329,16 +333,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
           const payload = {
             UserPublicKeyBase58Check: groupOwnerPublicKey,
             AccessGroupKeyName: threadAccessGroupKeyName,
-            MaxMessagesToFetch: PAGE_SIZE,
+            MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
             StartTimeStamp: groupChatTimestamp,
             StartTimeStampString: String(groupChatTimestamp),
           } as const;
 
-          console.log("[ConversationScreen] Fetching group messages", {
-            chatType,
-            payload,
-            afterCursor: paginationCursorRef.current,
-          });
+          if (__DEV__) {
+            console.log("[ConversationScreen] Fetching group messages", {
+              chatType,
+              payload,
+              afterCursor: paginationCursorRef.current,
+            });
+          }
 
           const groupResult = await fetchPaginatedGroupThreadMessages(
             payload,
@@ -346,7 +352,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             userPublicKey,
             {
               afterCursor: initial ? null : paginationCursorRef.current,
-              limit: PAGE_SIZE,
+              limit: MESSAGE_PAGE_SIZE,
               recipientAccessGroupOwnerPublicKey: groupOwnerPublicKey,
             }
           );
@@ -362,22 +368,24 @@ export default function ConversationScreen({ navigation, route }: Props) {
             UserGroupKeyName: userAccessGroupKeyName,
             PartyGroupOwnerPublicKeyBase58Check: counterPartyPublicKey,
             PartyGroupKeyName: threadAccessGroupKeyName,
-            MaxMessagesToFetch: PAGE_SIZE,
+            MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
             StartTimeStamp: dmTimestamp,
             StartTimeStampString: String(dmTimestamp),
           } as const;
 
-          console.log("[ConversationScreen] Fetching DM messages", {
-            chatType,
-            payload,
-          });
+          if (__DEV__) {
+            console.log("[ConversationScreen] Fetching DM messages", {
+              chatType,
+              payload,
+            });
+          }
 
           const dmResult = await fetchPaginatedDmThreadMessages(
             payload,
             accessGroupsRef.current,
             {
               afterCursor: initial ? null : paginationCursorRef.current,
-              limit: PAGE_SIZE,
+              limit: MESSAGE_PAGE_SIZE,
               fallbackBeforeTimestampNanos: fallbackBeforeTimestamp,
             }
           );
@@ -389,15 +397,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
           (msg): msg is DecryptedMessageEntryResponse => Boolean(msg)
         );
 
-        console.log(
-          "[ConversationScreen] Decrypted messages:",
-          decryptedMessages.map((m) => ({
-            hasDecryptedMessage: !!m.DecryptedMessage,
-            decryptedMessage: m.DecryptedMessage?.substring(0, 50),
-            error: (m as any).error,
-            chatType: m.ChatType,
-          }))
-        );
+        if (__DEV__) {
+          console.log(
+            "[ConversationScreen] Decrypted messages:",
+            decryptedMessages.map((m) => ({
+              hasDecryptedMessage: !!m.DecryptedMessage,
+              decryptedMessage: m.DecryptedMessage?.substring(0, 50),
+              error: (m as any).error,
+              chatType: m.ChatType,
+            }))
+          );
+        }
 
         setMessages((prev) => {
           const nextMessages = initial
@@ -413,17 +423,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
         });
 
         // Auto-load more if content doesn't fill screen
-        if (initial && decryptedMessages.length === PAGE_SIZE && hasMoreRef.current) {
+        if (initial && decryptedMessages.length === MESSAGE_PAGE_SIZE && hasMoreRef.current) {
           setTimeout(() => {
             if (!isLoadingRef.current && hasMoreRef.current) {
-              console.log("[ConversationScreen] Auto-loading more messages (content too short)");
+              if (__DEV__) {
+                console.log("[ConversationScreen] Auto-loading more messages (content too short)");
+              }
               loadMessages(false);
             }
-          }, 100);
+          }, AUTO_LOAD_DELAY_MS);
         }
 
         accessGroupsRef.current = result.updatedAllAccessGroups;
-        setAccessGroups(result.updatedAllAccessGroups);
 
         // Merge in any new profiles from the result for rendering avatars/usernames
         if (result.publicKeyToProfileEntryResponseMap) {
@@ -437,7 +448,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           let nextCursor = pageInfo?.endCursor ?? paginationCursorRef.current;
           let nextHasMore = Boolean(pageInfo?.hasNextPage && nextCursor);
 
-          if (!nextHasMore && decryptedMessages.length === PAGE_SIZE) {
+          if (!nextHasMore && decryptedMessages.length === MESSAGE_PAGE_SIZE) {
             nextHasMore = true;
             if (!nextCursor) {
               nextCursor =
@@ -453,7 +464,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           let nextCursor = pageInfo?.endCursor ?? paginationCursorRef.current;
           let nextHasMore = Boolean(pageInfo?.hasNextPage && nextCursor);
 
-          if (!nextHasMore && decryptedMessages.length === PAGE_SIZE) {
+          if (!nextHasMore && decryptedMessages.length === MESSAGE_PAGE_SIZE) {
             nextHasMore = true;
             if (!nextCursor) {
               nextCursor =
@@ -495,7 +506,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const bootstrap = async () => {
       // Reset state for the new conversation
       setMessages([]);
-      setAccessGroups([]);
       setHasMore(true);
       setError(null);
       setIsLoading(true);
@@ -801,390 +811,32 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return map;
   }, [messages]);
 
-  const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = ({
-    item,
-    index,
-  }) => {
-    return (
-      <MessageBubble
-        item={item}
-        index={index}
-        messages={messages}
-        profiles={profiles}
-        isGroupChat={isGroupChat}
-        onReply={handleReply}
-        onLongPress={handleMessageLongPress}
-        onBubbleMeasure={(id, layout) => {
-          bubbleLayoutsRef.current.set(id, layout);
-        }}
-        messageIdMap={messageIdMap}
-        isDark={isDark}
-
-      />
-    );
-  };
-
-  // Extracted to a separate component to use hooks/refs correctly
-  const MessageBubble = ({
-    item,
-    index,
-    messages,
-    profiles,
-    isGroupChat,
-    onReply,
-    onLongPress,
-    onBubbleMeasure,
-    messageIdMap,
-    isDark,
-
-  }: {
-    item: DecryptedMessageEntryResponse;
-    index: number;
-    messages: DecryptedMessageEntryResponse[];
-    profiles: PublicKeyToProfileEntryResponseMap;
-    isGroupChat: boolean;
-    onReply: (message: DecryptedMessageEntryResponse) => void;
-    onLongPress: (
-      message: DecryptedMessageEntryResponse,
-      layout?: { x: number; y: number; width: number; height: number }
-    ) => void;
-    onBubbleMeasure?: (
-      id: string,
-      layout: { x: number; y: number; width: number; height: number }
-    ) => void;
-    messageIdMap: Map<string, DecryptedMessageEntryResponse>;
-    isDark: boolean;
-
-  }) => {
-    const swipeableRef = useRef<Swipeable>(null);
-    const bubbleContainerRef = useRef<View>(null);
-    const extraData = item.MessageInfo?.ExtraData || {};
-    const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
-    const isMine = Boolean(item.IsSender);
-    const hasError = (item as any).error;
-    const messageId = getMessageId(item);
-    const editedMessageText =
-      typeof (extraData as any).editedMessage === "string"
-        ? (extraData as any).editedMessage
-        : undefined;
-    const isEditedMessage =
-      isEditedValue(extraData?.edited) || Boolean(editedMessageText);
-    const baseMessageText =
-      item.DecryptedMessage ||
-      (hasError ? "Unable to decrypt this message." : "Decrypting…");
-    const messageText =
-      (isEditedMessage && editedMessageText ? editedMessageText : baseMessageText) ||
-      baseMessageText;
-    const rawMessageText = messageText?.trim();
-    const timestamp = item.MessageInfo?.TimestampNanos;
-    const previousTimestamp =
-      messages[index + 1]?.MessageInfo?.TimestampNanos ?? undefined;
-    const nextMessage = messages[index - 1];
-    const previousMessage = messages[index + 1];
-
-    const senderProfile = profiles[senderPk];
-    const displayName = getProfileDisplayName(senderProfile, senderPk);
-
-    // For group chats, try to use profile pic from GraphQL first
-    let avatarUri: string;
-    if (isGroupChat && senderProfile?.ExtraData?.LargeProfilePicURL) {
-      avatarUri = `https://node.deso.org/api/v0/get-single-profile-picture/${senderPk}?fallback=${senderProfile.ExtraData.LargeProfilePicURL}`;
-    } else {
-      avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ?? FALLBACK_PROFILE_IMAGE;
-    }
-    const hasAvatar = Boolean(avatarUri);
-    const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
-
-    // Reply logic
-    const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
-    const repliedToMessage = repliedToMessageId
-      ? messageIdMap.get(repliedToMessageId)
-      : null;
-
-    const renderReplyPreview = () => {
-      if (!repliedToMessageId) return null;
-
-      // If we found the message locally, use it. Otherwise try fallback from ExtraData.
-      const fallbackText = item.MessageInfo?.ExtraData?.RepliedToMessageDecryptedText;
-      const replyText = getDisplayedMessageText(repliedToMessage) || fallbackText || "Message not loaded";
-
-      const replySenderPk = repliedToMessage?.SenderInfo?.OwnerPublicKeyBase58Check;
-      const replySenderProfile = replySenderPk ? profiles[replySenderPk] : null;
-      const replyDisplayName = replySenderPk
-        ? getProfileDisplayName(replySenderProfile, replySenderPk)
-        : "Replied Message";
+  const renderItem: ListRenderItem<DecryptedMessageEntryResponse> = useCallback(
+    ({ item, index }) => {
+      const previousMessage = messages[index + 1];
+      const nextMessage = messages[index - 1];
+      const previousTimestamp = previousMessage?.MessageInfo?.TimestampNanos;
 
       return (
-        <View
-          style={{
-            backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
-            borderLeftWidth: 4,
-            borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
-            borderRadius: 4,
-            padding: 6,
-            marginBottom: 6,
+        <MemoizedMessageBubble
+          item={item}
+          previousMessage={previousMessage}
+          nextMessage={nextMessage}
+          previousTimestamp={previousTimestamp}
+          profiles={profiles}
+          isGroupChat={isGroupChat}
+          onReply={handleReply}
+          onLongPress={handleMessageLongPress}
+          onBubbleMeasure={(id, layout) => {
+            bubbleLayoutsRef.current.set(id, layout);
           }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: "700",
-              color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
-              marginBottom: 2,
-            }}
-            numberOfLines={1}
-          >
-            {replyDisplayName}
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
-            }}
-            numberOfLines={2}
-          >
-            {replyText}
-          </Text>
-        </View>
+          messageIdMap={messageIdMap}
+          isDark={isDark}
+        />
       );
-    };
-
-    const renderSwipeAction = (
-      _progress: Animated.AnimatedInterpolation<number>,
-      dragX: Animated.AnimatedInterpolation<number>
-    ) => {
-      const scale = dragX.interpolate({
-        inputRange: [-50, 0, 50],
-        outputRange: [1, 0, 1],
-        extrapolate: "clamp",
-      });
-
-      return (
-        <View
-          style={{
-            justifyContent: "center",
-            alignItems: "center",
-            width: 50,
-            height: "100%",
-          }}
-        >
-          <Animated.View style={{ transform: [{ scale }] }}>
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: isDark ? "#334155" : "#e2e8f0",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Feather name="corner-up-left" size={18} color={isDark ? "#cbd5e1" : "#64748b"} />
-            </View>
-          </Animated.View>
-        </View>
-      );
-    };
-
-    if (rawMessageText === "🚀") {
-      return (
-        <View style={{ marginBottom: 12 }}>
-          {showDayDivider ? (
-            <View className="items-center py-1">
-              <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
-                <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
-                  {formatDayLabel(timestamp)}
-                </Text>
-              </View>
-            </View>
-          ) : null}
-          <View
-            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-              }`}
-          >
-            {!isMine ? (
-              <View className="mr-2" style={{ width: 32 }}>
-                {hasAvatar ? (
-                  <Image
-                    source={{ uri: avatarUri }}
-                    className="h-8 w-8 rounded-full bg-gray-200"
-                  />
-                ) : (
-                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                  </View>
-                )}
-              </View>
-            ) : null}
-            <Text
-              className={`text-[28px] ${isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
-                }`}
-            >
-              🚀
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    // Determine message grouping for curved edges
-    const isNextMessageFromSameSender = nextMessage?.IsSender === item.IsSender;
-    const isPreviousMessageFromSameSender = previousMessage?.IsSender === item.IsSender;
-
-    // Check if messages are within 1 minute of each other for grouping
-    const isNextMessageClose = nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
-      ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) < 60_000_000_000
-      : false;
-    const isPreviousMessageClose = previousMessage && timestamp && previousMessage.MessageInfo?.TimestampNanos
-      ? Math.abs(timestamp - previousMessage.MessageInfo.TimestampNanos) < 60_000_000_000
-      : false;
-
-    const isFirstInGroup = !isPreviousMessageFromSameSender || !isPreviousMessageClose;
-    const isLastInGroup = !isNextMessageFromSameSender || !isNextMessageClose;
-    const isOnlyMessage = isFirstInGroup && isLastInGroup;
-
-    // Dynamic border radius based on position in group
-    const getBorderRadius = () => {
-      if (isOnlyMessage) return { borderRadius: 20 };
-      if (isMine) {
-        if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
-        if (isLastInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 0, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
-        return { borderTopLeftRadius: 20, borderTopRightRadius: 4, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
-      } else {
-        if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
-        if (isLastInGroup) return { borderTopLeftRadius: 0, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
-        return { borderTopLeftRadius: 4, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
-      }
-    };
-
-    const marginBottom = isLastInGroup ? 16 : 2;
-
-    return (
-      <View
-        style={{ marginBottom }}
-        ref={bubbleContainerRef}
-        onLayout={() => {
-          if (!messageId) return;
-          bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
-            if (width > 0 && height > 0) {
-              onBubbleMeasure?.(messageId, { x, y, width, height });
-            }
-          });
-        }}
-      >
-        {showDayDivider ? (
-          <View className="items-center py-1">
-            <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
-              <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
-                {formatDayLabel(timestamp)}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-        <Swipeable
-          ref={swipeableRef}
-          renderRightActions={isMine ? renderSwipeAction : undefined}
-          renderLeftActions={isMine ? undefined : renderSwipeAction}
-          onSwipeableWillOpen={() => {
-            onReply(item);
-            swipeableRef.current?.close();
-          }}
-          overshootRight={false}
-          overshootLeft={false}
-        >
-          <TouchableWithoutFeedback
-            onLongPress={() => {
-              bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
-                if (width > 0 && height > 0) {
-                  if (messageId) {
-                    onBubbleMeasure?.(messageId, { x, y, width, height });
-                  }
-                  onLongPress(item, { x, y, width, height });
-                } else {
-                  onLongPress(item);
-                }
-              });
-            }}
-            delayLongPress={80}
-          >
-            <View
-              className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-                }`}
-            >
-              {!isMine ? (
-                <View className="mr-2" style={{ width: 32 }}>
-                  {isLastInGroup && hasAvatar ? (
-                    <Image
-                      source={{ uri: avatarUri }}
-                      className="h-8 w-8 rounded-full bg-gray-200"
-                    />
-                  ) : isLastInGroup ? (
-                    <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                      <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-              <View
-                className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
-                  }`}
-                style={[
-                  getBorderRadius(),
-                ]}
-              >
-                {!isMine && isFirstInGroup && (
-                  <Text
-                    className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                    numberOfLines={1}
-                  >
-                    {displayName}
-                  </Text>
-                )}
-                {renderReplyPreview()}
-                <Text
-                  className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
-                    }`}
-                >
-                  {messageText}
-                </Text>
-                {isLastInGroup && (
-                  <View
-                    className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
-                      }`}
-                  >
-                  {hasError ? (
-                    <Text className="text-[10px] font-medium text-red-500">
-                      Failed to decrypt
-                    </Text>
-                  ) : (
-                    <>
-                      {isEditedMessage ? (
-                        <Text
-                          className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
-                            }`}
-                        >
-                          Edited
-                        </Text>
-                      ) : null}
-                      {timestamp ? (
-                        <Text
-                          className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                            }`}
-                        >
-                            {formatTimestamp(timestamp)}
-                          </Text>
-                        ) : null}
-                      </>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </Swipeable>
-      </View>
-    );
-  };
+    },
+    [handleMessageLongPress, handleReply, isDark, isGroupChat, messageIdMap, messages, profiles]
+  );
 
   const keyExtractor = (
     item: DecryptedMessageEntryResponse,
@@ -1384,12 +1036,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
             }
             onEndReachedThreshold={2}
             onEndReached={() => {
-              console.log("[ConversationScreen] onEndReached triggered", {
-                hasMore: hasMoreRef.current,
-                isLoading: isLoadingRef.current,
-                cursor: paginationCursorRef.current,
-                messagesCount: messages.length,
-              });
               if (!isLoadingRef.current && hasMoreRef.current) {
                 loadMessages(false);
               }
@@ -1401,7 +1047,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
               scrollOffsetRef.current = distanceFromTop;
 
               // Show scroll-to-bottom button if we are more than 400px up
-              if (distanceFromTop > 400) {
+              if (distanceFromTop > SCROLL_TO_BOTTOM_THRESHOLD) {
                 if (!showScrollToBottom) {
                   scrollToBottomAnim.setValue(1); // Reset opacity when showing
                   setShowScrollToBottom(true);
@@ -1409,19 +1055,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
               } else {
                 if (showScrollToBottom) setShowScrollToBottom(false);
               }
-
-              console.log("[ConversationScreen] Scroll event", {
-                contentOffsetY: contentOffset.y,
-                contentHeight: contentSize.height,
-                layoutHeight: layoutMeasurement.height,
-                distanceFromTop,
-              });
-
-              if (distanceFromTop > 200 && !isLoadingRef.current && hasMoreRef.current) {
-                console.log("[ConversationScreen] Manual scroll pagination trigger", {
-                  distanceFromTop,
-                  hasMore: hasMoreRef.current,
-                });
+              if (distanceFromTop > SCROLL_PAGINATION_TRIGGER && !isLoadingRef.current && hasMoreRef.current) {
                 loadMessages(false);
               }
             }}
@@ -1790,6 +1424,367 @@ export default function ConversationScreen({ navigation, route }: Props) {
         </SafeAreaView>
       </Modal>
     </ScreenWrapper>
+  );
+}
+
+type MessageBubbleProps = {
+  item: DecryptedMessageEntryResponse;
+  previousMessage?: DecryptedMessageEntryResponse;
+  nextMessage?: DecryptedMessageEntryResponse;
+  previousTimestamp?: number;
+  profiles: PublicKeyToProfileEntryResponseMap;
+  isGroupChat: boolean;
+  onReply: (message: DecryptedMessageEntryResponse) => void;
+  onLongPress: (
+    message: DecryptedMessageEntryResponse,
+    layout?: { x: number; y: number; width: number; height: number }
+  ) => void;
+  onBubbleMeasure?: (
+    id: string,
+    layout: { x: number; y: number; width: number; height: number }
+  ) => void;
+  messageIdMap: Map<string, DecryptedMessageEntryResponse>;
+  isDark: boolean;
+};
+
+const MemoizedMessageBubble = React.memo(MessageBubble);
+
+function MessageBubble({
+  item,
+  previousMessage,
+  nextMessage,
+  previousTimestamp,
+  profiles,
+  isGroupChat,
+  onReply,
+  onLongPress,
+  onBubbleMeasure,
+  messageIdMap,
+  isDark,
+}: MessageBubbleProps) {
+  const swipeableRef = useRef<Swipeable>(null);
+  const bubbleContainerRef = useRef<View>(null);
+  const extraData = item.MessageInfo?.ExtraData || {};
+  const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+  const isMine = Boolean(item.IsSender);
+  const hasError = (item as any).error;
+  const messageId = getMessageId(item);
+  const editedMessageText =
+    typeof (extraData as any).editedMessage === "string"
+      ? (extraData as any).editedMessage
+      : undefined;
+  const isEditedMessage =
+    isEditedValue(extraData?.edited) || Boolean(editedMessageText);
+  const baseMessageText =
+    item.DecryptedMessage ||
+    (hasError ? "Unable to decrypt this message." : "Decrypting…");
+  const messageText =
+    (isEditedMessage && editedMessageText ? editedMessageText : baseMessageText) ||
+    baseMessageText;
+  const rawMessageText = messageText?.trim();
+  const timestamp = item.MessageInfo?.TimestampNanos;
+
+  const senderProfile = profiles[senderPk];
+  const displayName = getProfileDisplayName(senderProfile, senderPk);
+
+  // For group chats, try to use profile pic from GraphQL first
+  let avatarUri: string;
+  if (isGroupChat && senderProfile?.ExtraData?.LargeProfilePicURL) {
+    avatarUri = `https://node.deso.org/api/v0/get-single-profile-picture/${senderPk}?fallback=${senderProfile.ExtraData.LargeProfilePicURL}`;
+  } else {
+    avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ?? FALLBACK_PROFILE_IMAGE;
+  }
+  const hasAvatar = Boolean(avatarUri);
+  const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
+
+  // Reply logic
+  const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
+  const repliedToMessage = repliedToMessageId
+    ? messageIdMap.get(repliedToMessageId)
+    : null;
+
+  const renderReplyPreview = () => {
+    if (!repliedToMessageId) return null;
+
+    // If we found the message locally, use it. Otherwise try fallback from ExtraData.
+    const fallbackText = item.MessageInfo?.ExtraData?.RepliedToMessageDecryptedText;
+    const replyText = getDisplayedMessageText(repliedToMessage) || fallbackText || "Message not loaded";
+
+    const replySenderPk = repliedToMessage?.SenderInfo?.OwnerPublicKeyBase58Check;
+    const replySenderProfile = replySenderPk ? profiles[replySenderPk] : null;
+    const replyDisplayName = replySenderPk
+      ? getProfileDisplayName(replySenderProfile, replySenderPk)
+      : "Replied Message";
+
+    return (
+      <View
+        style={{
+          backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
+          borderLeftWidth: 4,
+          borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+          borderRadius: 4,
+          padding: 6,
+          marginBottom: 6,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 11,
+            fontWeight: "700",
+            color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+            marginBottom: 2,
+          }}
+          numberOfLines={1}
+        >
+          {replyDisplayName}
+        </Text>
+        <Text
+          style={{
+            fontSize: 12,
+            color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
+          }}
+          numberOfLines={2}
+        >
+          {replyText}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderSwipeAction = (
+    _progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-50, 0, 50],
+      outputRange: [1, 0, 1],
+      extrapolate: "clamp",
+    });
+
+    return (
+      <View
+        style={{
+          justifyContent: "center",
+          alignItems: "center",
+          width: 50,
+          height: "100%",
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: isDark ? "#334155" : "#e2e8f0",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <Feather name="corner-up-left" size={18} color={isDark ? "#cbd5e1" : "#64748b"} />
+          </View>
+        </Animated.View>
+      </View>
+    );
+  };
+
+  if (rawMessageText === "🚀") {
+    return (
+      <View style={{ marginBottom: 12 }}>
+        {showDayDivider ? (
+          <View className="items-center py-1">
+            <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
+              <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
+                {formatDayLabel(timestamp)}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+        <View
+          className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
+            }`}
+        >
+          {!isMine ? (
+            <View className="mr-2" style={{ width: 32 }}>
+              {hasAvatar ? (
+                <Image
+                  source={{ uri: avatarUri }}
+                  className="h-8 w-8 rounded-full bg-gray-200"
+                />
+              ) : (
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                  <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                </View>
+              )}
+            </View>
+          ) : null}
+          <Text
+            className={`text-[28px] ${isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
+              }`}
+          >
+            🚀
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Determine message grouping for curved edges
+  const isNextMessageFromSameSender = nextMessage?.IsSender === item.IsSender;
+  const isPreviousMessageFromSameSender = previousMessage?.IsSender === item.IsSender;
+
+  // Check if messages are within 1 minute of each other for grouping
+  const isNextMessageClose = nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
+    ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) < MESSAGE_GROUPING_WINDOW_NS
+    : false;
+  const isPreviousMessageClose = previousMessage && timestamp && previousMessage.MessageInfo?.TimestampNanos
+    ? Math.abs(timestamp - previousMessage.MessageInfo.TimestampNanos) < MESSAGE_GROUPING_WINDOW_NS
+    : false;
+
+  const isFirstInGroup = !isPreviousMessageFromSameSender || !isPreviousMessageClose;
+  const isLastInGroup = !isNextMessageFromSameSender || !isNextMessageClose;
+  const isOnlyMessage = isFirstInGroup && isLastInGroup;
+
+  // Dynamic border radius based on position in group
+  const getBorderRadius = () => {
+    if (isOnlyMessage) return { borderRadius: 20 };
+    if (isMine) {
+      if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
+      if (isLastInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 0, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
+      return { borderTopLeftRadius: 20, borderTopRightRadius: 4, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
+    } else {
+      if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
+      if (isLastInGroup) return { borderTopLeftRadius: 0, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
+      return { borderTopLeftRadius: 4, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
+    }
+  };
+
+  const marginBottom = isLastInGroup ? 16 : 2;
+
+  return (
+    <View
+      style={{ marginBottom }}
+      ref={bubbleContainerRef}
+      onLayout={() => {
+        if (!messageId) return;
+        bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
+          if (width > 0 && height > 0) {
+            onBubbleMeasure?.(messageId, { x, y, width, height });
+          }
+        });
+      }}
+    >
+      {showDayDivider ? (
+        <View className="items-center py-1">
+          <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
+            <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
+              {formatDayLabel(timestamp)}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={isMine ? renderSwipeAction : undefined}
+        renderLeftActions={isMine ? undefined : renderSwipeAction}
+        onSwipeableWillOpen={() => {
+          onReply(item);
+          swipeableRef.current?.close();
+        }}
+        overshootRight={false}
+        overshootLeft={false}
+      >
+        <TouchableWithoutFeedback
+          onLongPress={() => {
+            bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
+              if (width > 0 && height > 0) {
+                if (messageId) {
+                  onBubbleMeasure?.(messageId, { x, y, width, height });
+                }
+                onLongPress(item, { x, y, width, height });
+              } else {
+                onLongPress(item);
+              }
+            });
+          }}
+          delayLongPress={80}
+        >
+          <View
+            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
+              }`}
+          >
+            {!isMine ? (
+              <View className="mr-2" style={{ width: 32 }}>
+                {isLastInGroup && hasAvatar ? (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    className="h-8 w-8 rounded-full bg-gray-200"
+                  />
+                ) : isLastInGroup ? (
+                  <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <View
+              className={`max-w-[75%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+                }`}
+              style={[
+                getBorderRadius(),
+              ]}
+            >
+              {!isMine && isFirstInGroup && (
+                <Text
+                  className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                  numberOfLines={1}
+                >
+                  {displayName}
+                </Text>
+              )}
+              {renderReplyPreview()}
+              <Text
+                className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+                  }`}
+              >
+                {messageText}
+              </Text>
+              {isLastInGroup && (
+                <View
+                  className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                    }`}
+                >
+                  {hasError ? (
+                    <Text className="text-[10px] font-medium text-red-500">
+                      Failed to decrypt
+                    </Text>
+                  ) : (
+                    <>
+                      {isEditedMessage ? (
+                        <Text
+                          className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
+                            }`}
+                        >
+                          Edited
+                        </Text>
+                      ) : null}
+                      {timestamp ? (
+                        <Text
+                          className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                        >
+                          {formatTimestamp(timestamp)}
+                        </Text>
+                      ) : null}
+                    </>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Swipeable>
+    </View>
   );
 }
 

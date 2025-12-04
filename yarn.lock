@@ -2505,7 +2505,7 @@ babel-preset-current-node-syntax@^1.0.0:
     "@babel/plugin-syntax-private-property-in-object" "^7.14.5"
     "@babel/plugin-syntax-top-level-await" "^7.14.5"
 
-babel-preset-expo@~54.0.7:
+babel-preset-expo@^54.0.7, babel-preset-expo@~54.0.7:
   version "54.0.7"
   resolved "https://registry.npmjs.org/babel-preset-expo/-/babel-preset-expo-54.0.7.tgz"
   integrity sha512-JENWk0bvxW4I1ftveO8GRtX2t2TH6N4Z0TPvIHxroZ/4SswUfyNsUNbbP7Fm4erj3ar/JHGri5kTZ+s3xdjHZw==
@@ -3607,10 +3607,10 @@ expo-auth-session@~7.0.9:
     expo-web-browser "~15.0.9"
     invariant "^2.2.4"
 
-expo-blur@~13.0.2:
-  version "13.0.3"
-  resolved "https://registry.npmjs.org/expo-blur/-/expo-blur-13.0.3.tgz"
-  integrity sha512-z5W9ZGlG6ZiRLuoJZG1AHRvjK8j+2+nc/mtvEtyAa8T/8iTNpUnX4eC8xXDoTL/H4y2pc3cHvytDjCXJG26pcQ==
+expo-blur@~15.0.7:
+  version "15.0.7"
+  resolved "https://registry.npmjs.org/expo-blur/-/expo-blur-15.0.7.tgz"
+  integrity sha512-SugQQbQd+zRPy8z2G5qDD4NqhcD7srBF7fN7O7yq6q7ZFK59VWvpDxtMoUkmSfdxgqONsrBN/rLdk00USADrMg==
 
 expo-clipboard@~8.0.7:
   version "8.0.7"

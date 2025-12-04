@@ -1,9 +1,9 @@
 import React, { useContext, useEffect } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeTabs from "./HomeTabs";
-import ComposerScreen from "../screens/ComposerScreen";
-import LoginScreen from "../screens/LoginScreen";
-import ConversationScreen from "../screens/ConversationScreen";
+import ComposerScreen from "../features/messaging/screens/ComposerScreen";
+import LoginScreen from "../features/auth/screens/LoginScreen";
+import ConversationScreen from "../features/messaging/screens/ConversationScreen";
 
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { type RootStackParamList } from "./types";

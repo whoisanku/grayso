@@ -13,6 +13,7 @@ import {
   waitForTransactionFound,
 } from "deso-protocol";
 import { bytesToHex } from "@noble/hashes/utils";
+import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../constants/messaging";
 import {
   getPaginatedMessagesForDmThread,
   getPaginatedMessagesForGroupThread,
@@ -26,9 +27,6 @@ import {
   normalizeTimestampToNanos,
 } from "./desoGraphql";
 
-// This was causing issues, so defining it locally.
-// You might want to create the files and export from there.
-export const DEFAULT_KEY_MESSAGING_GROUP_NAME = "default-key";
 const USER_TO_SEND_MESSAGE_TO = ""; // Add a public key here
 
 export type Conversation = {
@@ -356,6 +354,7 @@ export async function fetchPaginatedDmThreadMessages(
     limit = payload.MaxMessagesToFetch ?? 10,
     fallbackBeforeTimestampNanos,
   } = options;
+  let nextPageInfo: { hasNextPage: boolean; endCursor: string | null } | null = null;
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     console.log("[fetchPaginatedDmThreadMessages] 🚀 Attempting GraphQL fetch", {
@@ -549,8 +548,7 @@ export async function fetchPaginatedDmThreadMessages(
         restResponse.PublicKeyToProfileEntryResponse
       );
 
-      let pageInfoLocal = pageInfo;
-      pageInfoLocal = {
+      nextPageInfo = {
         hasNextPage: restDecryptResult.decrypted.length === limit,
         endCursor:
           restDecryptResult.decrypted.length === limit
@@ -572,7 +570,7 @@ export async function fetchPaginatedDmThreadMessages(
       decrypted,
       updatedAllAccessGroups,
       publicKeyToProfileEntryResponseMap,
-      pageInfo,
+      pageInfo: nextPageInfo ?? pageInfo,
     };
   } catch (error) {
     if (typeof __DEV__ !== "undefined" && __DEV__) {

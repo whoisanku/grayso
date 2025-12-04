@@ -21,15 +21,15 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   type HomeTabParamList,
   type RootStackParamList,
-} from "../navigation/types";
+} from "../../../navigation/types";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../services/conversations";
+import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../constants/messaging";
 import {
   formatPublicKey,
   FALLBACK_GROUP_IMAGE,
   FALLBACK_PROFILE_IMAGE,
   getProfileImageUrl,
-} from "../utils/deso";
+} from "../../../utils/deso";
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
@@ -429,4 +429,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-

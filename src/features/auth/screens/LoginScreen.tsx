@@ -1,10 +1,10 @@
 import React, { useContext, useState, useEffect } from "react";
 import { View, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import { identity } from "deso-protocol";
-import { getTransactionSpendingLimits } from "../utils/deso";
+import { getTransactionSpendingLimits } from "../../../utils/deso";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import AppLogo from "../assets/app-logo.svg";
-import ScreenWrapper from "../components/ScreenWrapper";
+import AppLogo from "../../../assets/app-logo.svg";
+import ScreenWrapper from "../../../components/ScreenWrapper";
 
 const LoginScreen = () => {
   const { currentUser, isLoading } = useContext(DeSoIdentityContext);
