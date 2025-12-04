@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  memo,
 } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   TextInputContentSizeChangeEventData,
   View,
@@ -24,7 +26,11 @@ import {
   TouchableWithoutFeedback,
   DeviceEventEmitter,
   Animated,
+  Dimensions,
 } from "react-native";
+import { Easing } from "react-native";
+import { BlurView } from "expo-blur";
+import * as Clipboard from "expo-clipboard";
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -108,6 +114,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [editingMessage, setEditingMessage] = useState<DecryptedMessageEntryResponse | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const actionSheetAnim = useRef(new Animated.Value(0)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const [selectedBubbleLayout, setSelectedBubbleLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  const bubbleLayoutsRef = useRef<Map<string, { x: number; y: number; width: number; height: number }>>(new Map());
   const lastRocketMessageKeyRef = useRef<string | null>(null);
   const reactionOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -588,20 +599,104 @@ export default function ConversationScreen({ navigation, route }: Props) {
     setReplyToMessage(message);
   }, []);
 
-  const handleMessageLongPress = useCallback((message: DecryptedMessageEntryResponse) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedMessage(message);
-  }, []);
+  const animateOpenActions = useCallback(() => {
+    actionSheetAnim.stopAnimation();
+    backdropAnim.stopAnimation();
+    actionSheetAnim.setValue(0);
+    backdropAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(backdropAnim, {
+        toValue: 1,
+        duration: 60,
+        useNativeDriver: true,
+      }),
+      Animated.timing(actionSheetAnim, {
+        toValue: 1,
+        duration: 80,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [actionSheetAnim, backdropAnim]);
+
+  const animateCloseActions = useCallback(
+    (onFinished?: () => void) => {
+      actionSheetAnim.stopAnimation();
+      backdropAnim.stopAnimation();
+      Animated.parallel([
+        Animated.timing(backdropAnim, {
+          toValue: 0,
+          duration: 60,
+          useNativeDriver: true,
+        }),
+        Animated.timing(actionSheetAnim, {
+          toValue: 0,
+          duration: 80,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          onFinished?.();
+        }
+      });
+    },
+    [actionSheetAnim, backdropAnim]
+  );
+
+  const handleMessageLongPress = useCallback(
+    (
+      message: DecryptedMessageEntryResponse,
+      layout?: { x: number; y: number; width: number; height: number }
+    ) => {
+      // Trigger haptic immediately for responsive feel
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      // Get layout immediately to avoid delays
+      const messageId = getMessageId(message);
+      let bubbleLayout = layout;
+      
+      if (!bubbleLayout && messageId) {
+        bubbleLayout = bubbleLayoutsRef.current.get(messageId) || undefined;
+      }
+      
+      const finalLayout = bubbleLayout || getFallbackBubbleLayout();
+      
+      // Batch all state updates together for better performance
+      // This prevents multiple re-renders
+      setSelectedMessage(message);
+      setSelectedBubbleLayout(finalLayout);
+      
+      // Start animation immediately after state is set
+      requestAnimationFrame(() => {
+        animateOpenActions();
+      });
+    },
+    [animateOpenActions]
+  );
 
   const handleCloseMessageActions = useCallback(() => {
-    setSelectedMessage(null);
-  }, []);
+    // Light haptic on dismiss
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    animateCloseActions(() => {
+      setSelectedMessage(null);
+      setSelectedBubbleLayout(null);
+    });
+  }, [animateCloseActions]);
 
   const handleActionReply = useCallback(() => {
     if (!selectedMessage) return;
     handleReply(selectedMessage);
-    setSelectedMessage(null);
-  }, [selectedMessage, handleReply]);
+    handleCloseMessageActions();
+  }, [selectedMessage, handleReply, handleCloseMessageActions]);
+
+  const handleActionCopy = useCallback(async () => {
+    if (!selectedMessage) return;
+    const text = getDisplayedMessageText(selectedMessage) || "";
+    if (!text.trim()) return;
+    await Clipboard.setStringAsync(text);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    handleCloseMessageActions();
+  }, [selectedMessage, handleCloseMessageActions]);
 
   const startEditingMessage = useCallback(
     (message?: DecryptedMessageEntryResponse | null) => {
@@ -614,9 +709,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
         "";
       setEditDraft(draft);
       setEditingMessage(target);
-      setSelectedMessage(null);
+      handleCloseMessageActions();
     },
-    [selectedMessage]
+    [selectedMessage, handleCloseMessageActions]
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -719,8 +814,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
         isGroupChat={isGroupChat}
         onReply={handleReply}
         onLongPress={handleMessageLongPress}
+        onBubbleMeasure={(id, layout) => {
+          bubbleLayoutsRef.current.set(id, layout);
+        }}
         messageIdMap={messageIdMap}
         isDark={isDark}
+
       />
     );
   };
@@ -734,8 +833,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
     isGroupChat,
     onReply,
     onLongPress,
+    onBubbleMeasure,
     messageIdMap,
     isDark,
+
   }: {
     item: DecryptedMessageEntryResponse;
     index: number;
@@ -743,15 +844,25 @@ export default function ConversationScreen({ navigation, route }: Props) {
     profiles: PublicKeyToProfileEntryResponseMap;
     isGroupChat: boolean;
     onReply: (message: DecryptedMessageEntryResponse) => void;
-    onLongPress: (message: DecryptedMessageEntryResponse) => void;
+    onLongPress: (
+      message: DecryptedMessageEntryResponse,
+      layout?: { x: number; y: number; width: number; height: number }
+    ) => void;
+    onBubbleMeasure?: (
+      id: string,
+      layout: { x: number; y: number; width: number; height: number }
+    ) => void;
     messageIdMap: Map<string, DecryptedMessageEntryResponse>;
     isDark: boolean;
+
   }) => {
     const swipeableRef = useRef<Swipeable>(null);
+    const bubbleContainerRef = useRef<View>(null);
     const extraData = item.MessageInfo?.ExtraData || {};
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
+    const messageId = getMessageId(item);
     const editedMessageText =
       typeof (extraData as any).editedMessage === "string"
         ? (extraData as any).editedMessage
@@ -949,7 +1060,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
     const marginBottom = isLastInGroup ? 16 : 2;
 
     return (
-      <View style={{ marginBottom }}>
+      <View
+        style={{ marginBottom }}
+        ref={bubbleContainerRef}
+        onLayout={() => {
+          if (!messageId) return;
+          bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
+            if (width > 0 && height > 0) {
+              onBubbleMeasure?.(messageId, { x, y, width, height });
+            }
+          });
+        }}
+      >
         {showDayDivider ? (
           <View className="items-center py-1">
             <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
@@ -971,8 +1093,19 @@ export default function ConversationScreen({ navigation, route }: Props) {
           overshootLeft={false}
         >
           <TouchableWithoutFeedback
-            onLongPress={() => onLongPress(item)}
-            delayLongPress={250}
+            onLongPress={() => {
+              bubbleContainerRef.current?.measureInWindow((x, y, width, height) => {
+                if (width > 0 && height > 0) {
+                  if (messageId) {
+                    onBubbleMeasure?.(messageId, { x, y, width, height });
+                  }
+                  onLongPress(item, { x, y, width, height });
+                } else {
+                  onLongPress(item);
+                }
+              });
+            }}
+            delayLongPress={80}
           >
             <View
               className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
@@ -1233,6 +1366,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
             ListFooterComponent={footer}
             inverted
             showsVerticalScrollIndicator={false}
+            // Performance optimizations
+            removeClippedSubviews={Platform.OS === 'android'}
+            windowSize={10}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={50}
+            initialNumToRender={15}
             contentContainerClassName={
               messages.length === 0
                 ? "flex-grow items-center justify-center px-6 pb-16"
@@ -1409,70 +1548,116 @@ export default function ConversationScreen({ navigation, route }: Props) {
       <Modal
         visible={Boolean(selectedMessage)}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={handleCloseMessageActions}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.4)",
-            justifyContent: "flex-end",
-          }}
-        >
+        <View style={{ flex: 1 }}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFillObject,
+              { opacity: backdropAnim },
+            ]}
+          >
+            {Platform.OS === "ios" || Platform.OS === "android" ? (
+              <BlurView
+                intensity={50}
+                tint={isDark ? "dark" : "light"}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : (
+              <View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  { backgroundColor: isDark ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.35)" },
+                ]}
+              />
+            )}
+          </Animated.View>
+
           <TouchableOpacity
             activeOpacity={1}
-            style={{ flex: 1 }}
+            style={StyleSheet.absoluteFill}
             onPress={handleCloseMessageActions}
           />
-          <View
-            className={`${isDark ? "bg-[#0f172a]" : "bg-white"} mx-4 mb-4 rounded-2xl shadow-lg border ${isDark ? "border-slate-800" : "border-slate-200"
-              }`}
-            style={{
-              paddingBottom: composerBottomInset + 8,
-            }}
-          >
-            <View className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-              <Text className={`text-sm font-semibold ${isDark ? "text-white" : "text-slate-900"}`}>
-                Message actions
-              </Text>
-              {selectedMessage ? (
-                <Text
-                  className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}
-                  numberOfLines={2}
+
+          {selectedMessage && selectedBubbleLayout ? (() => {
+            const positions = computeModalPositions(
+              selectedBubbleLayout, 
+              composerBottomInset, 
+              Boolean(selectedMessage?.IsSender)
+            );
+            return (
+              <>
+                {/* Bubble Preview */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: positions.bubbleTop,
+                    left: selectedBubbleLayout.x,
+                    width: selectedBubbleLayout.width,
+                    opacity: actionSheetAnim,
+                    transform: [
+                      {
+                        translateY: actionSheetAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [10, 0],
+                        }),
+                      },
+                      {
+                        scale: actionSheetAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.97, 1],
+                        }),
+                      },
+                    ],
+                  }}
                 >
-                  {getDisplayedMessageText(selectedMessage) || "Message"}
-                </Text>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              onPress={handleActionReply}
-              className="flex-row items-center px-4 py-3 active:opacity-70"
-            >
-              <Feather
-                name="corner-up-left"
-                size={18}
-                color={isDark ? "#e2e8f0" : "#0f172a"}
-              />
-              <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                Reply
-              </Text>
-            </TouchableOpacity>
-            {selectedMessage?.IsSender ? (
-              <TouchableOpacity
-                onPress={() => startEditingMessage(selectedMessage)}
-                className="flex-row items-center px-4 py-3 active:opacity-70"
-              >
-                <Feather
-                  name="edit-2"
-                  size={18}
-                  color={isDark ? "#e2e8f0" : "#0f172a"}
-                />
-                <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                  Edit message
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+                  <SelectedBubblePreview
+                    message={selectedMessage}
+                    profiles={profiles}
+                    isDark={isDark}
+                  />
+                </Animated.View>
+
+                {/* Action Sheet */}
+                <Animated.View
+                  style={{
+                    position: "absolute",
+                    top: positions.actionTop,
+                    left: positions.actionLeft,
+                    opacity: actionSheetAnim,
+                    transform: [
+                      {
+                        translateY: actionSheetAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      },
+                      {
+                        scale: actionSheetAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.96, 1],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <ActionSheetCard
+                    isDark={isDark}
+                    onReply={handleActionReply}
+                    onEdit={
+                      selectedMessage?.IsSender
+                        ? () => startEditingMessage(selectedMessage)
+                        : undefined
+                    }
+                    onCopy={handleActionCopy}
+                  />
+                </Animated.View>
+              </>
+            );
+          })() : null}
         </View>
       </Modal>
 
@@ -1743,6 +1928,245 @@ function getDisplayedMessageText(
   }
 
   return message.DecryptedMessage || undefined;
+}
+
+function SelectedBubblePreview({
+  message,
+  profiles,
+  isDark,
+}: {
+  message: DecryptedMessageEntryResponse;
+  profiles: PublicKeyToProfileEntryResponseMap;
+  isDark: boolean;
+}) {
+  const isMine = Boolean(message.IsSender);
+  const senderPk = message.SenderInfo?.OwnerPublicKeyBase58Check || "";
+  const senderProfile = profiles[senderPk];
+  const displayName = getProfileDisplayName(senderProfile, senderPk);
+  const text = getDisplayedMessageText(message) || "Message";
+  const extra = message.MessageInfo?.ExtraData as Record<string, any> | undefined;
+  const isEdited = isEditedValue(extra?.edited) || Boolean(extra?.editedMessage);
+  const timestamp = message.MessageInfo?.TimestampNanos;
+
+  // Get profile image URL for non-sender messages
+  const avatarUri = senderPk 
+    ? getProfileImageUrl(senderPk) || FALLBACK_PROFILE_IMAGE
+    : FALLBACK_PROFILE_IMAGE;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        justifyContent: isMine ? 'flex-end' : 'flex-start',
+      }}
+    >
+      {/* Profile image for non-sender messages */}
+      {!isMine && (
+        <Image
+          source={{ uri: avatarUri }}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            marginRight: 8,
+            backgroundColor: isDark ? '#334155' : '#e5e7eb',
+          }}
+        />
+      )}
+      <View
+        className={`max-w-[80%] px-4 py-3 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"}`}
+        style={{
+          borderRadius: 20,
+          shadowColor: "#000",
+          shadowOpacity: 0.35,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 12 },
+          elevation: 14,
+        }}
+      >
+        {!isMine && (
+          <Text
+            className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+        )}
+        <Text
+          className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+            }`}
+        >
+          {text}
+        </Text>
+        <View
+          className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+            }`}
+        >
+          {isEdited ? (
+            <Text
+              className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
+                }`}
+            >
+              Edited
+            </Text>
+          ) : null}
+          {timestamp ? (
+            <Text
+              className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
+                }`}
+            >
+              {formatTimestamp(timestamp)}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ActionSheetCard({
+  isDark,
+  onReply,
+  onEdit,
+  onCopy,
+}: {
+  isDark: boolean;
+  onReply: () => void;
+  onEdit?: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <View
+      className={`${isDark ? "bg-[#0f172a]" : "bg-white"} rounded-2xl shadow-lg border ${isDark ? "border-slate-800" : "border-slate-200"
+        }`}
+      style={{
+        width: ACTION_SHEET_WIDTH,
+        overflow: "hidden",
+      }}
+    >
+      <TouchableOpacity
+        onPress={onReply}
+        className="flex-row items-center px-4 py-3 active:opacity-70"
+      >
+        <Feather
+          name="corner-up-left"
+          size={18}
+          color={isDark ? "#e2e8f0" : "#0f172a"}
+        />
+        <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          Reply
+        </Text>
+      </TouchableOpacity>
+      {onEdit ? (
+        <TouchableOpacity
+          onPress={onEdit}
+          className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
+        >
+          <Feather
+            name="edit-2"
+            size={18}
+            color={isDark ? "#e2e8f0" : "#0f172a"}
+          />
+          <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            Edit message
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+      <TouchableOpacity
+        onPress={onCopy}
+        className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
+      >
+        <Feather
+          name="copy"
+          size={18}
+          color={isDark ? "#e2e8f0" : "#0f172a"}
+        />
+        <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          Copy
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const ACTION_SHEET_WIDTH = 240;
+const ESTIMATED_ACTION_HEIGHT = 100; // Height of Reply + Copy buttons
+const ESTIMATED_BUBBLE_HEIGHT = 80; // Approximate bubble height
+const MIN_GAP_BETWEEN_BUBBLE_AND_SHEET = 12; // Minimum gap to prevent overlap
+const PROFILE_IMAGE_WIDTH = 40; // 32px image + 8px margin
+const WINDOW = Dimensions.get("window");
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Compute positions for both bubble preview and action sheet
+ * Returns adjusted positions that ensure:
+ * 1. Both bubble and action sheet are visible on screen
+ * 2. Action sheet is below the bubble with proper gap
+ * 3. When near bottom, bubble moves up to make room
+ */
+function computeModalPositions(
+  layout: { x: number; y: number; width: number; height: number },
+  bottomInset: number,
+  isSender: boolean
+): {
+  bubbleTop: number;
+  actionTop: number;
+  actionLeft: number;
+} {
+  const headerHeight = 60; // Approximate header height
+  const minTop = headerHeight + 8;
+  const maxBottom = WINDOW.height - bottomInset - 20;
+  
+  // Total space needed: bubble height + gap + action sheet height
+  const totalNeededHeight = layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET + ESTIMATED_ACTION_HEIGHT;
+  
+  // Calculate where bubble and action sheet would go if placed at original position
+  let bubbleTop = layout.y;
+  let actionTop = layout.y + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
+  
+  // Check if action sheet would go below screen bottom
+  const actionBottom = actionTop + ESTIMATED_ACTION_HEIGHT;
+  if (actionBottom > maxBottom) {
+    // Need to move everything up
+    // Calculate how much to move up
+    const overflow = actionBottom - maxBottom;
+    bubbleTop = Math.max(minTop, bubbleTop - overflow);
+    actionTop = bubbleTop + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
+  }
+  
+  // Ensure bubble doesn't go above header
+  if (bubbleTop < minTop) {
+    bubbleTop = minTop;
+    actionTop = bubbleTop + layout.height + MIN_GAP_BETWEEN_BUBBLE_AND_SHEET;
+  }
+  
+  // Calculate left position - align with the bubble content (after profile image for received)
+  let actionLeft: number;
+  if (isSender) {
+    // For sent messages: align action sheet's right edge with bubble's right edge
+    const desiredLeft = layout.x + layout.width - ACTION_SHEET_WIDTH;
+    actionLeft = clamp(desiredLeft, 12, WINDOW.width - ACTION_SHEET_WIDTH - 12);
+  } else {
+    // For received messages: align with bubble content start (after profile image)
+    // The bubble's x position already includes the profile image offset
+    const desiredLeft = layout.x;
+    actionLeft = clamp(desiredLeft, 12, WINDOW.width - ACTION_SHEET_WIDTH - 12);
+  }
+  
+  return { bubbleTop, actionTop, actionLeft };
+}
+
+function getFallbackBubbleLayout(): { x: number; y: number; width: number; height: number } {
+  return {
+    x: 16,
+    y: WINDOW.height / 2 - 80,
+    width: ACTION_SHEET_WIDTH,
+    height: 60,
+  };
 }
 
 function formatTimestamp(timestampNanos: number): string {

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
+    "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.1.6",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.3.14",
@@ -23,6 +24,7 @@
     "deso-protocol": "^3.4.1",
     "expo": "~54.0.25",
     "expo-auth-session": "~7.0.9",
+    "expo-blur": "~13.0.2",
     "expo-clipboard": "~8.0.7",
     "expo-crypto": "^15.0.7",
     "expo-haptics": "^15.0.7",
