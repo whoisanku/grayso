@@ -33,7 +33,7 @@ import {
   ChatType,
   DecryptedMessageEntryResponse,
 } from "deso-protocol";
-import { DEFAULT_KEY_MESSAGING_GROUP_NAME, SCROLL_PAGINATION_TRIGGER, SCROLL_TO_BOTTOM_THRESHOLD } from "../constants/messaging";
+import { DEFAULT_KEY_MESSAGING_GROUP_NAME, SCROLL_TO_BOTTOM_THRESHOLD } from "../constants/messaging";
 import {
   FALLBACK_PROFILE_IMAGE,
   getProfileDisplayName,
@@ -164,7 +164,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
-  const nearTopRef = useRef(false);
+  const autoLoadTriggeredRef = useRef(false);
   const hasInitialScrollRef = useRef(false);
 
   // --- Effects & Callbacks ---
@@ -254,18 +254,35 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return 'text';
   }, []);
 
-  const header = useMemo(() => {
-    // This is the loader that appears at the top when fetching older messages.
-    // It should only show when paginating, not during initial load or pull-to-refresh.
-    if (!isLoading || isRefreshing) return null;
-    if (messages.length === 0 || !hasMore) return null;
+  const isPaginating = useMemo(() => {
+    return isLoading && messages.length > 0 && !isRefreshing;
+  }, [isLoading, messages.length, isRefreshing]);
 
+  const handleLoadOlder = useCallback(() => {
+    if (isLoading || !hasMore) return;
+    loadMessages(false);
+  }, [isLoading, hasMore, loadMessages]);
+
+  const topListHeader = useMemo(() => {
+    if (!hasMore && !isPaginating) return null;
     return (
       <View className="py-4 items-center">
-        <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
+        {isPaginating ? (
+          <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
+        ) : (
+          <TouchableOpacity
+            onPress={handleLoadOlder}
+            disabled={isLoading}
+            className="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700"
+          >
+            <Text className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+              Load earlier messages
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
-  }, [isLoading, isRefreshing, messages.length, hasMore, isDark]);
+  }, [handleLoadOlder, hasMore, isPaginating, isDark, isLoading]);
 
   const footer = useMemo(() => {
     if (!error) return null;
@@ -369,7 +386,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             renderItem={renderItem}
             // @ts-ignore - estimatedItemSize exists but type definitions lag behind
             estimatedItemSize={80}
-            ListHeaderComponent={header} // Spinner appears above messages when loading older ones
+            ListHeaderComponent={topListHeader}
             ListFooterComponent={footer} // Error/info near bottom
             refreshControl={
               <RefreshControl
@@ -392,7 +409,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
               );
 
               scrollOffsetRef.current = distanceFromBottom;
-              nearTopRef.current = rawOffsetY <= 0;
+
+              const NEAR_TOP_THRESHOLD = 80;
+              const RESET_THRESHOLD = NEAR_TOP_THRESHOLD + 40;
+              if (rawOffsetY <= NEAR_TOP_THRESHOLD) {
+                if (!autoLoadTriggeredRef.current && hasMore && !isLoading) {
+                  autoLoadTriggeredRef.current = true;
+                  loadMessages(false);
+                }
+              } else if (rawOffsetY > RESET_THRESHOLD) {
+                autoLoadTriggeredRef.current = false;
+              }
 
               if (distanceFromBottom > SCROLL_TO_BOTTOM_THRESHOLD) {
                 if (!showScrollToBottom) {
@@ -406,18 +433,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
             scrollEventThrottle={16}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            onEndReachedThreshold={0.01}
-            onEndReached={() => {
-              // Better debouncing for pagination
-              if (!isLoading && hasMore && nearTopRef.current) {
-                // Use a longer timeout to prevent rapid successive calls
-                setTimeout(() => {
-                  if (!isLoading && hasMore && nearTopRef.current) {
-                    loadMessages(false);
-                  }
-                }, 300);
-              }
-            }}
             ListEmptyComponent={() => (
               <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400 }}>
                 {isLoading ? (
@@ -561,6 +576,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     message={selectedMessage}
                     profiles={profiles}
                     isDark={isDark}
+                    messageIdMap={messageIdMap}
+                    layout={{ width: selectedBubbleLayout.width, height: selectedBubbleLayout.height }}
                   />
                 </Reanimated.View>
 
