@@ -42,6 +42,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { Easing } from "react-native";
 import { BlurView } from "expo-blur";
+import { LiquidGlassView, isIOS26OrAbove } from "../../../utils/liquidGlass";
 import * as Clipboard from "expo-clipboard";
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -987,14 +988,29 @@ export default function ConversationScreen({ navigation, route }: Props) {
       useKeyboardController={true}
     >
       {/* Custom Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-black">
+      <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center flex-1">
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             className="mr-3"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="chevron-left" size={22} color={isDark ? "#fff" : "#000"} />
+              </LiquidGlassView>
+            ) : (
+              <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
+            )}
           </TouchableOpacity>
 
           <View className="flex-1">
@@ -1191,16 +1207,37 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 // Scroll to bottom
                 flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
               }}
-              className="h-10 w-10 bg-white dark:bg-slate-700 rounded-full items-center justify-center shadow-md border border-gray-200 dark:border-slate-600"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 4
-              }}
+              activeOpacity={0.8}
             >
-              <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+              {LiquidGlassView ? (
+                <LiquidGlassView
+                  effect="regular"
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#1f2937"} />
+                </LiquidGlassView>
+              ) : (
+                <BlurView
+                  intensity={80}
+                  tint={isDark ? "dark" : "light"}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+                </BlurView>
+              )}
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -1380,7 +1417,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowMembersModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-white dark:bg-black">
+        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
           <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
             <Text className="text-xl font-bold text-[#111] dark:text-white">Group Members</Text>
             <TouchableOpacity

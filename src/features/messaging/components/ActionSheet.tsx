@@ -4,6 +4,8 @@ import { Feather } from "@expo/vector-icons";
 import { DecryptedMessageEntryResponse, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { getProfileDisplayName, getProfileImageUrl, FALLBACK_PROFILE_IMAGE } from "../../../utils/deso";
 import { getDisplayedMessageText, isEditedValue, formatTimestamp } from "../utils/messageUtils";
+import { LiquidGlassView } from "../../../utils/liquidGlass";
+import { BlurView } from "expo-blur";
 
 const ACTION_SHEET_WIDTH = 240;
 const ESTIMATED_ACTION_HEIGHT = 100;
@@ -23,15 +25,8 @@ export function ActionSheetCard({
     onEdit,
     onCopy,
 }: ActionSheetCardProps) {
-    return (
-        <View
-            className={`${isDark ? "bg-[#0f172a]" : "bg-white"} rounded-2xl shadow-lg border ${isDark ? "border-slate-800" : "border-slate-200"
-                }`}
-            style={{
-                width: ACTION_SHEET_WIDTH,
-                overflow: "hidden",
-            }}
-        >
+    const cardContent = (
+        <>
             <TouchableOpacity
                 onPress={onReply}
                 className="flex-row items-center px-4 py-3 active:opacity-70"
@@ -48,7 +43,7 @@ export function ActionSheetCard({
             {onEdit ? (
                 <TouchableOpacity
                     onPress={onEdit}
-                    className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
+                    className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200/30 dark:border-slate-700/30"
                 >
                     <Feather
                         name="edit-2"
@@ -62,7 +57,7 @@ export function ActionSheetCard({
             ) : null}
             <TouchableOpacity
                 onPress={onCopy}
-                className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
+                className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200/30 dark:border-slate-700/30"
             >
                 <Feather
                     name="copy"
@@ -73,7 +68,38 @@ export function ActionSheetCard({
                     Copy
                 </Text>
             </TouchableOpacity>
-        </View>
+        </>
+    );
+
+    // Use LiquidGlassView for iOS 26+, otherwise fall back to BlurView or plain View
+    if (LiquidGlassView) {
+        return (
+            <LiquidGlassView
+                effect="regular"
+                style={{
+                    width: ACTION_SHEET_WIDTH,
+                    borderRadius: 16,
+                    overflow: "hidden",
+                }}
+            >
+                {cardContent}
+            </LiquidGlassView>
+        );
+    }
+
+    // Fallback for older iOS
+    return (
+        <BlurView
+            intensity={80}
+            tint={isDark ? "dark" : "light"}
+            style={{
+                width: ACTION_SHEET_WIDTH,
+                borderRadius: 16,
+                overflow: "hidden",
+            }}
+        >
+            {cardContent}
+        </BlurView>
     );
 }
 

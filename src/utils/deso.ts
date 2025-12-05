@@ -73,6 +73,11 @@ export function getTransactionSpendingLimits(
     TransactionCountLimitMap: {
       AUTHORIZE_DERIVED_KEY: 1,
       NEW_MESSAGE: UNLIMITED as any,
+      SUBMIT_POST: UNLIMITED as any,
+      UPDATE_PROFILE: UNLIMITED as any,
+      LIKE: UNLIMITED as any,
+      FOLLOW: UNLIMITED as any,
+      BASIC_TRANSFER: UNLIMITED as any,
     } as any,
     AccessGroupLimitMap: [
       {

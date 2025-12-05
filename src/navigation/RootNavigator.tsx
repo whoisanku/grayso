@@ -5,6 +5,8 @@ import HomeTabs from "./HomeTabs";
 import ComposerScreen from "../features/messaging/screens/ComposerScreen";
 import LoginScreen from "../features/auth/screens/LoginScreen";
 import ConversationScreen from "../features/messaging/screens/ConversationScreen";
+import SettingsScreen from "../features/settings/screens/SettingsScreen";
+import NewChatScreen from "../features/messaging/screens/NewChatScreen";
 import AppLogo from "../assets/app-logo.svg";
 import { useColorScheme } from "nativewind";
 
@@ -42,7 +44,7 @@ export default function RootNavigator() {
       <Animated.View
         style={{ flex: 1, opacity: fadeAnim }}
         className={`flex-1 items-center justify-center ${
-          colorScheme === "dark" ? "bg-black" : "bg-white"
+          colorScheme === "dark" ? "bg-[#0a0f1a]" : "bg-white"
         }`}
       >
         <View className="h-20 w-20 items-center justify-center overflow-hidden rounded-2xl">
@@ -67,11 +69,17 @@ export default function RootNavigator() {
               component={ConversationScreen}
               options={{ headerShown: true }}
             />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerShown: false }}
+            />
           </Stack.Group>
           <Stack.Group
             screenOptions={{ presentation: "modal", headerShown: false }}
           >
             <Stack.Screen name="Composer" component={ComposerScreen} />
+            <Stack.Screen name="NewChat" component={NewChatScreen} />
           </Stack.Group>
         </>
       ) : (

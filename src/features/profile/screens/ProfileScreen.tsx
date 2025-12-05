@@ -13,13 +13,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import {
   buildProfilePictureUrl,
   getSingleProfile,
-  identity,
   type ProfileEntryResponse,
 } from "deso-protocol";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../../navigation/types";
+import { LiquidGlassView } from "../../../utils/liquidGlass";
+import { useColorScheme } from "nativewind";
 
 const FALLBACK_BANNER =
   "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80";
@@ -44,6 +49,9 @@ const formatNumber = (value?: number | null) => {
 
 export default function ProfileScreen() {
   const { currentUser, isLoading } = useContext(DeSoIdentityContext);
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [profileDetails, setProfileDetails] =
     useState<ProfileEntryResponse | null>(
       currentUser?.ProfileEntryResponse ?? null
@@ -133,19 +141,13 @@ export default function ProfileScreen() {
     : 0;
   const hodlersCount = currentUser?.UsersWhoHODLYouCount ?? 0;
 
-  const handleLogout = useCallback(async () => {
-    try {
-      console.log("Logging out...");
-      await identity.logout();
-      console.log("Logout successful");
-    } catch (logoutError) {
-      console.warn("Logout error:", logoutError);
-    }
-  }, []);
+  const handleSettings = useCallback(() => {
+    navigation.navigate("Settings");
+  }, [navigation]);
 
   if (!currentUser && !isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white p-6 dark:bg-black">
+      <View className="flex-1 items-center justify-center bg-white p-6 dark:bg-[#0a0f1a]">
         <Text className="text-center text-base text-slate-700 dark:text-slate-300">
           Sign in with your DeSo identity to view your profile.
         </Text>
@@ -154,14 +156,14 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white dark:bg-black">
+    <ScrollView className="flex-1 bg-white dark:bg-[#0a0f1a]">
       <Image
         source={{ uri: bannerUri }}
         className="h-[120px] w-full"
         resizeMode="cover"
       />
       <View className="-mt-10 flex-row items-start justify-between px-4">
-        <View className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-white dark:border-black dark:bg-black">
+        <View className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-white dark:border-[#0a0f1a] dark:bg-[#0a0f1a]">
           <Image source={{ uri: avatarUri }} className="h-full w-full" />
         </View>
         <TouchableOpacity
@@ -219,16 +221,8 @@ export default function ProfileScreen() {
           </View>
         </View>
       </View>
-      <View className="px-4 pb-8">
-        <TouchableOpacity
-          className="items-center rounded-xl bg-rose-500 py-3"
-          onPress={handleLogout}
-        >
-          <Text className="text-lg font-semibold text-white">Logout</Text>
-        </TouchableOpacity>
-      </View>
       {(isLoading || isFetchingProfile) && (
-        <View className="absolute inset-0 items-center justify-center bg-white/60 dark:bg-black/60">
+        <View className="absolute inset-0 items-center justify-center bg-white/60 dark:bg-[#0a0f1a]/60">
           <ActivityIndicator size="large" color="#0085ff" />
         </View>
       )}

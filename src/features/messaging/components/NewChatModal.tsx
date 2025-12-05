@@ -35,6 +35,7 @@ import {
   ProfileSearchResult,
 } from "../services/desoGraphql";
 import { FALLBACK_PROFILE_IMAGE } from "../../../utils/deso";
+import { LiquidGlassView } from "../../../utils/liquidGlass";
 
 type NewChatModalProps = {
   visible: boolean;
@@ -232,18 +233,33 @@ export default function NewChatModal({
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
+      // Allow dragging down with some resistance
       if (e.translationY > 0) {
-        sheetTranslateY.value = e.translationY;
+        // Add rubber banding effect for smoother feel
+        sheetTranslateY.value = e.translationY * 0.85;
       }
     })
     .onEnd((e) => {
-      const shouldClose = e.translationY > 80 || e.velocityY > 700;
+      // Close if dragged down enough or with sufficient velocity
+      const shouldClose = e.translationY > 100 || e.velocityY > 500;
       if (shouldClose) {
-        // Reset position before closing to ensure clean state for next open
-        sheetTranslateY.value = 0;
-        runOnJS(handleClose)();
+        // Animate out smoothly before closing
+        sheetTranslateY.value = withSpring(
+          500, 
+          { damping: 25, stiffness: 300, velocity: e.velocityY },
+          (finished) => {
+            if (finished) {
+              runOnJS(handleClose)();
+            }
+          }
+        );
       } else {
-        sheetTranslateY.value = withSpring(0, { damping: 18, stiffness: 180 });
+        // Snap back with smooth animation
+        sheetTranslateY.value = withSpring(0, { 
+          damping: 20, 
+          stiffness: 400,
+          mass: 0.8,
+        });
       }
     });
 
@@ -279,7 +295,7 @@ export default function NewChatModal({
           <Animated.View
             entering={SlideInDown.duration(280)}
             exiting={SlideOutDown.duration(250)}
-            className="absolute bottom-0 left-0 right-0 overflow-hidden bg-white dark:bg-slate-900"
+            className="absolute bottom-0 left-0 right-0 overflow-hidden bg-white dark:bg-[#0a0f1a]"
             style={[
               {
                 height: Dimensions.get('window').height - insets.top - 20,
@@ -312,14 +328,45 @@ export default function NewChatModal({
                   </Text>
                   <TouchableOpacity
                     onPress={handleClose}
-                    className="h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
                     activeOpacity={0.7}
                   >
-                    <Feather
-                      name="x"
-                      size={16}
-                      color={isDark ? "#94a3b8" : "#64748b"}
-                    />
+                    {LiquidGlassView ? (
+                      <LiquidGlassView
+                        effect="regular"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Feather
+                          name="x"
+                          size={16}
+                          color={isDark ? "#fff" : "#000"}
+                        />
+                      </LiquidGlassView>
+                    ) : (
+                      <BlurView
+                        intensity={Platform.OS === "ios" ? 60 : 100}
+                        tint={isDark ? "dark" : "light"}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Feather
+                          name="x"
+                          size={16}
+                          color={isDark ? "#94a3b8" : "#64748b"}
+                        />
+                      </BlurView>
+                    )}
                   </TouchableOpacity>
                 </View>
                 
