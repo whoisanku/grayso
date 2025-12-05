@@ -27,6 +27,7 @@
     "deso-protocol": "^3.4.1",
     "expo": "~54.0.25",
     "expo-auth-session": "~7.0.9",
+    "expo-av": "~16.0.8",
     "expo-blur": "~15.0.7",
     "expo-clipboard": "~8.0.7",
     "expo-crypto": "^15.0.7",

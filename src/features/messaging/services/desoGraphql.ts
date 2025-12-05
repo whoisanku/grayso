@@ -597,10 +597,10 @@ export async function fetchAccessGroupMembers({
     .filter((member): member is GroupMember => Boolean(member?.publicKey));
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
-    console.log("[fetchAccessGroupMembers] fetched members", {
-      count: members.length,
-      members,
-    });
+    // console.log("[fetchAccessGroupMembers] fetched members", {
+    //   count: members.length,
+    //   members,
+    // });
   }
 
   return {

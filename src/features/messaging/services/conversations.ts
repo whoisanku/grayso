@@ -198,7 +198,102 @@ export const decryptAccessGroupMessages = async (
   accessGroups: AccessGroupEntryResponse[]
 ): Promise<DecryptedMessageEntryResponse[]> => {
   const decrypted = await Promise.all(
-    (messages || []).map((m) => identity.decryptMessage(m, accessGroups))
+    (messages || []).map(async (m) => {
+      // First, decrypt the main message content
+      const decryptedMessage = await identity.decryptMessage(m, accessGroups);
+      console.warn("💬 [Text Decryption] Result:", {
+        originalEncryptedText: m.MessageInfo.EncryptedText,
+        decryptedText: decryptedMessage.DecryptedMessage,
+      });
+
+      // TODO: Re-enable image decryption once the access group issue is resolved.
+      // // Now, check for and decrypt image URLs if they exist
+      const encryptedImageURLs = decryptedMessage.MessageInfo?.ExtraData?.encryptedImageURLs as string | undefined;
+      if (encryptedImageURLs) {
+        console.warn("🖼️ [Image Message] Encrypted image payload detected", {
+          encryptedImageURLs,
+          messageEncryptedText: decryptedMessage.MessageInfo?.EncryptedText,
+        });
+
+        try {
+          const decryptedImages = await identity.decryptMessage(
+            {
+              ...decryptedMessage,
+              MessageInfo: {
+                ...decryptedMessage.MessageInfo,
+                EncryptedText: encryptedImageURLs,
+              },
+            } as NewMessageEntryResponse,
+            accessGroups
+          );
+
+          if (decryptedImages.DecryptedMessage) {
+            if (!decryptedMessage.MessageInfo.ExtraData) {
+              decryptedMessage.MessageInfo.ExtraData = {};
+            }
+            decryptedMessage.MessageInfo.ExtraData.decryptedImageURLs = decryptedImages.DecryptedMessage;
+            console.warn("📸 [Image Decryption Succeeded]", {
+              decryptedImageURLs: decryptedImages.DecryptedMessage,
+              originalEncryptedText: decryptedMessage.MessageInfo.EncryptedText,
+            });
+          } else {
+            console.warn("🚨 [Image Decryption] Empty result", {
+              encryptedImageURLs,
+              decryptionResponse: decryptedImages,
+            });
+          }
+        } catch (e) {
+          console.warn("🚨 [Image Decryption] Failed to decrypt image URLs", {
+            error: e,
+            encryptedImageURLs,
+          });
+        }
+      }
+
+      const encryptedVideoURLs = decryptedMessage.MessageInfo?.ExtraData?.encryptedVideoURLs as string | undefined;
+      if (encryptedVideoURLs) {
+        console.warn("🎞️ [Video Message] Encrypted video payload detected", {
+          encryptedVideoURLs,
+          messageEncryptedText: decryptedMessage.MessageInfo?.EncryptedText,
+        });
+
+        try {
+          const decryptedVideos = await identity.decryptMessage(
+            {
+              ...decryptedMessage,
+              MessageInfo: {
+                ...decryptedMessage.MessageInfo,
+                EncryptedText: encryptedVideoURLs,
+              },
+            } as NewMessageEntryResponse,
+            accessGroups
+          );
+
+          if (decryptedVideos.DecryptedMessage) {
+            if (!decryptedMessage.MessageInfo.ExtraData) {
+              decryptedMessage.MessageInfo.ExtraData = {};
+            }
+            decryptedMessage.MessageInfo.ExtraData.decryptedVideoURLs = decryptedVideos.DecryptedMessage;
+            console.warn("📽️ [Video Decryption Succeeded]", {
+              decryptedVideoURLs: decryptedVideos.DecryptedMessage,
+              originalEncryptedText: decryptedMessage.MessageInfo.EncryptedText,
+            });
+          } else {
+            console.warn("🚨 [Video Decryption] Empty result", {
+              encryptedVideoURLs,
+              decryptionResponse: decryptedVideos,
+            });
+          }
+        } catch (e) {
+          console.warn("🚨 [Video Decryption] Failed to decrypt video URLs", {
+            error: e,
+            encryptedVideoURLs,
+          });
+        }
+      }
+
+      return decryptedMessage;
+    })
   );
 
   // Attempt to decrypt embedded reply messages if present
@@ -242,6 +337,7 @@ export const decryptAccessGroupMessages = async (
       }
     })
   );
+
 
   return decrypted;
 };
@@ -377,11 +473,11 @@ export async function fetchPaginatedDmThreadMessages(
       {};
 
     if (typeof __DEV__ !== "undefined" && __DEV__) {
-      console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
-        count: nodes.length,
-        nodes,
-        pageInfo,
-      });
+      // console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
+      //   count: nodes.length,
+      //   nodes,
+      //   pageInfo,
+      // });
     }
 
     const rawMessages = nodes

@@ -24,6 +24,8 @@ import {
     shouldShowDayDivider,
     formatDayLabel,
 } from "../utils/messageUtils";
+import { FileAndMessageBubble } from "../components/FileAndMessageBubble";
+import { VideoMessageBubble } from "../components/VideoMessageBubble";
 
 export type MessageBubbleProps = {
     item: DecryptedMessageEntryResponse;
@@ -80,6 +82,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         };
     });
     const extraData = item.MessageInfo?.ExtraData || {};
+    console.log("Message ExtraData:", extraData);
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
@@ -388,6 +391,17 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     </Text>
                                 )}
                                 {renderReplyPreview()}
+                                {renderReplyPreview()}
+                                <FileAndMessageBubble
+                                    decryptedImageURLs={extraData.decryptedImageURLs as string}
+                                    extraData={extraData}
+                                    isDark={isDark}
+                                />
+                                <VideoMessageBubble
+                                    decryptedVideoURLs={extraData.decryptedVideoURLs as string}
+                                    extraData={extraData}
+                                    isDark={isDark}
+                                />
                                 <Text
                                     className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
                                         }`}
