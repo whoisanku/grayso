@@ -20,6 +20,8 @@ export type RootStackParamList = {
   Composer: undefined;
   Login: undefined;
   Conversation: ConversationRouteParams;
+  Settings: undefined;
+  NewChat: undefined;
 };
 
 export type HomeTabParamList = {

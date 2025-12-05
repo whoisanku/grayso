@@ -227,7 +227,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   // Toolbar wrapper style with matching background
   const toolbarWrapperStyle = {
-    backgroundColor: isDark ? "#020617" : "#ffffff",
+    backgroundColor: 'transparent',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
@@ -276,16 +276,16 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     <ScreenWrapper
       edges={['top', 'left', 'right']}
       keyboardAvoiding={false}
-      backgroundColor={isDark ? "#020617" : "#ffffff"}
+      backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
     >
       <View className="flex-1">
         {/* Custom Header */}
         <View
-          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 pb-3 pt-2 dark:border-slate-800 dark:bg-slate-950"
+          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-4 dark:border-slate-800 dark:bg-[#0a0f1a]"
         >
           <TouchableOpacity
             onPress={onCancel}
-            className="p-2"
+            className="py-2"
             activeOpacity={0.7}
           >
             <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
@@ -294,7 +294,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           <TouchableOpacity
             onPress={onPost}
             disabled={!canPost || isPosting}
-            className={`rounded-full px-6 py-2.5 ${canPost
+            className={`rounded-full px-6 py-2 ${canPost
               ? "bg-[#0085ff]"
               : "bg-slate-200 dark:bg-slate-800"
               }`}
@@ -387,7 +387,6 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
               bottom: 0, 
               left: 0, 
               right: 0,
-              backgroundColor: isDark ? "#020617" : "#ffffff",
             },
             toolbarAnimatedStyle
           ]}

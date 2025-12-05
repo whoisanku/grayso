@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   DeviceEventEmitter,
+  Modal,
+  Dimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ChatType, buildProfilePictureUrl } from "deso-protocol";
@@ -30,9 +32,13 @@ import {
   getProfileImageUrl,
 } from "../../../utils/deso";
 import { useConversations } from "../hooks/useConversations";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
+import EditIcon from "../../../assets/navIcons/edit.svg";
+import { LiquidGlassView } from "../../../utils/liquidGlass";
+import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
+import { BlurView } from "expo-blur";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -89,10 +95,14 @@ const formatTimestamp = (timestampMs: number) => {
 
 export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
       string,
@@ -268,11 +278,35 @@ export default function HomeScreen() {
 
   if (isLoading && items.length === 0) {
     return (
-      <SafeAreaView className="flex-1 bg-white dark:bg-black">
-        <View className="px-4 pt-4 pb-3">
-          <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
-            Chats
-          </Text>
+      <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+        <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setIsDrawerOpen(true)}
+              activeOpacity={0.7}
+              className="mr-3"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+            <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+              Chats
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => rootNavigation.navigate("NewChat")}
+            activeOpacity={0.7}
+          >
+            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <EditIcon
+                width={20}
+                height={20}
+                stroke={isDark ? "#f8fafc" : "#0f172a"}
+                strokeWidth={2}
+              />
+            </View>
+          </TouchableOpacity>
         </View>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#0085ff" />
@@ -305,12 +339,159 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
-      <View className="px-4 pt-4 pb-3">
-        <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
-          Chats
-        </Text>
+    <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+      {/* Header */}
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
+        <View className="flex-row items-center">
+          {/* Hamburger Menu Button */}
+          <TouchableOpacity
+            onPress={() => setIsDrawerOpen(true)}
+            activeOpacity={0.7}
+            className="mr-3"
+          >
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </LiquidGlassView>
+            ) : (
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            )}
+          </TouchableOpacity>
+          <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+            Chats
+          </Text>
+        </View>
+        
+        {/* New Chat Button */}
+        <TouchableOpacity
+          onPress={() => rootNavigation.navigate("NewChat")}
+          activeOpacity={0.7}
+        >
+          {LiquidGlassView ? (
+            <LiquidGlassView
+              effect="regular"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <EditIcon
+                width={20}
+                height={20}
+                stroke={isDark ? "#f8fafc" : "#0f172a"}
+                strokeWidth={2}
+              />
+            </LiquidGlassView>
+          ) : (
+            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+              <EditIcon
+                width={20}
+                height={20}
+                stroke={isDark ? "#f8fafc" : "#0f172a"}
+                strokeWidth={2}
+              />
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
+
+      {/* Drawer Modal */}
+      <Modal
+        visible={isDrawerOpen}
+        transparent
+        animationType="none"
+        onRequestClose={() => setIsDrawerOpen(false)}
+      >
+        <View className="flex-1 flex-row">
+          {/* Backdrop */}
+          <Animated.View
+            entering={FadeIn.duration(150)}
+            exiting={FadeOut.duration(100)}
+            className="absolute inset-0"
+          >
+            <TouchableOpacity
+              className="flex-1"
+              activeOpacity={1}
+              onPress={() => setIsDrawerOpen(false)}
+            >
+              <BlurView
+                intensity={40}
+                tint={isDark ? "dark" : "light"}
+                className="flex-1"
+              />
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Drawer Content */}
+          <Animated.View
+            entering={SlideInLeft.duration(280)}
+            exiting={SlideOutLeft.duration(280)}
+            style={{ 
+              width: Dimensions.get('window').width * 0.65,
+              paddingTop: insets.top,
+              backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+            }}
+          >
+            {/* User Profile Header */}
+            <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
+              <View className="flex-row items-center">
+                <Image
+                  source={{ 
+                    uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic 
+                      ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
+                      : buildProfilePictureUrl(currentUser?.PublicKeyBase58Check || '', { fallbackImageUrl: FALLBACK_PROFILE_IMAGE })
+                  }}
+                  className="h-14 w-14 rounded-full bg-slate-200 dark:bg-slate-700"
+                />
+                <View className="ml-3 flex-1">
+                  <Text className="text-lg font-bold text-slate-900 dark:text-white" numberOfLines={1}>
+                    @{currentUser?.ProfileEntryResponse?.Username || 'User'}
+                  </Text>
+                  <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
+                    {currentUser?.PublicKeyBase58Check?.slice(0, 12)}...
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Menu Items */}
+            <View className="flex-1 py-4">
+              <TouchableOpacity
+                className="flex-row items-center px-5 py-4"
+                activeOpacity={0.7}
+                onPress={() => {
+                  setIsDrawerOpen(false);
+                  rootNavigation.navigate("Settings");
+                }}
+              >
+                <View className="w-11 h-11 rounded-xl items-center justify-center bg-slate-100 dark:bg-slate-800">
+                  <Feather name="settings" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
+                </View>
+                <Text className="ml-4 text-base font-medium text-slate-900 dark:text-white">
+                  Settings
+                </Text>
+                <View className="flex-1" />
+                <Feather name="chevron-right" size={20} color={isDark ? "#64748b" : "#94a3b8"} />
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
       <View className="flex-1">
         <FlatList
           data={enhancedItems}
@@ -333,7 +514,7 @@ export default function HomeScreen() {
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              className="flex-row items-center bg-white px-4 py-3 dark:bg-black"
+              className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]"
               activeOpacity={0.7}
               onPress={() => handlePress(item)}
             >

@@ -9,20 +9,7 @@ import { View, TouchableOpacity, Platform, StyleSheet } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
 import { BlurView } from "expo-blur";
-
-// Check if iOS 26+ for Liquid Glass support
-const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
-
-// Conditionally import LiquidGlassView only on iOS 26+
-let LiquidGlassView: React.ComponentType<any> | null = null;
-if (isIOS26OrAbove) {
-  try {
-    LiquidGlassView = require("@callstack/liquid-glass").LiquidGlassView;
-  } catch (e) {
-    // Native module not available, fallback to BlurView
-    LiquidGlassView = null;
-  }
-}
+import { LiquidGlassView, isIOS26OrAbove } from "../utils/liquidGlass";
 
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useColorScheme } from "nativewind";
@@ -54,6 +41,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       }
     };
 
+    // Center button (Compose) - special styling
     if (route.name === "Post") {
       return (
         <TouchableOpacity
