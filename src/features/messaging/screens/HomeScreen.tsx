@@ -133,7 +133,14 @@ export default function HomeScreen() {
     if (!userPk) return [];
 
     return Object.values(conversations).map((c) => {
-      const last = c.messages[0];
+      // Find the last (newest) non-edited message since messages are now sorted oldest-first
+      // Edited messages have newer timestamps but represent old content
+      const reversedMessages = [...c.messages].reverse();
+      const last = reversedMessages.find(msg => {
+        const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
+        return extraData?.edited !== 'true';
+      }) || c.messages[c.messages.length - 1]; // Fallback to last message if all are edited (unlikely)
+
       const info = last?.MessageInfo || {};
       const time = formatTimestamp(
         info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
@@ -148,8 +155,8 @@ export default function HomeScreen() {
       const otherPk = isGroup
         ? recipientPk
         : senderPk === userPk
-        ? recipientPk
-        : senderPk;
+          ? recipientPk
+          : senderPk;
       const name = isGroup
         ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
         : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
@@ -157,23 +164,23 @@ export default function HomeScreen() {
       const avatarUri = isGroup
         ? FALLBACK_GROUP_IMAGE
         : buildProfilePictureUrl(otherPk, {
-            fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-          });
+          fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+        });
 
       let stackedAvatarUris: string[] = [];
       let isLoadingMembers = false;
       if (isGroup) {
         const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
         const members = groupMembers[groupKey] || [];
-        
+
         if (members.length === 0) {
           isLoadingMembers = true;
         }
-        
+
         stackedAvatarUris = members
           .slice(0, 3)
-          .map((m) => 
-             m.profilePic 
+          .map((m) =>
+            m.profilePic
               ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
               : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
           );
@@ -213,11 +220,10 @@ export default function HomeScreen() {
         if (optimistic.timestampNanos > existingTimestamp) {
           return {
             ...item,
-            preview: `You: ${
-              optimistic.messageText.trim() === "🚀"
-                ? "🚀"
-                : optimistic.messageText
-            }`,
+            preview: `You: ${optimistic.messageText.trim() === "🚀"
+              ? "🚀"
+              : optimistic.messageText
+              }`,
             time: formatTimestamp(optimisticTimestampMs),
             lastTimestampNanos: optimistic.timestampNanos,
           };
@@ -248,8 +254,8 @@ export default function HomeScreen() {
         initialGroupMembers:
           item.isGroup && item.recipientInfo
             ? groupMembers[
-                `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
-              ]
+            `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
+            ]
             : undefined,
       });
     },

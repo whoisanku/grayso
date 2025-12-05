@@ -114,15 +114,15 @@ export function normalizeEditedMessages(
 }
 
 /**
- * Sort messages in descending order by timestamp (newest first)
+ * Sort messages in ascending order by timestamp (oldest first)
  */
-export function sortMessagesDescending(
+export function sortMessagesAscending(
     messages: DecryptedMessageEntryResponse[]
 ): DecryptedMessageEntryResponse[] {
     return [...messages].sort(
         (a, b) =>
-            (b.MessageInfo?.TimestampNanos ?? 0) -
-            (a.MessageInfo?.TimestampNanos ?? 0)
+            (a.MessageInfo?.TimestampNanos ?? 0) -
+            (b.MessageInfo?.TimestampNanos ?? 0)
     );
 }
 
@@ -132,7 +132,7 @@ export function sortMessagesDescending(
 export function normalizeAndSortMessages(
     messages: DecryptedMessageEntryResponse[]
 ): DecryptedMessageEntryResponse[] {
-    return sortMessagesDescending(normalizeEditedMessages(messages));
+    return sortMessagesAscending(normalizeEditedMessages(messages));
 }
 
 /**

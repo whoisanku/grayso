@@ -17,6 +17,7 @@ import Reanimated, {
     LinearTransition,
 } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import { Platform } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useColorScheme } from "nativewind";
@@ -81,20 +82,25 @@ export const Composer = React.memo(function Composer({
     // Use keyboard controller for dynamic keyboard height
     const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
     const animatedComposerStyle = useAnimatedStyle(() => ({
-        paddingBottom: Math.max(keyboardHeight.value, bottomInset),
+        paddingBottom: Platform.OS === "ios"
+            ? Math.max(keyboardHeight.value, bottomInset)
+            : bottomInset,
+        // Add smooth transition for keyboard height changes
+        marginBottom: Platform.OS === "android" && keyboardHeight.value > 0 ? 0 : 0,
     }));
 
     const focusInput = useCallback(() => {
         textInputRef.current?.focus();
     }, []);
 
-    // Auto-focus when entering edit mode or reply mode
+    // Auto-focus when entering edit mode or reply mode (with better timing)
     useEffect(() => {
         if (editingMessage || replyToMessage) {
-            // Use requestAnimationFrame for immediate snappy focus
-            requestAnimationFrame(() => {
+            // Use a longer delay to ensure layout is stable
+            const timer = setTimeout(() => {
                 focusInput();
-            });
+            }, 150);
+            return () => clearTimeout(timer);
         }
     }, [editingMessage, replyToMessage, focusInput]);
 
@@ -189,9 +195,10 @@ export const Composer = React.memo(function Composer({
 
         return (
             <Reanimated.View
-                entering={FadeInDown.springify().damping(18).stiffness(250)}
+                key="reply-preview"
+                entering={FadeInDown.springify().damping(12).stiffness(200)}
                 exiting={FadeOutUp.duration(200)}
-                layout={LinearTransition.springify().damping(18)}
+                layout={LinearTransition.springify().damping(12).stiffness(200)}
                 className={`flex-row items-center py-3 px-4 ${isDark
                     ? "bg-[#0f1419]"
                     : "bg-[#f1f5f9]"
@@ -257,9 +264,10 @@ export const Composer = React.memo(function Composer({
 
         return (
             <Reanimated.View
-                entering={FadeInDown.springify().damping(18).stiffness(250)}
+                key="edit-preview"
+                entering={FadeInDown.springify().damping(12).stiffness(200)}
                 exiting={FadeOutUp.duration(200)}
-                layout={LinearTransition.springify().damping(18)}
+                layout={LinearTransition.springify().damping(12).stiffness(200)}
                 className={`flex-row items-center py-3 px-4 ${isDark
                     ? "bg-[#1e293b]"
                     : "bg-[#f1f5f9]"

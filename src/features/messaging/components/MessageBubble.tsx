@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, Text, Image, Keyboard, TouchableWithoutFeedback } from "react-native";
 import Reanimated, {
     useSharedValue,
@@ -7,6 +7,8 @@ import Reanimated, {
     interpolate,
     Extrapolation,
     runOnJS,
+    useAnimatedRef,
+    measure,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Feather } from "@expo/vector-icons";
@@ -57,7 +59,26 @@ export const MessageBubble = React.memo(function MessageBubble({
     isDark,
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
-    const layoutRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+    const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
+    const scale = useSharedValue(0.95);
+    const opacity = useSharedValue(0);
+
+    // Only animate on initial mount, not on every prop change
+    const hasAnimated = useRef(false);
+    useEffect(() => {
+        if (!hasAnimated.current) {
+            scale.value = withSpring(1, { damping: 15, stiffness: 200 });
+            opacity.value = withSpring(1, { damping: 15, stiffness: 200 });
+            hasAnimated.current = true;
+        }
+    }, []);
+
+    const animatedBubbleStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ scale: scale.value }],
+            opacity: opacity.value,
+        };
+    });
     const extraData = item.MessageInfo?.ExtraData || {};
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
@@ -185,8 +206,8 @@ export const MessageBubble = React.memo(function MessageBubble({
             }
             // Spring back with bounce effect
             translateX.value = withSpring(0, {
-                damping: 15,
-                stiffness: 400,
+                damping: 12,
+                stiffness: 200,
                 mass: 0.5,
                 overshootClamping: false,
             });
@@ -219,46 +240,32 @@ export const MessageBubble = React.memo(function MessageBubble({
         };
     });
 
-    if (rawMessageText === "🚀") {
-        return (
-            <View style={{ marginBottom: 12 }}>
-                {showDayDivider ? (
-                    <View className="items-center py-1">
-                        <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
-                            <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
-                                {formatDayLabel(timestamp)}
-                            </Text>
-                        </View>
-                    </View>
-                ) : null}
-                <View
-                    className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-                        }`}
-                >
-                    {!isMine ? (
-                        <View className="mr-2" style={{ width: 32 }}>
-                            {hasAvatar ? (
-                                <Image
-                                    source={{ uri: avatarUri }}
-                                    className="h-8 w-8 rounded-full bg-gray-200"
-                                />
-                            ) : (
-                                <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                                    <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                                </View>
-                            )}
-                        </View>
-                    ) : null}
-                    <Text
-                        className={`text-[28px] ${isMine ? "text-[#4f46e5]" : "text-[#0f172a] dark:text-white"
-                            }`}
-                    >
-                        🚀
-                    </Text>
-                </View>
-            </View>
-        );
-    }
+    const handleLongPress = (layout: { x: number; y: number; width: number; height: number }) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        onLongPress(item, layout);
+    };
+
+    const longPressGesture = Gesture.LongPress()
+        .minDuration(250)
+        .onStart(() => {
+            const measured = measure(animatedBubbleRef);
+            if (measured) {
+                runOnJS(handleLongPress)({
+                    x: measured.pageX,
+                    y: measured.pageY,
+                    width: measured.width,
+                    height: measured.height,
+                });
+            }
+        });
+
+    const tapGesture = Gesture.Tap().onEnd(() => {
+        runOnJS(Keyboard.dismiss)();
+    });
+
+    const contentGesture = Gesture.Exclusive(longPressGesture, tapGesture);
+
+
 
     // Determine message grouping for curved edges
     const isNextMessageFromSameSender = nextMessage?.IsSender === item.IsSender;
@@ -278,15 +285,18 @@ export const MessageBubble = React.memo(function MessageBubble({
 
     // Dynamic border radius based on position in group
     const getBorderRadius = () => {
-        if (isOnlyMessage) return { borderRadius: 20 };
+        const R = 22; // Large radius
+        const r = 4;  // Small radius
+
+        if (isOnlyMessage) return { borderRadius: R };
         if (isMine) {
-            if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
-            if (isLastInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 0, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
-            return { borderTopLeftRadius: 20, borderTopRightRadius: 4, borderBottomLeftRadius: 20, borderBottomRightRadius: 4 };
+            if (isFirstInGroup) return { borderTopLeftRadius: R, borderTopRightRadius: R, borderBottomLeftRadius: R, borderBottomRightRadius: r };
+            if (isLastInGroup) return { borderTopLeftRadius: R, borderTopRightRadius: r, borderBottomLeftRadius: R, borderBottomRightRadius: R };
+            return { borderTopLeftRadius: R, borderTopRightRadius: r, borderBottomLeftRadius: R, borderBottomRightRadius: r };
         } else {
-            if (isFirstInGroup) return { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
-            if (isLastInGroup) return { borderTopLeftRadius: 0, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 };
-            return { borderTopLeftRadius: 4, borderTopRightRadius: 20, borderBottomLeftRadius: 4, borderBottomRightRadius: 20 };
+            if (isFirstInGroup) return { borderTopLeftRadius: R, borderTopRightRadius: R, borderBottomLeftRadius: r, borderBottomRightRadius: R };
+            if (isLastInGroup) return { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: R, borderBottomRightRadius: R };
+            return { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: r, borderBottomRightRadius: R };
         }
     };
 
@@ -296,14 +306,6 @@ export const MessageBubble = React.memo(function MessageBubble({
         <View
             style={{ marginBottom }}
             ref={bubbleContainerRef}
-            onLayout={(event) => {
-                if (!messageId) return;
-                // Store layout immediately without blocking
-                const { x, y, width, height } = event.nativeEvent.layout;
-                const layout = { x, y, width, height };
-                layoutRef.current = layout;
-                onBubbleMeasure?.(messageId, layout);
-            }}
         >
             {showDayDivider ? (
                 <View className="items-center py-1">
@@ -348,11 +350,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             {/* Swipeable message row */}
             <GestureDetector gesture={panGesture}>
                 <Reanimated.View style={animatedRowStyle}>
-                    <TouchableWithoutFeedback
-                        onPress={() => Keyboard.dismiss()}
-                        onLongPress={() => onLongPress(item, layoutRef.current || undefined)}
-                        delayLongPress={200}
-                    >
+                    <GestureDetector gesture={contentGesture}>
                         <View
                             className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                                 }`}
@@ -371,11 +369,14 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     ) : null}
                                 </View>
                             ) : null}
-                            <View
-                                className={`max-w-[80%] px-3.5 py-2.5 ${isMine ? "bg-[#0085ff]" : "bg-[#f1f3f5] dark:bg-[#161e27]"
+                            <Reanimated.View
+                                ref={animatedBubbleRef}
+                                className={`max-w-[80%] px-4 py-3 shadow-sm ${isMine ? "bg-[#2563eb]" : "bg-white dark:bg-[#1e293b]"
                                     }`}
                                 style={[
                                     getBorderRadius(),
+                                    !isMine && { borderWidth: 1, borderColor: isDark ? '#334155' : '#e2e8f0' },
+                                    animatedBubbleStyle,
                                 ]}
                             >
                                 {!isMine && isFirstInGroup && (
@@ -388,7 +389,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 )}
                                 {renderReplyPreview()}
                                 <Text
-                                    className={`text-[15px] leading-[21px] ${isMine ? "text-white" : "text-[#0f172a] dark:text-white"
+                                    className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
                                         }`}
                                 >
                                     {messageText}
@@ -424,9 +425,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         )}
                                     </View>
                                 )}
-                            </View>
+                            </Reanimated.View>
                         </View>
-                    </TouchableWithoutFeedback>
+                    </GestureDetector>
                 </Reanimated.View>
             </GestureDetector>
         </View>

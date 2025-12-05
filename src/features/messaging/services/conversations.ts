@@ -553,8 +553,8 @@ export async function fetchPaginatedDmThreadMessages(
         endCursor:
           restDecryptResult.decrypted.length === limit
             ? restDecryptResult.decrypted[
-                restDecryptResult.decrypted.length - 1
-              ]?.MessageInfo?.TimestampNanosString ?? null
+              restDecryptResult.decrypted.length - 1
+            ]?.MessageInfo?.TimestampNanosString ?? null
             : null,
       };
     }
