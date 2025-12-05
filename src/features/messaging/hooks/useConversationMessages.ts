@@ -70,6 +70,14 @@ export const useConversationMessages = ({
             next: DecryptedMessageEntryResponse[]
         ) => {
             const map = new Map<string, DecryptedMessageEntryResponse>();
+            const contentMap = new Map<string, number>(); // Track content+sender to detect duplicates
+
+            // Helper to create content key for duplicate detection
+            const getContentKey = (message: DecryptedMessageEntryResponse) => {
+                const content = message.DecryptedMessage?.trim() ?? "";
+                const sender = message.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+                return `${sender}:${content}`;
+            };
 
             // Add new messages first (source of truth)
             next.forEach((message) => {
@@ -79,7 +87,17 @@ export const useConversationMessages = ({
                 const senderKey =
                     message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
                 const uniqueKey = `${timestamp}-${senderKey}`;
-                map.set(uniqueKey, message);
+                
+                // Track content for duplicate detection
+                const contentKey = getContentKey(message);
+                const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
+                const existingTimestamp = contentMap.get(contentKey);
+                
+                // Only add if we don't have this exact content from same sender within 60 seconds
+                if (!existingTimestamp || Math.abs(msgTimestamp - existingTimestamp) > 60000 * 1e6) {
+                    map.set(uniqueKey, message);
+                    contentMap.set(contentKey, msgTimestamp);
+                }
             });
 
             // Merge previous messages, checking for duplicates
@@ -92,6 +110,16 @@ export const useConversationMessages = ({
                 const uniqueKey = `${timestamp}-${senderKey}`;
 
                 if (map.has(uniqueKey)) return;
+
+                // Check content-based duplicates
+                const contentKey = getContentKey(message);
+                const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
+                const existingTimestamp = contentMap.get(contentKey);
+                
+                // Skip if same content from same sender exists within 60 seconds
+                if (existingTimestamp && Math.abs(msgTimestamp - existingTimestamp) < 60000 * 1e6) {
+                    return;
+                }
 
                 // Fuzzy duplicate check for optimistic messages
                 const isDuplicate = Array.from(map.values()).some((existing) => {
@@ -109,6 +137,7 @@ export const useConversationMessages = ({
 
                 if (!isDuplicate) {
                     map.set(uniqueKey, message);
+                    contentMap.set(contentKey, msgTimestamp);
                 }
             });
 

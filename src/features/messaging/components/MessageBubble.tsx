@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from "react";
-import { View, Text, Image, Keyboard, TouchableWithoutFeedback } from "react-native";
+import React, { useRef } from "react";
+import { View, Text, Image, Keyboard } from "react-native";
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -62,27 +62,8 @@ export const MessageBubble = React.memo(function MessageBubble({
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
-    const scale = useSharedValue(0.95);
-    const opacity = useSharedValue(0);
 
-    // Only animate on initial mount, not on every prop change
-    const hasAnimated = useRef(false);
-    useEffect(() => {
-        if (!hasAnimated.current) {
-            scale.value = withSpring(1, { damping: 15, stiffness: 200 });
-            opacity.value = withSpring(1, { damping: 15, stiffness: 200 });
-            hasAnimated.current = true;
-        }
-    }, []);
-
-    const animatedBubbleStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: scale.value }],
-            opacity: opacity.value,
-        };
-    });
     const extraData = item.MessageInfo?.ExtraData || {};
-    console.log("Message ExtraData:", extraData);
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
@@ -114,6 +95,11 @@ export const MessageBubble = React.memo(function MessageBubble({
     }
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
+
+    const hasMedia = Boolean(
+        (extraData as Record<string, unknown>).decryptedImageURLs ||
+        (extraData as Record<string, unknown>).decryptedVideoURLs
+    );
 
     // Reply logic
     const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
@@ -180,12 +166,15 @@ export const MessageBubble = React.memo(function MessageBubble({
     };
 
     const triggerReply = () => {
+        if (!onReply) return;
         onReply(item);
     };
 
     const panGesture = Gesture.Pan()
+        .enabled(!hasMedia)
         .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px to avoid conflict with scroll
         .onUpdate((event) => {
+            if (typeof event?.translationX !== "number") return;
             // For sent messages (isMine), swipe left (negative); for received, swipe right (positive)
             const clampedValue = isMine
                 ? Math.max(-MAX_SWIPE, Math.min(0, event.translationX))
@@ -207,12 +196,11 @@ export const MessageBubble = React.memo(function MessageBubble({
             if (absValue >= SWIPE_THRESHOLD) {
                 runOnJS(triggerReply)();
             }
-            // Spring back with bounce effect
+            // Smooth snap back without bounce
             translateX.value = withSpring(0, {
-                damping: 12,
-                stiffness: 200,
-                mass: 0.5,
-                overshootClamping: false,
+                damping: 20,
+                stiffness: 300,
+                overshootClamping: true,
             });
             hasTriggeredHaptic.value = false;
         });
@@ -244,6 +232,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     });
 
     const handleLongPress = (layout: { x: number; y: number; width: number; height: number }) => {
+        if (!onLongPress) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         onLongPress(item, layout);
     };
@@ -262,9 +251,11 @@ export const MessageBubble = React.memo(function MessageBubble({
             }
         });
 
-    const tapGesture = Gesture.Tap().onEnd(() => {
-        runOnJS(Keyboard.dismiss)();
-    });
+    const tapGesture = Gesture.Tap()
+        .enabled(!hasMedia)
+        .onEnd(() => {
+            runOnJS(Keyboard.dismiss)();
+        });
 
     const contentGesture = Gesture.Exclusive(longPressGesture, tapGesture);
 
@@ -379,7 +370,6 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 style={[
                                     getBorderRadius(),
                                     !isMine && { borderWidth: 1, borderColor: isDark ? '#334155' : '#e2e8f0' },
-                                    animatedBubbleStyle,
                                 ]}
                             >
                                 {!isMine && isFirstInGroup && (
@@ -390,7 +380,6 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         {displayName}
                                     </Text>
                                 )}
-                                {renderReplyPreview()}
                                 {renderReplyPreview()}
                                 <FileAndMessageBubble
                                     decryptedImageURLs={extraData.decryptedImageURLs as string}

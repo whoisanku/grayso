@@ -11,14 +11,10 @@ export const FileAndMessageBubble = React.memo(({ decryptedImageURLs, extraData,
     if (!decryptedImageURLs || typeof decryptedImageURLs !== 'string') return null;
 
     try {
-        // It might be a JSON array string or just a comma separated string, 
-        // but based on standard practice it's likely a JSON array of strings.
-        // Let's try to parse it.
         let imageUrls: string[] = [];
         try {
             imageUrls = JSON.parse(decryptedImageURLs);
         } catch {
-            // If not JSON, maybe just a raw string URL?
             if (decryptedImageURLs.startsWith('http')) {
                 imageUrls = [decryptedImageURLs];
             }
@@ -29,13 +25,10 @@ export const FileAndMessageBubble = React.memo(({ decryptedImageURLs, extraData,
         return (
             <View className="mb-2">
                 {imageUrls.map((url, index) => {
-                    // Try to get dimensions from ExtraData
-                    // The format in the user request was "image.0.width"
                     const widthKey = `image.${index}.width`;
                     const heightKey = `image.${index}.height`;
                     const imgWidth = extraData[widthKey] ? parseInt(extraData[widthKey] as string, 10) : undefined;
                     const imgHeight = extraData[heightKey] ? parseInt(extraData[heightKey] as string, 10) : undefined;
-
                     const aspectRatio = (imgWidth && imgHeight) ? imgWidth / imgHeight : 1;
 
                     return (
@@ -60,3 +53,5 @@ export const FileAndMessageBubble = React.memo(({ decryptedImageURLs, extraData,
         return null;
     }
 });
+
+FileAndMessageBubble.displayName = "FileAndMessageBubble";

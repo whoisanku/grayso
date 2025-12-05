@@ -14,7 +14,6 @@ import Reanimated, {
     useAnimatedStyle,
     FadeInDown,
     FadeOutUp,
-    LinearTransition,
 } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { Platform } from "react-native";
@@ -196,9 +195,8 @@ export const Composer = React.memo(function Composer({
         return (
             <Reanimated.View
                 key="reply-preview"
-                entering={FadeInDown.springify().damping(12).stiffness(200)}
-                exiting={FadeOutUp.duration(200)}
-                layout={LinearTransition.springify().damping(12).stiffness(200)}
+                entering={FadeInDown.duration(150)}
+                exiting={FadeOutUp.duration(150)}
                 className={`flex-row items-center py-3 px-4 ${isDark
                     ? "bg-[#0f1419]"
                     : "bg-[#f1f5f9]"
@@ -265,9 +263,8 @@ export const Composer = React.memo(function Composer({
         return (
             <Reanimated.View
                 key="edit-preview"
-                entering={FadeInDown.springify().damping(12).stiffness(200)}
-                exiting={FadeOutUp.duration(200)}
-                layout={LinearTransition.springify().damping(12).stiffness(200)}
+                entering={FadeInDown.duration(150)}
+                exiting={FadeOutUp.duration(150)}
                 className={`flex-row items-center py-3 px-4 ${isDark
                     ? "bg-[#1e293b]"
                     : "bg-[#f1f5f9]"
