@@ -76,6 +76,7 @@ import { useColorScheme } from "nativewind";
 import { useKeyboardHandler, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 
 import ScreenWrapper from "../../../components/ScreenWrapper";
+import { ActionSheetCard } from "../components/ActionSheet";
 import {
   AUTO_LOAD_DELAY_MS,
   MESSAGE_GROUPING_WINDOW_NS,
@@ -2113,70 +2114,7 @@ function SelectedBubblePreview({
   );
 }
 
-function ActionSheetCard({
-  isDark,
-  onReply,
-  onEdit,
-  onCopy,
-}: {
-  isDark: boolean;
-  onReply: () => void;
-  onEdit?: () => void;
-  onCopy: () => void;
-}) {
-  return (
-    <View
-      className={`${isDark ? "bg-[#0f172a]" : "bg-white"} rounded-2xl shadow-lg border ${isDark ? "border-slate-800" : "border-slate-200"
-        }`}
-      style={{
-        width: ACTION_SHEET_WIDTH,
-        overflow: "hidden",
-      }}
-    >
-      <TouchableOpacity
-        onPress={onReply}
-        className="flex-row items-center px-4 py-3 active:opacity-70"
-      >
-        <Feather
-          name="corner-up-left"
-          size={18}
-          color={isDark ? "#e2e8f0" : "#0f172a"}
-        />
-        <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-          Reply
-        </Text>
-      </TouchableOpacity>
-      {onEdit ? (
-        <TouchableOpacity
-          onPress={onEdit}
-          className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
-        >
-          <Feather
-            name="edit-2"
-            size={18}
-            color={isDark ? "#e2e8f0" : "#0f172a"}
-          />
-          <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-            Edit message
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-      <TouchableOpacity
-        onPress={onCopy}
-        className="flex-row items-center px-4 py-3 active:opacity-70 border-t border-slate-200 dark:border-slate-800"
-      >
-        <Feather
-          name="copy"
-          size={18}
-          color={isDark ? "#e2e8f0" : "#0f172a"}
-        />
-        <Text className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-          Copy
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
+// ActionSheetCard is now imported from ../components/ActionSheet with liquid glass effect
 
 const ACTION_SHEET_WIDTH = 240;
 const ESTIMATED_ACTION_HEIGHT = 100; // Height of Reply + Copy buttons
