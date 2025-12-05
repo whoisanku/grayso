@@ -930,6 +930,52 @@ export default function ConversationScreen({ navigation, route }: Props) {
     [chatType, mergeMessages, userPublicKey]
   );
 
+  const sendQuickHello = useCallback(async () => {
+    const messageText = "Hi 👋";
+    const timestampNanos = Math.round(Date.now() * 1e6);
+    
+    // Create optimistic message
+    const optimisticMessage = {
+      DecryptedMessage: messageText,
+      IsSender: true,
+      MessageInfo: {
+        TimestampNanos: timestampNanos,
+        TimestampNanosString: String(timestampNanos),
+      },
+      SenderInfo: {
+        OwnerPublicKeyBase58Check: userPublicKey,
+      },
+      ChatType: chatType,
+    } as DecryptedMessageEntryResponse;
+
+    setMessages((prev) => mergeMessages(prev, [optimisticMessage]));
+
+    try {
+      // Actually send the message via DeSo API
+      await encryptAndSendNewMessage(
+        messageText,
+        userPublicKey,
+        counterPartyPublicKey,
+        threadAccessGroupKeyName,
+        userAccessGroupKeyName,
+        recipientInfo?.AccessGroupPublicKeyBase58Check
+      );
+
+      // Emit event for any listeners
+      DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
+        conversationId,
+        messageText,
+        timestampNanos,
+        chatType,
+        threadPublicKey: counterPartyPublicKey,
+        threadAccessGroupKeyName,
+        userAccessGroupKeyName,
+      });
+    } catch (error) {
+      console.error("[sendQuickHello] Failed to send message:", error);
+    }
+  }, [chatType, conversationId, counterPartyPublicKey, mergeMessages, recipientInfo?.AccessGroupPublicKeyBase58Check, threadAccessGroupKeyName, userAccessGroupKeyName, userPublicKey]);
+
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   return (
@@ -1088,7 +1134,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
               />
             }
             ListEmptyComponent={() => (
-              <View className="items-center justify-center px-6 py-10">
+              <View className="items-center justify-center px-6 py-10" style={{ transform: [{ scaleY: -1 }] }}>
                 {isLoading ? (
                   <View className="items-center">
                     <ActivityIndicator size="large" color="#3b82f6" />
@@ -1097,14 +1143,24 @@ export default function ConversationScreen({ navigation, route }: Props) {
                     </Text>
                   </View>
                 ) : (
-                  <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                    <Feather name="message-circle" size={38} color={isDark ? "#64748b" : "#9ca3af"} />
-                    <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                      No messages yet
+                  <View className="items-center rounded-3xl border border-gray-200 bg-white px-10 py-12 dark:border-slate-800 dark:bg-slate-900">
+                    <Text className="text-6xl mb-4">👋</Text>
+                    <Text className="text-xl font-semibold text-gray-900 dark:text-slate-200">
+                      Say hello!
                     </Text>
-                    <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
-                      Start the conversation and it will appear here instantly.
+                    <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400 px-2">
+                      You haven't started a conversation with{"\n"}
+                      <Text className="font-semibold text-gray-700 dark:text-slate-300">{headerDisplayName}</Text> yet
                     </Text>
+                    <View className="mt-5">
+                      <TouchableOpacity 
+                        onPress={sendQuickHello}
+                        activeOpacity={0.7}
+                        className="px-5 py-2.5 bg-blue-100 dark:bg-blue-900/40 rounded-full"
+                      >
+                        <Text className="text-base font-medium text-blue-600 dark:text-blue-400">Hi 👋</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
               </View>

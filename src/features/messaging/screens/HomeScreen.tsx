@@ -33,6 +33,9 @@ import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { useColorScheme } from "nativewind";
+import NewChatModal from "../components/NewChatModal";
+import EditIcon from "../../../assets/navIcons/edit.svg";
+import { ProfileSearchResult } from "../services/desoGraphql";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -89,10 +92,12 @@ const formatTimestamp = (timestampMs: number) => {
 
 export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === "dark";
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
+  const [isNewChatModalVisible, setIsNewChatModalVisible] = useState(false);
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
       string,
@@ -260,14 +265,48 @@ export default function HomeScreen() {
     navigation.navigate("Composer");
   }, [navigation]);
 
+  const handleNewChatSelect = useCallback(
+    (profile: ProfileSearchResult) => {
+      if (!currentUser?.PublicKeyBase58Check) return;
+
+      navigation.navigate("Conversation", {
+        threadPublicKey: profile.publicKey,
+        chatType: ChatType.DM,
+        userPublicKey: currentUser.PublicKeyBase58Check,
+        threadAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+        partyGroupOwnerPublicKeyBase58Check: profile.publicKey,
+        title: profile.username,
+      });
+    },
+    [currentUser?.PublicKeyBase58Check, navigation]
+  );
+
   if (isLoading && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-black">
-        <View className="px-4 pt-4 pb-3">
+        <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
           <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
             Chats
           </Text>
+          <TouchableOpacity
+            onPress={() => setIsNewChatModalVisible(true)}
+            className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
+            activeOpacity={0.7}
+          >
+            <EditIcon
+              width={20}
+              height={20}
+              stroke={isDark ? "#f8fafc" : "#0f172a"}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
         </View>
+        <NewChatModal
+          visible={isNewChatModalVisible}
+          onClose={() => setIsNewChatModalVisible(false)}
+          onSelectProfile={handleNewChatSelect}
+        />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#0085ff" />
         </View>
@@ -300,11 +339,29 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-black">
-      <View className="px-4 pt-4 pb-3">
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
         <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
           Chats
         </Text>
+        <TouchableOpacity
+          onPress={() => setIsNewChatModalVisible(true)}
+          className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
+          activeOpacity={0.7}
+        >
+          <EditIcon
+            width={20}
+            height={20}
+            stroke={isDark ? "#f8fafc" : "#0f172a"}
+            strokeWidth={2}
+          />
+        </TouchableOpacity>
       </View>
+
+      <NewChatModal
+        visible={isNewChatModalVisible}
+        onClose={() => setIsNewChatModalVisible(false)}
+        onSelectProfile={handleNewChatSelect}
+      />
       <View className="flex-1">
         <FlatList
           data={enhancedItems}
