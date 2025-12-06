@@ -1,4 +1,5 @@
 import { identity } from "deso-protocol";
+import { Platform } from "react-native";
 
 const UPLOAD_IMAGE_ENDPOINT = "https://node.deso.org/api/v0/upload-image";
 
@@ -23,11 +24,18 @@ export const uploadImage = async (
             const match = /\.(\w+)$/.exec(filename);
             const type = match ? `image/${match[1]}` : "image/jpeg";
 
-            formData.append("file", {
-                uri: imageUri,
-                name: filename,
-                type,
-            } as any);
+            if (Platform.OS === "web") {
+                const response = await fetch(imageUri);
+                const blob = await response.blob();
+                const file = blob instanceof File ? blob : new File([blob], filename, { type: blob.type || type });
+                formData.append("file", file, filename);
+            } else {
+                formData.append("file", {
+                    uri: imageUri,
+                    name: filename,
+                    type,
+                } as any);
+            }
 
             const xhr = new XMLHttpRequest();
             xhr.open("POST", UPLOAD_IMAGE_ENDPOINT);

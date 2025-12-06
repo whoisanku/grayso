@@ -1,6 +1,6 @@
 import CryptoPolyfill from "./components/CryptoPolyfill";
 import "react-native-gesture-handler";
-import React from "react";
+import React, { useEffect } from "react";
 import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
@@ -17,12 +17,16 @@ import { queryClient } from "./state/queryClient";
 // Web specific config if needed
 configure({
   storageProvider: AsyncStorage,
-  appName: "Starter App",
+  appName: "Grayso",
   spendingLimitOptions: getTransactionSpendingLimits(""),
 });
 
 export default function App() {
   const { colorScheme } = useColorScheme();
+
+  useEffect(() => {
+    document.title = "Grayso";
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -31,7 +35,10 @@ export default function App() {
         <SafeAreaProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
               <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+              <NavigationContainer
+                theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                documentTitle={{ formatter: () => "Grayso" }}
+              >
                 <RootNavigator />
               </NavigationContainer>
           </GestureHandlerRootView>

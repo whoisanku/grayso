@@ -69,7 +69,7 @@ export function getTransactionSpendingLimits(
 ): TransactionSpendingLimitResponseOptions {
   const UNLIMITED = "UNLIMITED" as unknown as number; // the SDK accepts this string sentinel
   return {
-    GlobalDESOLimit: 5 * 1e9,
+    GlobalDESOLimit: 1 * 1e9,
     TransactionCountLimitMap: {
       AUTHORIZE_DERIVED_KEY: 1,
       NEW_MESSAGE: UNLIMITED as any,

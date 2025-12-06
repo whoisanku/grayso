@@ -1,6 +1,6 @@
 {
-  "name": "Starter App",
-  "short_name": "StarterApp",
+  "name": "Grayso",
+  "short_name": "Grayso",
   "description": "Decentralized messaging powered by DeSo",
   "start_url": "/",
   "scope": "/",

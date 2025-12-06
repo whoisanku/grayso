@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useCallback, useEffect, useState } from "react";
+import React, { useContext, useMemo, useCallback, useEffect, useState, useRef } from "react";
 import {
   FlatList,
   Text,
@@ -10,6 +10,8 @@ import {
   DeviceEventEmitter,
   Modal,
   Dimensions,
+  Pressable,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ChatType, buildProfilePictureUrl } from "deso-protocol";
@@ -102,6 +104,7 @@ export default function HomeScreen() {
   const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const drawerRef = useRef<View | null>(null);
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
       string,
@@ -136,6 +139,26 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !isDrawerOpen) {
+      return;
+    }
+
+    const handleClick = (event: MouseEvent) => {
+      const node = drawerRef.current as unknown as HTMLElement | null;
+
+      if (node && event.target instanceof Node && !node.contains(event.target)) {
+        setIsDrawerOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [isDrawerOpen]);
 
   const items = useMemo<MockConversation[]>(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
@@ -407,17 +430,17 @@ export default function HomeScreen() {
             exiting={FadeOut.duration(100)}
             className="absolute inset-0"
           >
-            <TouchableOpacity
+            <Pressable
               className="flex-1"
-              activeOpacity={1}
               onPress={() => setIsDrawerOpen(false)}
             >
               <BlurView
                 intensity={40}
                 tint={isDark ? "dark" : "light"}
                 className="flex-1"
+                pointerEvents="none"
               />
-            </TouchableOpacity>
+            </Pressable>
           </Animated.View>
 
           {/* Drawer Content */}
@@ -429,6 +452,7 @@ export default function HomeScreen() {
               paddingTop: insets.top,
               backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
             }}
+            ref={drawerRef as any}
           >
             {/* User Profile Header */}
             <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
