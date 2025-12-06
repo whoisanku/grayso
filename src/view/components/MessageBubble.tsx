@@ -192,9 +192,11 @@ export const MessageBubble = React.memo(function MessageBubble({
         onReply(item);
     }, [onReply, item]);
 
+    
     const panGesture = useMemo(() => Gesture.Pan()
         .enabled(!hasMedia)
-        .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px to avoid conflict with scroll
+        .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px horizontal movement
+        .failOffsetY([-10, 10]) // Fail (allow scroll) if vertical movement exceeds 10px
         .onUpdate((event) => {
             'worklet';
             if (typeof event?.translationX !== "number") return;
@@ -395,9 +397,9 @@ export const MessageBubble = React.memo(function MessageBubble({
             </Reanimated.View>
 
             {/* Swipeable message row */}
-            <GestureDetector gesture={panGesture}>
+            <GestureDetector gesture={panGesture} touchAction="pan-y">
                 <Reanimated.View style={animatedRowStyle}>
-                    <GestureDetector gesture={contentGesture}>
+                    <GestureDetector gesture={contentGesture} touchAction="pan-y">
                         <View
                             className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                                 }`}
@@ -429,7 +431,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         backgroundColor: isMine 
                                             ? '#3b82f6' 
                                             : (isDark ? '#1e2738' : '#f8fafc'),
-                                    }
+                                    },
                                 ]}
                             >
                                 {/* Only show sender name in GROUP chats */}
