@@ -33,7 +33,18 @@
     ],
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/app-icon.png"
+      "output": "single",
+      "favicon": "./assets/app-icon.png",
+      "name": "Grayso",
+      "shortName": "Grayso",
+      "description": "Decentralized messaging powered by DeSo",
+      "lang": "en",
+      "backgroundColor": "#000000",
+      "themeColor": "#000000",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/"
     },
     "extra": {
       "eas": {
