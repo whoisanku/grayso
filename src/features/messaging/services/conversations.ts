@@ -349,7 +349,9 @@ export const encryptAndSendNewMessage = async (
   RecipientMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
   SenderMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
   RecipientAccessGroupPublicKeyBase58Check?: string,
-  extraData?: { [k: string]: string }
+  extraData?: { [k: string]: string },
+  imageURLs?: string[],
+  videoURLs?: string[]
 ): Promise<string> => {
   if (SenderMessagingKeyName !== DEFAULT_KEY_MESSAGING_GROUP_NAME) {
     return Promise.reject("sender must use default key for now");
@@ -363,6 +365,8 @@ export const encryptAndSendNewMessage = async (
     SenderMessagingKeyName,
     RecipientAccessGroupPublicKeyBase58Check,
     extraData,
+    imageURLs,
+    videoURLs,
   });
 
   const response = await checkPartyAccessGroups({
@@ -384,15 +388,47 @@ export const encryptAndSendNewMessage = async (
   const effectiveRecipientGroupKeyName =
     response.RecipientAccessGroupKeyName || RecipientMessagingKeyName;
 
+  const recipientKeyToUse = response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || "";
+
   if (effectiveRecipientGroupKeyName) {
     message = await identity.encryptMessage(
-      response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || "",
+      recipientKeyToUse,
       messageToSend
     );
   } else {
     message = bytesToHex(new TextEncoder().encode(messageToSend));
     isUnencrypted = true;
     ExtraData["unencrypted"] = "true";
+  }
+
+  // Encrypt Image URLs if present
+  if (imageURLs && imageURLs.length > 0) {
+    const imagesJson = JSON.stringify(imageURLs);
+    let encryptedImages = "";
+    if (effectiveRecipientGroupKeyName) {
+      encryptedImages = await identity.encryptMessage(
+        recipientKeyToUse,
+        imagesJson
+      );
+    } else {
+      encryptedImages = bytesToHex(new TextEncoder().encode(imagesJson));
+    }
+    ExtraData["encryptedImageURLs"] = encryptedImages;
+  }
+
+  // Encrypt Video URLs if present
+  if (videoURLs && videoURLs.length > 0) {
+    const videosJson = JSON.stringify(videoURLs);
+    let encryptedVideos = "";
+    if (effectiveRecipientGroupKeyName) {
+      encryptedVideos = await identity.encryptMessage(
+        recipientKeyToUse,
+        videosJson
+      );
+    } else {
+      encryptedVideos = bytesToHex(new TextEncoder().encode(videosJson));
+    }
+    ExtraData["encryptedVideoURLs"] = encryptedVideos;
   }
 
   if (!message) {

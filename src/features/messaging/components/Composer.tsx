@@ -27,14 +27,19 @@ import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { getProfileDisplayName } from "../../../utils/deso";
 import { getDisplayedMessageText } from "../utils/messageUtils";
 import * as ImagePicker from "expo-image-picker";
+import { uploadImage, uploadVideo } from "../../../services/media";
 
 // Type for selected images (for future API integration)
 export type SelectedImage = {
     uri: string;
     width: number;
     height: number;
-    fileName?: string;
+    fileName?: string | null;
     mimeType?: string;
+    // Upload state
+    uploadStatus: 'pending' | 'uploading' | 'completed' | 'error';
+    progress: number;
+    uploadedUrl?: string;
 };
 
 export type ComposerProps = {
@@ -123,27 +128,69 @@ export const Composer = React.memo(function Composer({
     const handlePickImages = useCallback(async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
                 allowsMultipleSelection: true,
                 quality: 0.8,
                 selectionLimit: 10,
             });
 
-            if (!result.canceled && result.assets.length > 0) {
+            if (!result.canceled && result.assets && result.assets.length > 0) {
                 const newImages: SelectedImage[] = result.assets.map((asset) => ({
                     uri: asset.uri,
-                    width: asset.width || 0,
-                    height: asset.height || 0,
-                    fileName: asset.fileName || undefined,
-                    mimeType: asset.mimeType || undefined,
+                    width: asset.width,
+                    height: asset.height,
+                    fileName: asset.fileName,
+                    mimeType: asset.mimeType,
+                    uploadStatus: 'pending',
+                    progress: 0
                 }));
-                setSelectedImages((prev) => [...prev, ...newImages].slice(0, 10)); // Limit to 10 images
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+                setSelectedImages((prev) => [...prev, ...newImages]);
+
+                // Start uploads immediately
+                newImages.forEach((image) => {
+                    uploadMediaItem(image);
+                });
             }
         } catch (error) {
-            console.error("Image picker error:", error);
+            console.error("Error picking images:", error);
         }
-    }, []);
+    }, [userPublicKey]);
+
+    const uploadMediaItem = async (item: SelectedImage) => {
+        // Update status to uploading
+        setSelectedImages(prev => prev.map(img =>
+            img.uri === item.uri ? { ...img, uploadStatus: 'uploading' } : img
+        ));
+
+        try {
+            const isVideo = item.mimeType?.startsWith('video/');
+            let url = "";
+
+            const onProgress = (progress: number) => {
+                setSelectedImages(prev => prev.map(img =>
+                    img.uri === item.uri ? { ...img, progress } : img
+                ));
+            };
+
+            if (isVideo) {
+                url = await uploadVideo(userPublicKey, item.uri, onProgress);
+            } else {
+                url = await uploadImage(userPublicKey, item.uri, onProgress);
+            }
+
+            // Update status to completed
+            setSelectedImages(prev => prev.map(img =>
+                img.uri === item.uri ? { ...img, uploadStatus: 'completed', uploadedUrl: url, progress: 1 } : img
+            ));
+
+        } catch (error) {
+            console.error("Upload failed:", error);
+            setSelectedImages(prev => prev.map(img =>
+                img.uri === item.uri ? { ...img, uploadStatus: 'error', progress: 0 } : img
+            ));
+        }
+    };
 
     // Remove image handler
     const handleRemoveImage = useCallback((index: number) => {
@@ -359,17 +406,128 @@ export const Composer = React.memo(function Composer({
         }
     };
 
-    const handleSendOrSave = () => {
+    const handleSendOrSave = async () => {
         if (isEditMode) {
             onSaveEdit?.();
         } else {
-            // TODO: Your friend should integrate selectedImages here for API upload
-            // The selectedImages array contains { uri, width, height, fileName, mimeType }
-            // After successful send, clear images: setSelectedImages([])
-            onSend();
-            // Clear images after sending (for now just clears locally)
-            if (selectedImages.length > 0) {
+            // Check if we have content to send
+            if (!currentText.trim() && selectedImages.length === 0) return;
+
+            try {
+                setSending(true);
+                onSendingChange?.(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+                const extraData: { [k: string]: string } = {};
+
+                // Handle image uploads if any
+                const imageURLs: string[] = [];
+                const videoURLs: string[] = [];
+
+                if (selectedImages.length > 0) {
+                    // Check if any uploads are still pending or failed
+                    const pendingUploads = selectedImages.filter(img => img.uploadStatus === 'uploading' || img.uploadStatus === 'pending');
+                    if (pendingUploads.length > 0) {
+                        // TODO: Show toast "Please wait for uploads to complete"
+                        setSending(false);
+                        onSendingChange?.(false);
+                        return;
+                    }
+
+                    const failedUploads = selectedImages.filter(img => img.uploadStatus === 'error');
+                    if (failedUploads.length > 0) {
+                        // TODO: Show toast "Some uploads failed"
+                        setSending(false);
+                        onSendingChange?.(false);
+                        return;
+                    }
+
+                    try {
+                        const imagesToUpload = selectedImages.filter(img => !img.mimeType?.startsWith('video/'));
+                        const videosToUpload = selectedImages.filter(img => img.mimeType?.startsWith('video/'));
+
+                        // Collect uploaded images
+                        imagesToUpload.forEach((img, i) => {
+                            if (img.uploadedUrl) {
+                                imageURLs.push(img.uploadedUrl);
+                                const clientId = img.uploadedUrl.split('/').pop();
+                                if (clientId) {
+                                    extraData[`image.${i}.clientId`] = clientId;
+                                    extraData[`image.${i}.width`] = String(img.width);
+                                    extraData[`image.${i}.height`] = String(img.height);
+                                    extraData[`image.${i}.orientation`] = img.width > img.height ? "landscape" : "portrait";
+                                }
+                            }
+                        });
+
+                        // Collect uploaded videos
+                        videosToUpload.forEach((vid, i) => {
+                            if (vid.uploadedUrl) {
+                                videoURLs.push(vid.uploadedUrl);
+                                // Extract clientId from URL (e.g. https://iframe.videodelivery.net/<id> -> <id>)
+                                const clientId = vid.uploadedUrl.split('/').pop();
+                                if (clientId) {
+                                    extraData[`video.${i}.clientId`] = clientId;
+                                }
+                                extraData[`video.${i}.width`] = String(vid.width);
+                                extraData[`video.${i}.height`] = String(vid.height);
+                                // Default to portrait for now, or calculate if possible
+                                extraData[`video.${i}.orientation`] = vid.width > vid.height ? "landscape" : "portrait";
+                            }
+                        });
+
+                    } catch (err) {
+                        console.error("Failed to process media:", err);
+                        // TODO: Show error toast to user
+                        setSending(false);
+                        onSendingChange?.(false);
+                        return;
+                    }
+                }
+
+                // Handle reply metadata
+                if (replyToMessage && replyToMessage.MessageInfo?.TimestampNanosString) {
+                    extraData.RepliedToMessageId = replyToMessage.MessageInfo.TimestampNanosString;
+                    if (replyToMessage.MessageInfo.EncryptedText) {
+                        extraData.RepliedToMessageEncryptedText = replyToMessage.MessageInfo.EncryptedText;
+                    }
+                }
+
+                await encryptAndSendNewMessage(
+                    currentText.trim(), // Can be empty string if only sending images
+                    userPublicKey,
+                    counterPartyPublicKey,
+                    threadAccessGroupKeyName,
+                    userAccessGroupKeyName,
+                    recipientAccessGroupPublicKeyBase58Check,
+                    extraData,
+                    imageURLs,
+                    videoURLs
+                );
+
+                const timestampNanos = Math.round(Date.now() * 1e6);
+                onMessageSent?.(currentText.trim());
+                if (onCancelReply) onCancelReply();
+
+                DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
+                    conversationId,
+                    messageText: currentText.trim(),
+                    timestampNanos,
+                    chatType,
+                    threadPublicKey: counterPartyPublicKey,
+                    threadAccessGroupKeyName,
+                    userAccessGroupKeyName,
+                    extraData // Include extraData for optimistic UI if needed
+                });
+
+                setText("");
                 setSelectedImages([]);
+                focusInput();
+            } catch (e) {
+                console.error("Send message error", e);
+            } finally {
+                setSending(false);
+                onSendingChange?.(false);
             }
         }
     };
@@ -393,11 +551,11 @@ export const Composer = React.memo(function Composer({
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}
+                    contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}
                     className="border-b border-slate-100 dark:border-slate-800"
                 >
                     {selectedImages.map((image, index) => (
-                        <View key={`${image.uri}-${index}`} style={{ position: 'relative' }}>
+                        <View key={`${image.uri}-${index}`} className="mr-2 relative">
                             <Image
                                 source={{ uri: image.uri }}
                                 style={{
@@ -405,9 +563,28 @@ export const Composer = React.memo(function Composer({
                                     height: 72,
                                     borderRadius: 12,
                                     backgroundColor: isDark ? '#1e2738' : '#f1f5f9',
+                                    opacity: image.uploadStatus === 'uploading' ? 0.7 : 1
                                 }}
                                 resizeMode="cover"
                             />
+
+                            {/* Progress Overlay */}
+                            {image.uploadStatus === 'uploading' && (
+                                <View className="absolute inset-0 items-center justify-center bg-black/30 rounded-xl">
+                                    <ActivityIndicator size="small" color="#fff" />
+                                    <Text className="text-white text-[10px] font-bold mt-1">
+                                        {Math.round(image.progress * 100)}%
+                                    </Text>
+                                </View>
+                            )}
+
+                            {/* Error Overlay */}
+                            {image.uploadStatus === 'error' && (
+                                <View className="absolute inset-0 items-center justify-center bg-red-500/50 rounded-xl">
+                                    <Feather name="alert-circle" size={20} color="#fff" />
+                                </View>
+                            )}
+
                             <TouchableOpacity
                                 onPress={() => handleRemoveImage(index)}
                                 activeOpacity={0.8}
@@ -495,6 +672,6 @@ export const Composer = React.memo(function Composer({
                     </TouchableOpacity>
                 </View>
             </View>
-        </View>
+        </View >
     );
 });
