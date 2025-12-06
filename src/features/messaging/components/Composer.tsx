@@ -9,13 +9,14 @@ import {
     NativeSyntheticEvent,
     TextInputContentSizeChangeEventData,
     DeviceEventEmitter,
+    Image,
+    ScrollView,
 } from "react-native";
 import Reanimated, {
-    useAnimatedStyle,
     FadeInDown,
     FadeOutUp,
 } from "react-native-reanimated";
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+// Keyboard animation now handled by ScreenWrapper's KeyboardAvoidingView
 import { Platform } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -25,6 +26,16 @@ import { encryptAndSendNewMessage } from "../services/conversations";
 import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
 import { getProfileDisplayName } from "../../../utils/deso";
 import { getDisplayedMessageText } from "../utils/messageUtils";
+import * as ImagePicker from "expo-image-picker";
+
+// Type for selected images (for future API integration)
+export type SelectedImage = {
+    uri: string;
+    width: number;
+    height: number;
+    fileName?: string;
+    mimeType?: string;
+};
 
 export type ComposerProps = {
     isGroupChat: boolean;
@@ -74,19 +85,13 @@ export const Composer = React.memo(function Composer({
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
     const [inputHeight, setInputHeight] = useState(32);
+    const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const textInputRef = useRef<TextInput>(null);
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
-    // Use keyboard controller for dynamic keyboard height
-    const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
-    const animatedComposerStyle = useAnimatedStyle(() => ({
-        paddingBottom: Platform.OS === "ios"
-            ? Math.max(keyboardHeight.value, bottomInset)
-            : bottomInset,
-        // Add smooth transition for keyboard height changes
-        marginBottom: Platform.OS === "android" && keyboardHeight.value > 0 ? 0 : 0,
-    }));
+    // Keyboard avoidance is now handled by ScreenWrapper's KeyboardAvoidingView
+    // This ensures the entire content (including FlatList) moves up with keyboard
 
     const focusInput = useCallback(() => {
         textInputRef.current?.focus();
@@ -113,6 +118,38 @@ export const Composer = React.memo(function Composer({
         },
         []
     );
+
+    // Image picker handler
+    const handlePickImages = useCallback(async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsMultipleSelection: true,
+                quality: 0.8,
+                selectionLimit: 10,
+            });
+
+            if (!result.canceled && result.assets.length > 0) {
+                const newImages: SelectedImage[] = result.assets.map((asset) => ({
+                    uri: asset.uri,
+                    width: asset.width || 0,
+                    height: asset.height || 0,
+                    fileName: asset.fileName || undefined,
+                    mimeType: asset.mimeType || undefined,
+                }));
+                setSelectedImages((prev) => [...prev, ...newImages].slice(0, 10)); // Limit to 10 images
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+        } catch (error) {
+            console.error("Image picker error:", error);
+        }
+    }, []);
+
+    // Remove image handler
+    const handleRemoveImage = useCallback((index: number) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    }, []);
 
     const onSend = useCallback(async (messageText?: string) => {
         const textToSend = messageText || text.trim();
@@ -197,7 +234,7 @@ export const Composer = React.memo(function Composer({
                 key="reply-preview"
                 entering={FadeInDown.duration(150)}
                 exiting={FadeOutUp.duration(150)}
-                className={`flex-row items-center py-3 px-4 ${isDark
+                className={`flex-row items-center py-3 px-3 ${isDark
                     ? "bg-[#0f1419]"
                     : "bg-[#f1f5f9]"
                     }`}
@@ -236,11 +273,11 @@ export const Composer = React.memo(function Composer({
                         width: 36,
                         height: 36,
                         borderRadius: 18,
-                        borderWidth: 2,
-                        borderColor: isDark ? '#4a5568' : '#cbd5e1',
+                        backgroundColor: isDark ? '#1e2738' : '#e2e8f0',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginLeft: 12,
+                        marginLeft: 8,
+                        marginRight: 1.5, // Align with send button (pr-1.5 in composer input)
                     }}
                 >
                     <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
@@ -265,7 +302,7 @@ export const Composer = React.memo(function Composer({
                 key="edit-preview"
                 entering={FadeInDown.duration(150)}
                 exiting={FadeOutUp.duration(150)}
-                className={`flex-row items-center py-3 px-4 ${isDark
+                className={`flex-row items-center py-3 px-3 ${isDark
                     ? "bg-[#1e293b]"
                     : "bg-[#f1f5f9]"
                     }`}
@@ -297,11 +334,11 @@ export const Composer = React.memo(function Composer({
                         width: 36,
                         height: 36,
                         borderRadius: 18,
-                        borderWidth: 2,
-                        borderColor: isDark ? '#4a5568' : '#cbd5e1',
+                        backgroundColor: isDark ? '#1e2738' : '#e2e8f0',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginLeft: 12,
+                        marginLeft: 8,
+                        marginRight: 1.5, // Align with send button (pr-1.5 in composer input)
                     }}
                 >
                     <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
@@ -326,24 +363,95 @@ export const Composer = React.memo(function Composer({
         if (isEditMode) {
             onSaveEdit?.();
         } else {
+            // TODO: Your friend should integrate selectedImages here for API upload
+            // The selectedImages array contains { uri, width, height, fileName, mimeType }
+            // After successful send, clear images: setSelectedImages([])
             onSend();
+            // Clear images after sending (for now just clears locally)
+            if (selectedImages.length > 0) {
+                setSelectedImages([]);
+            }
         }
     };
 
+    const hasContent = currentText.trim().length > 0 || selectedImages.length > 0;
     const isDisabled = isEditMode
         ? (!currentText.trim() || isSavingEdit)
-        : (sending || !currentText.trim());
+        : (sending || !hasContent);
 
     return (
-        <Reanimated.View
-            className={`border-t border-slate-200 dark:border-slate-800 ${isDark ? "bg-[#000]" : "bg-[#fff]"
+        <View
+            className={`border-t border-slate-200 dark:border-slate-800 ${isDark ? "bg-[#0a0f1a]" : "bg-[#fff]"
                 }`}
-            style={animatedComposerStyle}
+            style={{ paddingBottom: bottomInset }}
         >
             {editPreview}
             {replyPreview}
-            <View className="flex-row items-end mx-3 mt-3 justify-between">
-                <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${isDark ? "bg-[#1e293b]" : "bg-[#f1f5f9]"
+
+            {/* Selected Images Preview */}
+            {selectedImages.length > 0 && (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}
+                    className="border-b border-slate-100 dark:border-slate-800"
+                >
+                    {selectedImages.map((image, index) => (
+                        <View key={`${image.uri}-${index}`} style={{ position: 'relative' }}>
+                            <Image
+                                source={{ uri: image.uri }}
+                                style={{
+                                    width: 72,
+                                    height: 72,
+                                    borderRadius: 12,
+                                    backgroundColor: isDark ? '#1e2738' : '#f1f5f9',
+                                }}
+                                resizeMode="cover"
+                            />
+                            <TouchableOpacity
+                                onPress={() => handleRemoveImage(index)}
+                                activeOpacity={0.8}
+                                style={{
+                                    position: 'absolute',
+                                    top: -6,
+                                    right: -6,
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: 11,
+                                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderWidth: 2,
+                                    borderColor: isDark ? '#0a0f1a' : '#fff',
+                                }}
+                            >
+                                <Feather name="x" size={12} color={isDark ? '#94a3b8' : '#64748b'} />
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                </ScrollView>
+            )}
+
+            <View className="flex-row items-end mx-3 my-3 justify-between">
+                {/* Image Picker Button - only show when not editing */}
+                {!isEditMode && (
+                    <TouchableOpacity
+                        onPress={handlePickImages}
+                        activeOpacity={0.7}
+                        className="mr-2"
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ alignSelf: 'center' }}
+                    >
+                        <View
+                            className={`h-9 w-9 rounded-full items-center justify-center ${isDark ? "bg-[#1e2738]" : "bg-[#f1f5f9]"
+                                }`}
+                        >
+                            <Feather name="plus" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
+                        </View>
+                    </TouchableOpacity>
+                )}
+
+                <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${isDark ? "bg-[#1e2738]" : "bg-[#f1f5f9]"
                     }`}>
                     <TextInput
                         ref={textInputRef}
@@ -373,21 +481,20 @@ export const Composer = React.memo(function Composer({
                         activeOpacity={0.85}
                         className="ml-2"
                     >
-                        <View className={`h-8 w-8 rounded-full items-center justify-center ${!currentHasText ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : (isEditMode ? "bg-[#f59e0b]" : "bg-[#0085ff]")
-                            }`}>
+                        <View className={`h-9 w-9 rounded-full items-center justify-center ${!hasContent ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : (isEditMode ? "bg-[#f59e0b]" : "bg-[#0085ff]")}`}>
                             {(sending || isSavingEdit) ? (
                                 <ActivityIndicator size="small" color="#ffffff" />
                             ) : (
                                 <Ionicons
                                     name={isEditMode ? "checkmark" : "arrow-up"}
-                                    size={20}
-                                    color={!currentHasText ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
+                                    size={22}
+                                    color={!hasContent ? (isDark ? "#94a3b8" : "#64748b") : "#ffffff"}
                                 />
                             )}
                         </View>
                     </TouchableOpacity>
                 </View>
             </View>
-        </Reanimated.View>
+        </View>
     );
 });

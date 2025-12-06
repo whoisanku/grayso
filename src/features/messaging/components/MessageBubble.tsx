@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useCallback, useMemo } from "react";
 import { View, Text, Image, Keyboard } from "react-native";
 import Reanimated, {
     useSharedValue,
@@ -26,6 +26,7 @@ import {
 } from "../utils/messageUtils";
 import { FileAndMessageBubble } from "../components/FileAndMessageBubble";
 import { VideoMessageBubble } from "../components/VideoMessageBubble";
+import { ImageGalleryModal } from "../components/ImageGalleryModal";
 
 export type MessageBubbleProps = {
     item: DecryptedMessageEntryResponse;
@@ -62,6 +63,21 @@ export const MessageBubble = React.memo(function MessageBubble({
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
+
+    // Image gallery state
+    const [galleryVisible, setGalleryVisible] = useState(false);
+    const [galleryImages, setGalleryImages] = useState<string[]>([]);
+    const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
+
+    const handleImagePress = useCallback((images: string[], index: number) => {
+        setGalleryImages(images);
+        setGalleryInitialIndex(index);
+        setGalleryVisible(true);
+    }, []);
+
+    const handleCloseGallery = useCallback(() => {
+        setGalleryVisible(false);
+    }, []);
 
     const extraData = item.MessageInfo?.ExtraData || {};
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
@@ -161,19 +177,20 @@ export const MessageBubble = React.memo(function MessageBubble({
     const translateX = useSharedValue(0);
     const hasTriggeredHaptic = useSharedValue(false);
 
-    const triggerHaptic = () => {
+    const triggerHaptic = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    };
+    }, []);
 
-    const triggerReply = () => {
+    const triggerReply = useCallback(() => {
         if (!onReply) return;
         onReply(item);
-    };
+    }, [onReply, item]);
 
-    const panGesture = Gesture.Pan()
+    const panGesture = useMemo(() => Gesture.Pan()
         .enabled(!hasMedia)
         .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px to avoid conflict with scroll
         .onUpdate((event) => {
+            'worklet';
             if (typeof event?.translationX !== "number") return;
             // For sent messages (isMine), swipe left (negative); for received, swipe right (positive)
             const clampedValue = isMine
@@ -192,6 +209,7 @@ export const MessageBubble = React.memo(function MessageBubble({
             }
         })
         .onEnd(() => {
+            'worklet';
             const absValue = Math.abs(translateX.value);
             if (absValue >= SWIPE_THRESHOLD) {
                 runOnJS(triggerReply)();
@@ -203,7 +221,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 overshootClamping: true,
             });
             hasTriggeredHaptic.value = false;
-        });
+        }), [hasMedia, isMine, triggerHaptic, triggerReply]);
 
     const animatedRowStyle = useAnimatedStyle(() => {
         return {
@@ -231,15 +249,16 @@ export const MessageBubble = React.memo(function MessageBubble({
         };
     });
 
-    const handleLongPress = (layout: { x: number; y: number; width: number; height: number }) => {
+    const handleLongPress = useCallback((layout: { x: number; y: number; width: number; height: number }) => {
         if (!onLongPress) return;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // Haptic is handled in useMessageActions to avoid double feedback
         onLongPress(item, layout);
-    };
+    }, [onLongPress, item]);
 
-    const longPressGesture = Gesture.LongPress()
+    const longPressGesture = useMemo(() => Gesture.LongPress()
         .minDuration(250)
         .onStart(() => {
+            'worklet';
             const measured = measure(animatedBubbleRef);
             if (measured) {
                 runOnJS(handleLongPress)({
@@ -249,15 +268,16 @@ export const MessageBubble = React.memo(function MessageBubble({
                     height: measured.height,
                 });
             }
-        });
+        }), [handleLongPress]);
 
-    const tapGesture = Gesture.Tap()
+    const tapGesture = useMemo(() => Gesture.Tap()
         .enabled(!hasMedia)
         .onEnd(() => {
+            'worklet';
             runOnJS(Keyboard.dismiss)();
-        });
+        }), [hasMedia]);
 
-    const contentGesture = Gesture.Exclusive(longPressGesture, tapGesture);
+    const contentGesture = useMemo(() => Gesture.Exclusive(longPressGesture, tapGesture), [longPressGesture, tapGesture]);
 
 
 
@@ -277,8 +297,8 @@ export const MessageBubble = React.memo(function MessageBubble({
     const isLastInGroup = !isNextMessageFromSameSender || !isNextMessageClose;
     const isOnlyMessage = isFirstInGroup && isLastInGroup;
 
-    // Dynamic border radius based on position in group
-    const getBorderRadius = () => {
+    // Dynamic border radius based on position in group - memoized for performance
+    const borderRadiusStyle = useMemo(() => {
         const R = 22; // Large radius
         const r = 4;  // Small radius
 
@@ -292,7 +312,14 @@ export const MessageBubble = React.memo(function MessageBubble({
             if (isLastInGroup) return { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: R, borderBottomRightRadius: R };
             return { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: r, borderBottomRightRadius: R };
         }
-    };
+    }, [isOnlyMessage, isMine, isFirstInGroup, isLastInGroup]);
+
+    // Memoize bubble border and shadow styles for performance
+    const bubbleExtraStyle = useMemo(() => [
+        borderRadiusStyle,
+        !isMine && { borderWidth: 0.5, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
+        { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 2 },
+    ], [borderRadiusStyle, isMine, isDark]);
 
     const marginBottom = isLastInGroup ? 16 : 2;
 
@@ -302,9 +329,9 @@ export const MessageBubble = React.memo(function MessageBubble({
             ref={bubbleContainerRef}
         >
             {showDayDivider ? (
-                <View className="items-center py-1">
-                    <View className="rounded-full bg-gray-200 px-3 py-1 dark:bg-slate-800">
-                        <Text className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-400">
+                <View className="items-center py-5 my-2">
+                    <View className="rounded-full bg-gray-200/80 px-4 py-1.5 dark:bg-white/10">
+                        <Text className="text-[11px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                             {formatDayLabel(timestamp)}
                         </Text>
                     </View>
@@ -349,7 +376,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                             className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                                 }`}
                         >
-                            {!isMine ? (
+                            {/* Only show profile pic for received messages in GROUP chats */}
+                            {!isMine && isGroupChat ? (
                                 <View className="mr-2" style={{ width: 32 }}>
                                     {isLastInGroup && hasAvatar ? (
                                         <Image
@@ -365,14 +393,12 @@ export const MessageBubble = React.memo(function MessageBubble({
                             ) : null}
                             <Reanimated.View
                                 ref={animatedBubbleRef}
-                                className={`max-w-[80%] px-4 py-3 shadow-sm ${isMine ? "bg-[#2563eb]" : "bg-white dark:bg-[#1e293b]"
+                                className={`max-w-[80%] px-4 py-3 ${isMine ? "bg-[#3b82f6]" : "bg-[#f8fafc] dark:bg-[#1e2738]"
                                     }`}
-                                style={[
-                                    getBorderRadius(),
-                                    !isMine && { borderWidth: 1, borderColor: isDark ? '#334155' : '#e2e8f0' },
-                                ]}
+                                style={bubbleExtraStyle}
                             >
-                                {!isMine && isFirstInGroup && (
+                                {/* Only show sender name in GROUP chats */}
+                                {!isMine && isGroupChat && isFirstInGroup && (
                                     <Text
                                         className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
                                         numberOfLines={1}
@@ -385,54 +411,51 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     decryptedImageURLs={extraData.decryptedImageURLs as string}
                                     extraData={extraData}
                                     isDark={isDark}
+                                    onImagePress={handleImagePress}
                                 />
                                 <VideoMessageBubble
                                     decryptedVideoURLs={extraData.decryptedVideoURLs as string}
                                     extraData={extraData}
                                     isDark={isDark}
                                 />
-                                <Text
-                                    className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
-                                        }`}
-                                >
-                                    {messageText}
-                                </Text>
-                                {isLastInGroup && (
-                                    <View
-                                        className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"
+                                {/* Message text with WhatsApp-style inline timestamp */}
+                                <View>
+                                    <Text
+                                        className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
                                             }`}
                                     >
-                                        {hasError ? (
-                                            <Text className="text-[10px] font-medium text-red-500">
-                                                Failed to decrypt
-                                            </Text>
-                                        ) : (
+                                        {messageText}
+                                        {/* Invisible spacer to reserve space for timestamp */}
+                                        <Text style={{ opacity: 0, fontSize: 10 }}>
+                                            {"  "}{isEditedMessage ? "Edited " : ""}{timestamp ? formatTimestamp(timestamp) : ""}
+                                        </Text>
+                                    </Text>
+                                    {/* Actual timestamp positioned at bottom-right */}
+                                    <Text
+                                        className={`text-[10px] ${hasError ? "text-red-500" : isMine ? "text-blue-200" : "text-slate-400 dark:text-slate-500"}`}
+                                        style={{ position: 'absolute', bottom: 0, right: 0 }}
+                                    >
+                                        {hasError ? "Failed" : (
                                             <>
-                                                {isEditedMessage ? (
-                                                    <Text
-                                                        className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
-                                                            }`}
-                                                    >
-                                                        Edited
-                                                    </Text>
-                                                ) : null}
-                                                {timestamp ? (
-                                                    <Text
-                                                        className={`text-[10px] opacity-70 ${isMine ? "text-white/70" : "text-slate-500 dark:text-slate-400"
-                                                            }`}
-                                                    >
-                                                        {formatTimestamp(timestamp)}
-                                                    </Text>
-                                                ) : null}
+                                                {isEditedMessage ? "Edited " : ""}
+                                                {timestamp ? formatTimestamp(timestamp) : ""}
                                             </>
                                         )}
-                                    </View>
-                                )}
+                                    </Text>
+                                </View>
                             </Reanimated.View>
                         </View>
                     </GestureDetector>
                 </Reanimated.View>
             </GestureDetector>
+
+            {/* Fullscreen Image Gallery Modal */}
+            <ImageGalleryModal
+                visible={galleryVisible}
+                images={galleryImages}
+                initialIndex={galleryInitialIndex}
+                onClose={handleCloseGallery}
+            />
         </View>
     );
 });

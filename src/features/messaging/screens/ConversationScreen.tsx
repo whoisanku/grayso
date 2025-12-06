@@ -11,7 +11,6 @@ import {
   FlatList,
   Modal,
   Platform,
-  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,7 +18,7 @@ import {
   Image,
   Animated,
 } from "react-native";
-import { FlashList as FlashListComponent } from "@shopify/flash-list";
+
 import Reanimated from "react-native-reanimated";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
@@ -162,8 +161,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
-  const autoLoadTriggeredRef = useRef(false);
-  const hasInitialScrollRef = useRef(false);
+
 
   // --- Effects & Callbacks ---
 
@@ -171,23 +169,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-
-  // Auto-scroll to latest messages when conversation opens only
-  useEffect(() => {
-    if (hasInitialScrollRef.current) return;
-    if (messages.length === 0 || isLoading) return;
-
-    hasInitialScrollRef.current = true;
-    const timer = setTimeout(() => {
-      try {
-        flatListRef.current?.scrollToEnd({ animated: false });
-      } catch (err) {
-        console.warn("[ConversationScreen] Failed initial scrollToEnd", err);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [isLoading, messages.length]);
+  // No need to scrollToEnd with inverted list - newest messages automatically at bottom
 
 
   // --- Render Helpers ---
@@ -206,13 +188,20 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return getProfileImageUrl(counterPartyPublicKey) || FALLBACK_PROFILE_IMAGE;
   }, [counterPartyPublicKey, isGroupChat, recipientOwnerKey]);
 
-  // Messages are already sorted newest-first by normalizeAndSortMessages
-  // No need to reverse - display them as-is
+  // Messages sorted oldest-first by normalizeAndSortMessages
+  // For inverted FlatList, we reverse to newest-first (index 0 = newest)
+  // This way, loading older messages appends to END of array = no scroll jump
+  const invertedMessages = useMemo(() => {
+    return [...messages].reverse();
+  }, [messages]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: DecryptedMessageEntryResponse; index: number }) => {
-      const previousMessage = messages[index - 1];
-      const nextMessage = messages[index + 1];
+      // With inverted list: index 0 = newest message (visually at bottom)
+      // Map back to original order for prev/next context
+      const originalIndex = invertedMessages.length - 1 - index;
+      const previousMessage = messages[originalIndex - 1];
+      const nextMessage = messages[originalIndex + 1];
       const previousTimestamp = previousMessage?.MessageInfo?.TimestampNanos;
 
       return (
@@ -233,24 +222,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
         />
       );
     },
-    [handleMessageLongPress, handleReply, isDark, isGroupChat, messageIdMap, profiles, bubbleLayoutsRef] // Remove messages from dependencies to prevent unnecessary re-renders
+    [handleMessageLongPress, handleReply, isDark, isGroupChat, messageIdMap, profiles, bubbleLayoutsRef, messages, invertedMessages.length]
   );
 
   const keyExtractor = useCallback((item: DecryptedMessageEntryResponse, index: number) => {
     return item.MessageInfo?.TimestampNanosString ?? `${item.MessageInfo?.TimestampNanos ?? "unknown"} -${index} `;
   }, []);
 
-  // FlashList getItemType for efficient cell recycling
-  const getItemType = useCallback((item: DecryptedMessageEntryResponse) => {
-    // Categorize messages by type for optimal recycling
-    const extraData = item.MessageInfo?.ExtraData as Record<string, any> | undefined;
-    if (extraData?.MessageType === 'SYSTEM') return 'system';
-    if (extraData?.ImageURLs?.length) return 'image';
-    if (extraData?.VideoURLs?.length) return 'video';
-    if (extraData?.RepliedToMessageId) return 'reply';
-    if (extraData?.edited === 'true') return 'edited';
-    return 'text';
-  }, []);
+
 
   const isPaginating = useMemo(() => {
     return isLoading && messages.length > 0 && !isRefreshing;
@@ -296,7 +275,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
       edges={['top', 'left', 'right', 'bottom']}
       keyboardAvoiding={Platform.OS === "ios"}
       keyboardVerticalOffset={0}
-      backgroundColor={isDark ? "#000000" : "#ffffff"}
+      backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
       useKeyboardController={true}
     >
       {/* Custom Header */}
@@ -352,8 +331,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 // Loading placeholders
                 [0, 1, 2].map((i) => (
                   <View
-                    key={`placeholder - ${i} `}
-                    className={`h - 9 w - 9 rounded - full bg - slate - 200 border - 2 border - white dark: bg - slate - 700 dark: border - slate - 800 ${i > 0 ? "-ml-[15px]" : ""} `}
+                    key={`placeholder-${i}`}
+                    className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""}`}
                     style={{ zIndex: 3 - i }}
                   />
                 ))
@@ -391,50 +370,37 @@ export default function ConversationScreen({ navigation, route }: Props) {
             <ActivityIndicator size="large" color="#3b82f6" />
           </View>
         ) : (
-          <FlashListComponent<DecryptedMessageEntryResponse>
+          <FlatList<DecryptedMessageEntryResponse>
             ref={flatListRef}
-            data={messages}
+            data={invertedMessages}
             keyExtractor={keyExtractor}
-            getItemType={getItemType}
             renderItem={renderItem}
-            // @ts-ignore - estimatedItemSize exists but type definitions lag behind
-            estimatedItemSize={80}
-            ListHeaderComponent={topListHeader}
-            ListFooterComponent={footer} // Error/info near bottom
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={() => loadMessages(true, true)}
-                tintColor={isDark ? "#94a3b8" : "#64748b"}
-              />
-            }
+            inverted={true}
+            // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
+            ListFooterComponent={topListHeader}
+            ListHeaderComponent={footer}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               paddingHorizontal: 16,
-              paddingBottom: 12,
+              paddingTop: 12,
             }}
+            // Load older messages when scrolling toward the "end" (visually = top)
+            onEndReached={() => {
+              if (!isLoading && hasMore) {
+                loadMessages(false);
+              }
+            }}
+            onEndReachedThreshold={0.3}
             onScroll={(e) => {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               const rawOffsetY = contentOffset.y;
-              const distanceFromBottom = Math.max(
-                0,
-                contentSize.height - (rawOffsetY + layoutMeasurement.height)
-              );
+              
+              // Track current scroll offset
+              scrollOffsetRef.current = rawOffsetY;
 
-              scrollOffsetRef.current = distanceFromBottom;
-
-              const NEAR_TOP_THRESHOLD = 80;
-              const RESET_THRESHOLD = NEAR_TOP_THRESHOLD + 40;
-              if (rawOffsetY <= NEAR_TOP_THRESHOLD) {
-                if (!autoLoadTriggeredRef.current && hasMore && !isLoading) {
-                  autoLoadTriggeredRef.current = true;
-                  loadMessages(false);
-                }
-              } else if (rawOffsetY > RESET_THRESHOLD) {
-                autoLoadTriggeredRef.current = false;
-              }
-
-              if (distanceFromBottom > SCROLL_TO_BOTTOM_THRESHOLD) {
+              // With inverted list: offset 0 = bottom (newest), higher offset = top (older)
+              // Show scroll-to-bottom button when user scrolls up (away from newest)
+              if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
                 if (!showScrollToBottom) {
                   scrollToBottomAnim.setValue(1);
                   setShowScrollToBottom(true);
@@ -445,9 +411,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
             }}
             scrollEventThrottle={16}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
+            keyboardDismissMode="interactive"
             ListEmptyComponent={() => (
-              <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400 }}>
+              <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}>
                 {isLoading ? (
                   <View className="items-center">
                     <ActivityIndicator size="large" color="#3b82f6" />
@@ -487,9 +453,10 @@ export default function ConversationScreen({ navigation, route }: Props) {
                   useNativeDriver: true,
                 }).start(() => setShowScrollToBottom(false));
                 try {
-                  flatListRef.current?.scrollToEnd({ animated: true });
+                  // With inverted list, offset 0 = visual bottom (newest messages)
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
                 } catch (err) {
-                  console.warn("[ConversationScreen] scrollToEnd failed", err);
+                  console.warn("[ConversationScreen] scrollToOffset failed", err);
                 }
               }}
               activeOpacity={0.8}
@@ -528,14 +495,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
         )}
       </View>
 
-      {
-        isSendingMessage ? (
-          <View className="flex-row items-center justify-center py-1.5 bg-[#4f46e5]/10 border-t border-[#4f46e5]/20">
-            <ActivityIndicator size="small" color="#2563eb" />
-            <Text className="ml-2 text-xs font-semibold text-[#4f46e5] tracking-wide">Sending…</Text>
-          </View>
-        ) : null
-      }
 
 
       <Composer
