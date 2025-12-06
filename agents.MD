@@ -1,60 +1,57 @@
 # Engineering Playbook
 
-Guidelines for keeping the app fast, stable, and consistent across iOS and Android.
+Guidelines for keeping the app fast, stable, and consistent across iOS, Android, and Web.
 
-## Architecture & Files
-- Default to feature-first inside `src/features/<feature>`, grouping that feature’s `screens`, `components`, `hooks`, `services`, and `constants` together; keep true cross-feature pieces in `components`, `utils`, and app-wide config in `constants`.
-- Keep navigation-only code in `navigation/`; route-aware UI lives with its feature, not the navigator.
-- Export types from the module that owns them; avoid deep relative imports by re-exporting through an index when it improves clarity.
-- Delete unused code and props promptly; do not leave commented-out blocks.
+## Architecture & Structure
+
+We follow a layer-based architecture similar to Bluesky's `social-app`, designed for scalability and code reuse.
+
+-   **`src/view`**: Contains all UI-related code.
+    -   `screens/`: Top-level screen components, grouped by feature if necessary (e.g., `auth/`, `profile/`).
+    -   `components/`: Reusable UI components.
+    -   `hooks/`: View-logic hooks (e.g., animations, form handling, local UI state).
+-   **`src/state`**: Global state management (React Query, Context, Stores).
+    -   `queries/`: React Query definitions/hooks, grouped by domain (e.g., `messages/`, `feed/`).
+    -   `mutations/`: Mutation hooks for data modification.
+-   **`src/services`**: API clients, backend interactions, and third-party service wrappers (e.g., DeSo protocol, Storage).
+-   **`src/alf`**: Application Layout & Foundations. Design system abstraction layer (theming, typography, atoms).
+-   **`src/lib`**: Generic utilities and helpers (e.g., string formatting, date parsing) that are not domain-specific.
+-   **`src/navigation`**: Navigation configuration (stacks, tabs).
 
 ## SOLID & Design
-- Single Responsibility: keep screens, hooks, and services focused on one concern; split mixed logic instead of adding flags.
-- Open/Closed + Liskov: extend behavior via composition/props and compatible interfaces instead of editing shared bases.
-- Interface Segregation: prefer small, purpose-built interfaces/hooks over “god” contexts; keep dependencies narrow.
-- Dependency Inversion: inject services/config into features and hooks rather than hard-coding globals to keep units testable.
 
-## Constants & Copy
-- Centralize static strings and enums in `src/constants` (e.g., `strings.ts`, `errors.ts`, `events.ts`) instead of hardcoding in components.
-- Keep endpoint paths, feature flags, pagination sizes, and magic numbers in constants; co-locate when truly feature-specific.
-- Gate noisy logs behind `__DEV__` and keep user-facing messages friendly and concise.
-
-## Data Fetching & State
-- Prefer a single source of truth per entity; cache paginated results and merge incrementally instead of re-sorting full arrays.
-- Make fetchers resilient: GraphQL first, then REST fallback, with proper cursor handling (`hasNextPage`, `endCursor`) and deduping by message id/timestamp.
-- Avoid duplicate requests: guard with refs/flags, throttle scroll-triggered pagination, and debounce rapid calls.
-- Keep React state minimal; use refs for ephemeral fetch flags and avoid state writes inside tight scroll handlers.
-- Memoize render props (`useCallback`/`useMemo`) and avoid recreating inline functions for list rows.
-
-## UI/UX & Platform Parity
-- Verify layouts on both iOS and Android: safe areas, keyboard avoidance, touch targets, and platform-specific shadows/ripples.
-- Use virtualization (`FlatList`/`FlashList`) with stable keys and estimated sizes; keep list item components pure and memoized.
-- Respect theme (`light/dark`), accessibility (roles, labels, hitSlop), and dynamic type where applicable.
-- Handle loading, empty, and error states consistently; show actionable retry where it makes sense.
-
-## Performance
-- Strip heavy synchronous work from render paths; move expensive logic to memoized selectors or background tasks.
-- Batch state updates, prefer immutable-but-stable references for unchanged list items, and avoid logging inside animation/scroll loops.
-- Reuse images/avatars with caching where possible; avoid unnecessary re-measurement of list items.
-
-## Error Handling & Resilience
-- Always handle network errors with user-friendly copy and console context in dev builds.
-- Validate inputs before API calls; fail fast with clear messages.
-- Gracefully handle missing access groups/keys by refetching once and surfacing status.
-
-## Testing & Quality Gates
-- Add unit tests for utilities and parsers; add component/integration tests for critical flows (message send/receive, pagination).
-- Run lint/type checks locally; keep CI green before merging.
-- Code review checklist: platform parity, pagination guards, memoization for lists, constants extracted, accessibility, and error paths covered.
-
-## Git & Change Hygiene
-- Small, focused commits with clear messages.
-- Keep PRs scoped: feature or refactor, not both. Remove dead code and unused imports in the same pass.
+-   **Single Responsibility**: Keep screens, hooks, and services focused on one concern.
+-   **Dependency Inversion**: Inject services/config into features and hooks rather than hard-coding globals.
+-   **Composition**: Extend behavior via composition/props instead of inheritance.
 
 ## Styling (NativeWind)
-- **Always use NativeWind `className`** for styling instead of `StyleSheet.create`. This ensures consistency and leverages Tailwind utility classes.
-- Use `className` props directly on components (e.g., `className="flex-1 bg-white dark:bg-black"`).
-- For dynamic styles, combine `className` with conditional logic: ``className={`text-base ${isActive ? "text-blue-500" : "text-gray-500"}`}``.
-- Only use inline `style` prop when passing dynamic values that can't be expressed as Tailwind classes (e.g., animated values, computed dimensions).
-- `StyleSheet.absoluteFill` and `StyleSheet.absoluteFillObject` are acceptable as React Native utilities for modal overlays.
-- Always support both light and dark mode using Tailwind's `dark:` prefix.
+
+-   **Always use NativeWind `className`** for styling.
+-   Avoid `StyleSheet.create` unless absolutely necessary for dynamic values that Tailwind cannot express.
+-   Use `className` props directly: `<View className="flex-1 bg-white dark:bg-black" />`.
+-   Support Dark Mode using the `dark:` prefix.
+-   Use `src/alf` helpers or atoms if established for common patterns.
+
+## Data Fetching & State
+
+-   **React Query**: Use `@tanstack/react-query` for all async server state.
+-   **Query Keys**: Define query keys in a dedicated file (e.g., `src/state/queries/keys.ts`) or collocated with the hook factory.
+-   **Optimistic Updates**: Implement optimistic updates for better UX on mutations (e.g., sending messages).
+-   **Pagination**: Use `useInfiniteQuery` for lists.
+
+## Platform Parity (Web Support)
+
+-   **Mobile First, Web Compatible**: Ensure all code runs on Web.
+-   **Native Modules**: Guard native-only modules (like `react-native-keyboard-controller`, `expo-haptics`) with platform checks (`Platform.OS !== 'web'`) or lazy imports.
+-   **Navigation**: Ensure deep linking and browser history work correctly on Web.
+
+## Testing
+
+-   Add unit tests for utilities and parsers.
+-   Use integration tests for critical flows (authentication, messaging).
+
+## Git Hygiene
+
+-   Small, focused commits.
+-   Clear commit messages.
+-   Delete unused code immediately.

@@ -11,7 +11,16 @@ import {
     Edge,
 } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
-import { KeyboardAvoidingView as KeyboardControllerView } from "react-native-keyboard-controller";
+
+// Dynamically import keyboard controller only on native
+let KeyboardControllerView: any = View;
+if (Platform.OS !== "web") {
+    try {
+        KeyboardControllerView = require("react-native-keyboard-controller").KeyboardAvoidingView;
+    } catch (e) {
+        console.warn("react-native-keyboard-controller not found");
+    }
+}
 
 interface ScreenWrapperProps {
     children: React.ReactNode;
@@ -71,7 +80,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
     );
 
     if (keyboardAvoiding) {
-        if (useKeyboardController) {
+        if (useKeyboardController && Platform.OS !== 'web') {
             return (
                 <KeyboardControllerView
                     className="flex-1"
@@ -100,4 +109,3 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
 };
 
 export default ScreenWrapper;
-

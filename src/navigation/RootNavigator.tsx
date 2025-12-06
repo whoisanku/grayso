@@ -2,11 +2,11 @@ import React, { useContext, useEffect, useState } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, Animated } from "react-native";
 import HomeTabs from "./HomeTabs";
-import ComposerScreen from "../features/messaging/screens/ComposerScreen";
-import LoginScreen from "../features/auth/screens/LoginScreen";
-import ConversationScreen from "../features/messaging/screens/ConversationScreen";
-import SettingsScreen from "../features/settings/screens/SettingsScreen";
-import NewChatScreen from "../features/messaging/screens/NewChatScreen";
+import LoginScreen from "../view/screens/auth/LoginScreen";
+import SettingsScreen from "../view/screens/settings/SettingsScreen";
+import ComposerScreen from "../view/screens/ComposerScreen";
+import ConversationScreen from "../view/screens/ConversationScreen";
+import NewChatScreen from "../view/screens/NewChatScreen";
 import AppLogo from "../assets/app-logo.svg";
 import { useColorScheme } from "nativewind";
 
