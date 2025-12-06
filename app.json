@@ -6,7 +6,8 @@
     "sdkVersion": "54.0.0",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "icon": "./assets/app-icon.png",
     "orientation": "portrait",
@@ -19,7 +20,10 @@
     },
     "scheme": "starterapp",
     "ios": {
-      "bundleIdentifier": "com.anonymous.starter-app"
+      "bundleIdentifier": "com.anonymous.starter-app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.anonymous.starterapp"
@@ -30,6 +34,11 @@
     "web": {
       "bundler": "metro",
       "favicon": "./assets/app-icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5eeffb46-766f-4f4f-b976-01c3f64e23ce"
+      }
     }
   }
 }

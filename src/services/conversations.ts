@@ -13,6 +13,7 @@ import {
   waitForTransactionFound,
 } from "deso-protocol";
 import { bytesToHex } from "@noble/hashes/utils";
+import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../constants/messaging";
 import {
   getPaginatedMessagesForDmThread,
   getPaginatedMessagesForGroupThread,
@@ -26,9 +27,6 @@ import {
   normalizeTimestampToNanos,
 } from "./desoGraphql";
 
-// This was causing issues, so defining it locally.
-// You might want to create the files and export from there.
-export const DEFAULT_KEY_MESSAGING_GROUP_NAME = "default-key";
 const USER_TO_SEND_MESSAGE_TO = ""; // Add a public key here
 
 export type Conversation = {
@@ -200,7 +198,102 @@ export const decryptAccessGroupMessages = async (
   accessGroups: AccessGroupEntryResponse[]
 ): Promise<DecryptedMessageEntryResponse[]> => {
   const decrypted = await Promise.all(
-    (messages || []).map((m) => identity.decryptMessage(m, accessGroups))
+    (messages || []).map(async (m) => {
+      // First, decrypt the main message content
+      const decryptedMessage = await identity.decryptMessage(m, accessGroups);
+      console.warn("💬 [Text Decryption] Result:", {
+        originalEncryptedText: m.MessageInfo.EncryptedText,
+        decryptedText: decryptedMessage.DecryptedMessage,
+      });
+
+      // TODO: Re-enable image decryption once the access group issue is resolved.
+      // // Now, check for and decrypt image URLs if they exist
+      const encryptedImageURLs = decryptedMessage.MessageInfo?.ExtraData?.encryptedImageURLs as string | undefined;
+      if (encryptedImageURLs) {
+        console.warn("🖼️ [Image Message] Encrypted image payload detected", {
+          encryptedImageURLs,
+          messageEncryptedText: decryptedMessage.MessageInfo?.EncryptedText,
+        });
+
+        try {
+          const decryptedImages = await identity.decryptMessage(
+            {
+              ...decryptedMessage,
+              MessageInfo: {
+                ...decryptedMessage.MessageInfo,
+                EncryptedText: encryptedImageURLs,
+              },
+            } as NewMessageEntryResponse,
+            accessGroups
+          );
+
+          if (decryptedImages.DecryptedMessage) {
+            if (!decryptedMessage.MessageInfo.ExtraData) {
+              decryptedMessage.MessageInfo.ExtraData = {};
+            }
+            decryptedMessage.MessageInfo.ExtraData.decryptedImageURLs = decryptedImages.DecryptedMessage;
+            console.warn("📸 [Image Decryption Succeeded]", {
+              decryptedImageURLs: decryptedImages.DecryptedMessage,
+              originalEncryptedText: decryptedMessage.MessageInfo.EncryptedText,
+            });
+          } else {
+            console.warn("🚨 [Image Decryption] Empty result", {
+              encryptedImageURLs,
+              decryptionResponse: decryptedImages,
+            });
+          }
+        } catch (e) {
+          console.warn("🚨 [Image Decryption] Failed to decrypt image URLs", {
+            error: e,
+            encryptedImageURLs,
+          });
+        }
+      }
+
+      const encryptedVideoURLs = decryptedMessage.MessageInfo?.ExtraData?.encryptedVideoURLs as string | undefined;
+      if (encryptedVideoURLs) {
+        console.warn("🎞️ [Video Message] Encrypted video payload detected", {
+          encryptedVideoURLs,
+          messageEncryptedText: decryptedMessage.MessageInfo?.EncryptedText,
+        });
+
+        try {
+          const decryptedVideos = await identity.decryptMessage(
+            {
+              ...decryptedMessage,
+              MessageInfo: {
+                ...decryptedMessage.MessageInfo,
+                EncryptedText: encryptedVideoURLs,
+              },
+            } as NewMessageEntryResponse,
+            accessGroups
+          );
+
+          if (decryptedVideos.DecryptedMessage) {
+            if (!decryptedMessage.MessageInfo.ExtraData) {
+              decryptedMessage.MessageInfo.ExtraData = {};
+            }
+            decryptedMessage.MessageInfo.ExtraData.decryptedVideoURLs = decryptedVideos.DecryptedMessage;
+            console.warn("📽️ [Video Decryption Succeeded]", {
+              decryptedVideoURLs: decryptedVideos.DecryptedMessage,
+              originalEncryptedText: decryptedMessage.MessageInfo.EncryptedText,
+            });
+          } else {
+            console.warn("🚨 [Video Decryption] Empty result", {
+              encryptedVideoURLs,
+              decryptionResponse: decryptedVideos,
+            });
+          }
+        } catch (e) {
+          console.warn("🚨 [Video Decryption] Failed to decrypt video URLs", {
+            error: e,
+            encryptedVideoURLs,
+          });
+        }
+      }
+
+      return decryptedMessage;
+    })
   );
 
   // Attempt to decrypt embedded reply messages if present
@@ -230,7 +323,7 @@ export const decryptAccessGroupMessages = async (
           if (decryptedReply.DecryptedMessage) {
             // Mutate the original message's ExtraData to include the decrypted text
             if (!d.MessageInfo) {
-              d.MessageInfo = { EncryptedText: "", TimestampNanos: 0, TimestampNanosString: "" };
+              d.MessageInfo = { EncryptedText: "", TimestampNanos: 0, TimestampNanosString: "", ExtraData: {} };
             }
             if (!d.MessageInfo.ExtraData) {
               d.MessageInfo.ExtraData = {};
@@ -245,6 +338,7 @@ export const decryptAccessGroupMessages = async (
     })
   );
 
+
   return decrypted;
 };
 
@@ -255,7 +349,9 @@ export const encryptAndSendNewMessage = async (
   RecipientMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
   SenderMessagingKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
   RecipientAccessGroupPublicKeyBase58Check?: string,
-  extraData?: { [k: string]: string }
+  extraData?: { [k: string]: string },
+  imageURLs?: string[],
+  videoURLs?: string[]
 ): Promise<string> => {
   if (SenderMessagingKeyName !== DEFAULT_KEY_MESSAGING_GROUP_NAME) {
     return Promise.reject("sender must use default key for now");
@@ -269,6 +365,8 @@ export const encryptAndSendNewMessage = async (
     SenderMessagingKeyName,
     RecipientAccessGroupPublicKeyBase58Check,
     extraData,
+    imageURLs,
+    videoURLs,
   });
 
   const response = await checkPartyAccessGroups({
@@ -290,15 +388,47 @@ export const encryptAndSendNewMessage = async (
   const effectiveRecipientGroupKeyName =
     response.RecipientAccessGroupKeyName || RecipientMessagingKeyName;
 
+  const recipientKeyToUse = response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || "";
+
   if (effectiveRecipientGroupKeyName) {
     message = await identity.encryptMessage(
-      response.RecipientAccessGroupPublicKeyBase58Check || RecipientAccessGroupPublicKeyBase58Check || "",
+      recipientKeyToUse,
       messageToSend
     );
   } else {
     message = bytesToHex(new TextEncoder().encode(messageToSend));
     isUnencrypted = true;
     ExtraData["unencrypted"] = "true";
+  }
+
+  // Encrypt Image URLs if present
+  if (imageURLs && imageURLs.length > 0) {
+    const imagesJson = JSON.stringify(imageURLs);
+    let encryptedImages = "";
+    if (effectiveRecipientGroupKeyName) {
+      encryptedImages = await identity.encryptMessage(
+        recipientKeyToUse,
+        imagesJson
+      );
+    } else {
+      encryptedImages = bytesToHex(new TextEncoder().encode(imagesJson));
+    }
+    ExtraData["encryptedImageURLs"] = encryptedImages;
+  }
+
+  // Encrypt Video URLs if present
+  if (videoURLs && videoURLs.length > 0) {
+    const videosJson = JSON.stringify(videoURLs);
+    let encryptedVideos = "";
+    if (effectiveRecipientGroupKeyName) {
+      encryptedVideos = await identity.encryptMessage(
+        recipientKeyToUse,
+        videosJson
+      );
+    } else {
+      encryptedVideos = bytesToHex(new TextEncoder().encode(videosJson));
+    }
+    ExtraData["encryptedVideoURLs"] = encryptedVideos;
   }
 
   if (!message) {
@@ -356,6 +486,7 @@ export async function fetchPaginatedDmThreadMessages(
     limit = payload.MaxMessagesToFetch ?? 10,
     fallbackBeforeTimestampNanos,
   } = options;
+  let nextPageInfo: { hasNextPage: boolean; endCursor: string | null } | null = null;
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     console.log("[fetchPaginatedDmThreadMessages] 🚀 Attempting GraphQL fetch", {
@@ -378,11 +509,11 @@ export async function fetchPaginatedDmThreadMessages(
       {};
 
     if (typeof __DEV__ !== "undefined" && __DEV__) {
-      console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
-        count: nodes.length,
-        nodes,
-        pageInfo,
-      });
+      // console.log("[fetchPaginatedDmThreadMessages] graphql nodes", {
+      //   count: nodes.length,
+      //   nodes,
+      //   pageInfo,
+      // });
     }
 
     const rawMessages = nodes
@@ -549,14 +680,13 @@ export async function fetchPaginatedDmThreadMessages(
         restResponse.PublicKeyToProfileEntryResponse
       );
 
-      let pageInfoLocal = pageInfo;
-      pageInfoLocal = {
+      nextPageInfo = {
         hasNextPage: restDecryptResult.decrypted.length === limit,
         endCursor:
           restDecryptResult.decrypted.length === limit
             ? restDecryptResult.decrypted[
-                restDecryptResult.decrypted.length - 1
-              ]?.MessageInfo?.TimestampNanosString ?? null
+              restDecryptResult.decrypted.length - 1
+            ]?.MessageInfo?.TimestampNanosString ?? null
             : null,
       };
     }
@@ -572,7 +702,7 @@ export async function fetchPaginatedDmThreadMessages(
       decrypted,
       updatedAllAccessGroups,
       publicKeyToProfileEntryResponseMap,
-      pageInfo,
+      pageInfo: nextPageInfo ?? pageInfo,
     };
   } catch (error) {
     if (typeof __DEV__ !== "undefined" && __DEV__) {
@@ -602,14 +732,20 @@ export async function fetchPaginatedDmThreadMessages(
     });
   }
 
+  // Compute pagination info for REST fallback
+  const pageLimit = payload.MaxMessagesToFetch ?? 10;
+  const receivedFullPage = decrypted.length >= pageLimit;
+  const oldestMessage = decrypted[decrypted.length - 1];
+  const endCursor = oldestMessage?.MessageInfo?.TimestampNanosString ?? null;
+
   return {
     decrypted,
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
     pageInfo: {
-      hasNextPage: false,
-      endCursor: null,
+      hasNextPage: receivedFullPage,
+      endCursor: receivedFullPage ? endCursor : null,
     },
   };
 }
@@ -799,14 +935,20 @@ export async function fetchPaginatedGroupThreadMessages(
     });
   }
 
+  // Compute pagination info for REST fallback
+  const pageLimit = payload.MaxMessagesToFetch ?? 10;
+  const receivedFullPage = decrypted.length >= pageLimit;
+  const oldestMessage = decrypted[decrypted.length - 1];
+  const endCursor = oldestMessage?.MessageInfo?.TimestampNanosString ?? null;
+
   return {
     decrypted,
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
     pageInfo: {
-      hasNextPage: false,
-      endCursor: null,
+      hasNextPage: receivedFullPage,
+      endCursor: receivedFullPage ? endCursor : null,
     },
   };
 }
