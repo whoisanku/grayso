@@ -6,7 +6,8 @@
     "sdkVersion": "54.0.0",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "icon": "./assets/app-icon.png",
     "orientation": "portrait",

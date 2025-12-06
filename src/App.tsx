@@ -1,4 +1,4 @@
-import CryptoPolyfill from "react-native-webview-crypto";
+import CryptoPolyfill from "./components/CryptoPolyfill";
 import "react-native-gesture-handler";
 import React from "react";
 import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
@@ -13,7 +13,7 @@ import { configure, identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
 import RootNavigator from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
+import { KeyboardProvider } from "./components/KeyboardProvider";
 
 WebBrowser.maybeCompleteAuthSession();
 
