@@ -1,7 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import HomeScreen from "../features/messaging/screens/HomeScreen";
-import ProfileScreen from "../features/profile/screens/ProfileScreen";
+import HomeScreen from "../view/screens/HomeScreen";
+import ProfileScreen from "../view/screens/profile/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import PlusIcon from "../assets/navIcons/plus.svg";

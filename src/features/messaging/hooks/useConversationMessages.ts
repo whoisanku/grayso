@@ -9,16 +9,16 @@ import {
     encryptAndSendNewMessage,
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
-} from "../services/conversations";
+} from "../../../services/conversations";
 import {
     AUTO_LOAD_DELAY_MS,
     MESSAGE_PAGE_SIZE,
     SCROLL_PAGINATION_TRIGGER,
     DEFAULT_KEY_MESSAGING_GROUP_NAME,
-} from "../constants/messaging";
-import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from "../utils/messageUtils";
+} from "../../../constants/messaging";
+import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from "../../../utils/messageUtils";
 import { DeviceEventEmitter } from "react-native";
-import { OUTGOING_MESSAGE_EVENT } from "../constants/events";
+import { OUTGOING_MESSAGE_EVENT } from "../../../constants/events";
 import { StorageService } from "../../../services/storage";
 
 type UseConversationMessagesProps = {
