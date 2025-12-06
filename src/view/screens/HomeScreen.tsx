@@ -35,7 +35,6 @@ import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT } from "../../constants/events";
 import { useColorScheme } from "nativewind";
-import EditIcon from "../../../assets/navIcons/edit.svg";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
@@ -299,12 +298,7 @@ export default function HomeScreen() {
             activeOpacity={0.7}
           >
             <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-              <EditIcon
-                width={20}
-                height={20}
-                stroke={isDark ? "#f8fafc" : "#0f172a"}
-                strokeWidth={2}
-              />
+<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
             </View>
           </TouchableOpacity>
         </View>
@@ -329,7 +323,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             className="mt-6 rounded-full bg-red-500 px-6 py-2"
             activeOpacity={0.8}
-            onPress={reload}
+            onPress={() => reload()}
           >
             <Text className="text-sm font-semibold text-white">Try again</Text>
           </TouchableOpacity>
@@ -389,21 +383,11 @@ export default function HomeScreen() {
                 justifyContent: 'center',
               }}
             >
-              <EditIcon
-                width={20}
-                height={20}
-                stroke={isDark ? "#f8fafc" : "#0f172a"}
-                strokeWidth={2}
-              />
+<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
             </LiquidGlassView>
           ) : (
             <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-              <EditIcon
-                width={20}
-                height={20}
-                stroke={isDark ? "#f8fafc" : "#0f172a"}
-                strokeWidth={2}
-              />
+<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
             </View>
           )}
         </TouchableOpacity>

@@ -696,14 +696,20 @@ export async function fetchPaginatedDmThreadMessages(
     });
   }
 
+  // Compute pagination info for REST fallback
+  const pageLimit = payload.MaxMessagesToFetch ?? 10;
+  const receivedFullPage = decrypted.length >= pageLimit;
+  const oldestMessage = decrypted[decrypted.length - 1];
+  const endCursor = oldestMessage?.MessageInfo?.TimestampNanosString ?? null;
+
   return {
     decrypted,
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
     pageInfo: {
-      hasNextPage: false,
-      endCursor: null,
+      hasNextPage: receivedFullPage,
+      endCursor: receivedFullPage ? endCursor : null,
     },
   };
 }
@@ -893,14 +899,20 @@ export async function fetchPaginatedGroupThreadMessages(
     });
   }
 
+  // Compute pagination info for REST fallback
+  const pageLimit = payload.MaxMessagesToFetch ?? 10;
+  const receivedFullPage = decrypted.length >= pageLimit;
+  const oldestMessage = decrypted[decrypted.length - 1];
+  const endCursor = oldestMessage?.MessageInfo?.TimestampNanosString ?? null;
+
   return {
     decrypted,
     updatedAllAccessGroups,
     publicKeyToProfileEntryResponseMap:
       response.PublicKeyToProfileEntryResponse,
     pageInfo: {
-      hasNextPage: false,
-      endCursor: null,
+      hasNextPage: receivedFullPage,
+      endCursor: receivedFullPage ? endCursor : null,
     },
   };
 }

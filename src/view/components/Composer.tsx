@@ -234,10 +234,13 @@ export const Composer = React.memo(function Composer({
                 key="reply-preview"
                 entering={FadeInDown.duration(150)}
                 exiting={FadeOutUp.duration(150)}
-                className={`flex-row items-center py-3 px-3 ${isDark
-                    ? "bg-[#0f1419]"
-                    : "bg-[#f1f5f9]"
-                    }`}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    backgroundColor: isDark ? '#0f1419' : '#f1f5f9',
+                }}
             >
                 {/* Left accent bar */}
                 <View
@@ -250,16 +253,23 @@ export const Composer = React.memo(function Composer({
                         marginRight: 12,
                     }}
                 />
-                <View className="flex-1">
+                <View style={{ flex: 1 }}>
                     <Text
-                        className="text-base font-semibold mb-1"
-                        style={{ color: '#1DB7A4' }}
+                        style={{
+                            fontSize: 15,
+                            fontWeight: '600',
+                            color: '#1DB7A4',
+                            marginBottom: 2,
+                        }}
                         numberOfLines={1}
                     >
                         {displayName}
                     </Text>
                     <Text
-                        className={`text-sm ${isDark ? "text-[#8899a6]" : "text-[#64748b]"}`}
+                        style={{
+                            fontSize: 14,
+                            color: isDark ? '#8899a6' : '#64748b',
+                        }}
                         numberOfLines={1}
                     >
                         {messageText}
@@ -277,7 +287,7 @@ export const Composer = React.memo(function Composer({
                         alignItems: 'center',
                         justifyContent: 'center',
                         marginLeft: 8,
-                        marginRight: 1.5, // Align with send button (pr-1.5 in composer input)
+                        marginRight: 1.5,
                     }}
                 >
                     <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
@@ -302,10 +312,13 @@ export const Composer = React.memo(function Composer({
                 key="edit-preview"
                 entering={FadeInDown.duration(150)}
                 exiting={FadeOutUp.duration(150)}
-                className={`flex-row items-center py-3 px-3 ${isDark
-                    ? "bg-[#1e293b]"
-                    : "bg-[#f1f5f9]"
-                    }`}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
+                }}
             >
                 {/* Left accent bar - amber for edit mode */}
                 <View
@@ -318,11 +331,24 @@ export const Composer = React.memo(function Composer({
                         marginRight: 12,
                     }}
                 />
-                <View className="flex-1">
-                    <Text className="text-base font-semibold text-[#f59e0b] mb-1">
+                <View style={{ flex: 1 }}>
+                    <Text
+                        style={{
+                            fontSize: 15,
+                            fontWeight: '600',
+                            color: '#f59e0b',
+                            marginBottom: 2,
+                        }}
+                    >
                         Editing message
                     </Text>
-                    <Text className={`text-sm ${isDark ? "text-[#cbd5e1]" : "text-[#64748b]"}`} numberOfLines={1}>
+                    <Text
+                        style={{
+                            fontSize: 14,
+                            color: isDark ? '#cbd5e1' : '#64748b',
+                        }}
+                        numberOfLines={1}
+                    >
                         {messageText}
                     </Text>
                 </View>
@@ -338,7 +364,7 @@ export const Composer = React.memo(function Composer({
                         alignItems: 'center',
                         justifyContent: 'center',
                         marginLeft: 8,
-                        marginRight: 1.5, // Align with send button (pr-1.5 in composer input)
+                        marginRight: 1.5,
                     }}
                 >
                     <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
@@ -381,9 +407,12 @@ export const Composer = React.memo(function Composer({
 
     return (
         <View
-            className={`border-t border-slate-200 dark:border-slate-800 ${isDark ? "bg-[#0a0f1a]" : "bg-[#fff]"
-                }`}
-            style={{ paddingBottom: bottomInset }}
+            style={{
+                borderTopWidth: 1,
+                borderTopColor: isDark ? '#1e293b' : '#e2e8f0',
+                backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+                paddingBottom: bottomInset,
+            }}
         >
             {editPreview}
             {replyPreview}
@@ -432,27 +461,50 @@ export const Composer = React.memo(function Composer({
                 </ScrollView>
             )}
 
-            <View className="flex-row items-end mx-3 my-3 justify-between">
+            <View 
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-end',
+                    marginHorizontal: 12,
+                    marginVertical: 12,
+                    justifyContent: 'space-between',
+                }}
+            >
                 {/* Image Picker Button - only show when not editing */}
                 {!isEditMode && (
                     <TouchableOpacity
                         onPress={handlePickImages}
                         activeOpacity={0.7}
-                        className="mr-2"
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        style={{ alignSelf: 'center' }}
+                        style={{ alignSelf: 'center', marginRight: 8 }}
                     >
                         <View
-                            className={`h-9 w-9 rounded-full items-center justify-center ${isDark ? "bg-[#1e2738]" : "bg-[#f1f5f9]"
-                                }`}
+                            style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: isDark ? '#1e2738' : '#f1f5f9',
+                            }}
                         >
                             <Feather name="plus" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
                         </View>
                     </TouchableOpacity>
                 )}
 
-                <View className={`flex-1 rounded-3xl flex-row items-center pl-4 pr-1.5 py-1.5 ${isDark ? "bg-[#1e2738]" : "bg-[#f1f5f9]"
-                    }`}>
+                <View 
+                    style={{
+                        flex: 1,
+                        borderRadius: 24,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingLeft: 16,
+                        paddingRight: 6,
+                        paddingVertical: 6,
+                        backgroundColor: isDark ? '#1e2738' : '#f1f5f9',
+                    }}
+                >
                     <TextInput
                         ref={textInputRef}
                         placeholder={isEditMode ? "Update your message" : (isGroupChat ? "Message the group…" : "Write a message")}
@@ -467,21 +519,38 @@ export const Composer = React.memo(function Composer({
                         returnKeyType="default"
                         blurOnSubmit={false}
                         onContentSizeChange={handleContentSizeChange}
-                        className={`flex-1 text-base leading-5 p-0 ml-0 ${isDark ? "text-[#f8fafc]" : "text-[#1e293b]"
-                            }`}
                         style={{
+                            flex: 1,
+                            fontSize: 16,
+                            lineHeight: 20,
+                            padding: 0,
+                            marginLeft: 0,
+                            color: isDark ? '#f8fafc' : '#1e293b',
                             minHeight: 24,
                             maxHeight: 80,
                             paddingVertical: 4,
-                        }}
+                            // Remove focus outline on web
+                            outlineStyle: 'none',
+                        } as any}
                     />
                     <TouchableOpacity
                         onPress={handleSendOrSave}
                         disabled={isDisabled}
                         activeOpacity={0.85}
-                        className="ml-2"
+                        style={{ marginLeft: 8 }}
                     >
-                        <View className={`h-9 w-9 rounded-full items-center justify-center ${!hasContent ? (isDark ? "bg-[#334155]" : "bg-[#e2e8f0]") : (isEditMode ? "bg-[#f59e0b]" : "bg-[#0085ff]")}`}>
+                        <View 
+                            style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: !hasContent 
+                                    ? (isDark ? '#334155' : '#e2e8f0') 
+                                    : (isEditMode ? '#f59e0b' : '#0085ff'),
+                            }}
+                        >
                             {(sending || isSavingEdit) ? (
                                 <ActivityIndicator size="small" color="#ffffff" />
                             ) : (

@@ -188,20 +188,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return getProfileImageUrl(counterPartyPublicKey) || FALLBACK_PROFILE_IMAGE;
   }, [counterPartyPublicKey, isGroupChat, recipientOwnerKey]);
 
-  // Messages sorted oldest-first by normalizeAndSortMessages
-  // For inverted FlatList, we reverse to newest-first (index 0 = newest)
-  // This way, loading older messages appends to END of array = no scroll jump
-  const invertedMessages = useMemo(() => {
-    return [...messages].reverse();
-  }, [messages]);
+  // GraphQL returns messages newest-first (TIMESTAMP_DESC)
+  const displayMessages = messages;
 
   const renderItem = useCallback(
     ({ item, index }: { item: DecryptedMessageEntryResponse; index: number }) => {
-      // With inverted list: index 0 = newest message (visually at bottom)
-      // Map back to original order for prev/next context
-      const originalIndex = invertedMessages.length - 1 - index;
-      const previousMessage = messages[originalIndex - 1];
-      const nextMessage = messages[originalIndex + 1];
+      const previousMessage = messages[index + 1];
+      const nextMessage = messages[index - 1];
       const previousTimestamp = previousMessage?.MessageInfo?.TimestampNanos;
 
       return (
@@ -222,7 +215,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         />
       );
     },
-    [handleMessageLongPress, handleReply, isDark, isGroupChat, messageIdMap, profiles, bubbleLayoutsRef, messages, invertedMessages.length]
+    [handleMessageLongPress, handleReply, isDark, isGroupChat, messageIdMap, profiles, bubbleLayoutsRef, messages]
   );
 
   const keyExtractor = useCallback((item: DecryptedMessageEntryResponse, index: number) => {
@@ -235,31 +228,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return isLoading && messages.length > 0 && !isRefreshing;
   }, [isLoading, messages.length, isRefreshing]);
 
-  const handleLoadOlder = useCallback(() => {
-    if (isLoading || !hasMore) return;
-    loadMessages(false);
-  }, [isLoading, hasMore, loadMessages]);
 
   const topListHeader = useMemo(() => {
-    if (!hasMore && !isPaginating) return null;
+    // Only show spinner when there are more messages to load
+    if (!hasMore) return null;
+    
     return (
-      <View className="py-4 items-center">
-        {isPaginating ? (
-          <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
-        ) : (
-          <TouchableOpacity
-            onPress={handleLoadOlder}
-            disabled={isLoading}
-            className="px-4 py-2 rounded-full border border-slate-200 dark:border-slate-700"
-          >
-            <Text className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              Load earlier messages
-            </Text>
-          </TouchableOpacity>
-        )}
+      <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+        <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
       </View>
     );
-  }, [handleLoadOlder, hasMore, isPaginating, isDark, isLoading]);
+  }, [hasMore, isDark]);
 
   const footer = useMemo(() => {
     if (!error) return null;
@@ -361,10 +340,19 @@ export default function ConversationScreen({ navigation, route }: Props) {
               className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
             />
           )}
-        </TouchableOpacity >
+      </TouchableOpacity >
       </View >
 
-      <View style={{ flex: 1 }}>
+      {/* Main content - limited width on web for better readability */}
+      <View style={[
+        { flex: 1 },
+        Platform.OS === 'web' && { 
+          maxWidth: 600, 
+          width: '100%', 
+          alignSelf: 'center',
+        }
+      ]}>
+        <View style={{ flex: 1 }}>
         {isLoading && messages.length === 0 ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#3b82f6" />
@@ -372,7 +360,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         ) : (
           <FlatList<DecryptedMessageEntryResponse>
             ref={flatListRef}
-            data={invertedMessages}
+            data={displayMessages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             inverted={true}
@@ -493,6 +481,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </Animated.View>
         )}
+        </View>
       </View>
 
 

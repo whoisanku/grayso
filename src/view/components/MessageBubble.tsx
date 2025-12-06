@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useMemo } from "react";
-import { View, Text, Image, Keyboard } from "react-native";
+import { View, Text, Image, Keyboard, Platform } from "react-native";
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -139,18 +139,21 @@ export const MessageBubble = React.memo(function MessageBubble({
         return (
             <View
                 style={{
-                    backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
-                    borderLeftWidth: 4,
+                    backgroundColor: isMine 
+                        ? "rgba(255, 255, 255, 0.15)" 
+                        : (isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"),
+                    borderLeftWidth: 3,
                     borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
-                    borderRadius: 4,
-                    padding: 6,
-                    marginBottom: 6,
+                    borderRadius: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 8,
+                    marginBottom: 8,
                 }}
             >
                 <Text
                     style={{
-                        fontSize: 11,
-                        fontWeight: "700",
+                        fontSize: 12,
+                        fontWeight: "600",
                         color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
                         marginBottom: 2,
                     }}
@@ -160,8 +163,11 @@ export const MessageBubble = React.memo(function MessageBubble({
                 </Text>
                 <Text
                     style={{
-                        fontSize: 12,
-                        color: isMine ? "rgba(255, 255, 255, 0.8)" : "#4b5563",
+                        fontSize: 13,
+                        lineHeight: 18,
+                        color: isMine 
+                            ? "rgba(255, 255, 255, 0.75)" 
+                            : (isDark ? "#94a3b8" : "#4b5563"),
                     }}
                     numberOfLines={2}
                 >
@@ -315,11 +321,31 @@ export const MessageBubble = React.memo(function MessageBubble({
     }, [isOnlyMessage, isMine, isFirstInGroup, isLastInGroup]);
 
     // Memoize bubble border and shadow styles for performance
-    const bubbleExtraStyle = useMemo(() => [
-        borderRadiusStyle,
-        !isMine && { borderWidth: 0.5, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
-        { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 2 },
-    ], [borderRadiusStyle, isMine, isDark]);
+    // Use CSS boxShadow for web since RN shadow props don't work there
+    const bubbleExtraStyle = useMemo(() => {
+        const baseStyles = [
+            borderRadiusStyle,
+            !isMine && { borderWidth: 0.5, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
+        ];
+        
+        if (Platform.OS === 'web') {
+            // CSS box-shadow for web
+            return [
+                ...baseStyles,
+                { 
+                    boxShadow: isDark 
+                        ? '0 2px 8px rgba(0, 0, 0, 0.3)' 
+                        : '0 1px 4px rgba(0, 0, 0, 0.08)'
+                } as any,
+            ];
+        }
+        
+        // React Native shadow for iOS/Android
+        return [
+            ...baseStyles,
+            { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 2 },
+        ];
+    }, [borderRadiusStyle, isMine, isDark]);
 
     const marginBottom = isLastInGroup ? 16 : 2;
 
@@ -393,9 +419,18 @@ export const MessageBubble = React.memo(function MessageBubble({
                             ) : null}
                             <Reanimated.View
                                 ref={animatedBubbleRef}
-                                className={`max-w-[80%] px-4 py-3 ${isMine ? "bg-[#3b82f6]" : "bg-[#f8fafc] dark:bg-[#1e2738]"
-                                    }`}
-                                style={bubbleExtraStyle}
+                                style={[
+                                    bubbleExtraStyle,
+                                    { 
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 12,
+                                        maxWidth: Platform.OS === 'web' ? 320 : '80%',
+                                        overflow: 'hidden',
+                                        backgroundColor: isMine 
+                                            ? '#3b82f6' 
+                                            : (isDark ? '#1e2738' : '#f8fafc'),
+                                    }
+                                ]}
                             >
                                 {/* Only show sender name in GROUP chats */}
                                 {!isMine && isGroupChat && isFirstInGroup && (
@@ -421,19 +456,27 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 {/* Message text with WhatsApp-style inline timestamp */}
                                 <View>
                                     <Text
-                                        className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
-                                            }`}
+                                        className={`text-base leading-[22px] ${
+                                            isMine 
+                                                ? 'text-white' 
+                                                : 'text-slate-900 dark:text-slate-100'
+                                        }`}
                                     >
                                         {messageText}
                                         {/* Invisible spacer to reserve space for timestamp */}
-                                        <Text style={{ opacity: 0, fontSize: 10 }}>
+                                        <Text className="text-[10px] opacity-0">
                                             {"  "}{isEditedMessage ? "Edited " : ""}{timestamp ? formatTimestamp(timestamp) : ""}
                                         </Text>
                                     </Text>
                                     {/* Actual timestamp positioned at bottom-right */}
                                     <Text
-                                        className={`text-[10px] ${hasError ? "text-red-500" : isMine ? "text-blue-200" : "text-slate-400 dark:text-slate-500"}`}
-                                        style={{ position: 'absolute', bottom: 0, right: 0 }}
+                                        className={`absolute bottom-0 right-0 text-[10px] ${
+                                            hasError 
+                                                ? 'text-red-500' 
+                                                : isMine 
+                                                    ? 'text-blue-200' 
+                                                    : 'text-slate-400 dark:text-slate-500'
+                                        }`}
                                     >
                                         {hasError ? "Failed" : (
                                             <>

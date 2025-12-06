@@ -63,20 +63,17 @@ export const fetchMessages = async ({
   const nowMs = Date.now();
   const currentTimestampNanos = nowMs * 1_000_000;
 
-  // If we have a pageParam (cursor), we rely on it.
-  // But the underlying API also takes a StartTimeStamp.
-  // The original logic used oldestTimestampRef to track this.
-  // For React Query, we might need to pass this state through pageParam or
-  // restructure how pagination works.
-
-  // To keep it simple and aligned with original logic:
-  // We will encode timestamp into the cursor if needed, or assume the cursor
-  // provided by the API (endCursor) is sufficient.
-  // The original logic explicitly managed `oldestTimestampRef` separately from the cursor.
-
-  const paginationTimestamp = currentTimestampNanos; // Simplified for initial fetch;
-  // Note: True infinite scroll might need adjustment to `fetchPaginated...` to accept
-  // just a cursor, or we pass the timestamp in the pageParam object.
+  // For pagination: if we have a cursor (pageParam), it's the timestamp of the oldest
+  // message from the previous page. Use it to fetch messages BEFORE that timestamp.
+  // Otherwise, use current time for the initial fetch (get newest messages first).
+  let paginationTimestamp = currentTimestampNanos;
+  if (pageParam) {
+    // The cursor is often a timestamp string - try to parse it
+    const parsedCursor = Number(pageParam);
+    if (!Number.isNaN(parsedCursor) && parsedCursor > 0) {
+      paginationTimestamp = parsedCursor;
+    }
+  }
 
   if (isGroupChat) {
      const groupOwnerPublicKey =

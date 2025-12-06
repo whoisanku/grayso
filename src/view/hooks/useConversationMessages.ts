@@ -74,13 +74,23 @@ export const useConversationMessages = ({
         partyGroupOwnerPublicKeyBase58Check,
       }),
     initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => lastPage.pageInfo.endCursor,
+    getNextPageParam: (lastPage) => 
+      lastPage.pageInfo.hasNextPage ? lastPage.pageInfo.endCursor : undefined,
     staleTime: 1000 * 60, // 1 minute
   });
 
   const messages = useMemo(() => {
     if (!data) return [];
-    return data.pages.flatMap((page) => page.decrypted);
+    // Flatten all pages and deduplicate by timestamp + sender to avoid duplicate keys
+    const allMessages = data.pages.flatMap((page) => page.decrypted);
+    const seen = new Set<string>();
+    return allMessages.filter((msg) => {
+      const key = msg.MessageInfo?.TimestampNanosString ?? 
+                  String(msg.MessageInfo?.TimestampNanos ?? '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [data]);
 
   const profiles = useMemo(() => {
