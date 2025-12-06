@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 
 export type VideoMessageBubbleProps = {
   decryptedVideoURLs?: string;
-  extraData: Record<string, any>;
+  extraData?: Record<string, any> | null;
   isDark: boolean;
 };
 
@@ -33,6 +33,18 @@ const normalizeVideoSource = (url: string): NormalizedVideoSource => {
   }
 
   return { streamUrl: url };
+};
+
+const buildStreamUrlFromClientId = (clientId?: string): NormalizedVideoSource | null => {
+  if (!clientId) return null;
+
+  const sanitized = clientId.split("?")[0];
+  if (!sanitized) return null;
+
+  return {
+    streamUrl: `https://videodelivery.net/${sanitized}/manifest/video.m3u8`,
+    posterUrl: `https://videodelivery.net/${sanitized}/thumbnails/thumbnail.jpg?time=1s`,
+  };
 };
 
 const parseVideoUrls = (value?: string): string[] => {
@@ -63,6 +75,10 @@ type VideoPlayerProps = {
 };
 
 const VideoPlayer = React.memo(({ streamUrl, posterUrl, aspectRatio, isDark, isLast }: VideoPlayerProps) => {
+  if (!streamUrl) {
+    return null;
+  }
+
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -74,7 +90,7 @@ const VideoPlayer = React.memo(({ streamUrl, posterUrl, aspectRatio, isDark, isL
 
   const handleTogglePlay = useCallback(async () => {
     if (!videoRef.current) return;
-    
+
     try {
       const status = await videoRef.current.getStatusAsync();
       if (status.isLoaded) {
@@ -112,7 +128,7 @@ const VideoPlayer = React.memo(({ streamUrl, posterUrl, aspectRatio, isDark, isL
         shouldPlay={false}
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
       />
-      
+
       {/* Play/Pause overlay - only show when paused */}
       {!isPlaying && (
         <View
@@ -150,7 +166,23 @@ const VideoPlayer = React.memo(({ streamUrl, posterUrl, aspectRatio, isDark, isL
 VideoPlayer.displayName = "VideoPlayer";
 
 export const VideoMessageBubble = React.memo(({ decryptedVideoURLs, extraData, isDark }: VideoMessageBubbleProps) => {
-  const videoUrls = parseVideoUrls(decryptedVideoURLs);
+  let videoUrls = parseVideoUrls(decryptedVideoURLs);
+  const metadata: Record<string, any> = extraData ?? {};
+
+  // Fallback: Check for videos in extraData if no decrypted URLs found
+  if ((!videoUrls || videoUrls.length === 0) && extraData) {
+    let index = 0;
+    while (true) {
+      const clientIdKey = `video.${index}.clientId`;
+      const clientId = metadata[clientIdKey];
+
+      if (!clientId) break;
+
+      // Construct URL using the known video delivery base URL
+      videoUrls.push(`https://iframe.videodelivery.net/${clientId}`);
+      index++;
+    }
+  }
 
   if (videoUrls.length === 0) {
     return null;
@@ -159,18 +191,40 @@ export const VideoMessageBubble = React.memo(({ decryptedVideoURLs, extraData, i
   return (
     <View className="mb-2">
       {videoUrls.map((url, index) => {
-        const { streamUrl, posterUrl } = normalizeVideoSource(url);
+        const normalized = normalizeVideoSource(url);
         const widthKey = `video.${index}.width`;
         const heightKey = `video.${index}.height`;
-        const videoWidth = extraData[widthKey] ? parseInt(extraData[widthKey] as string, 10) : undefined;
-        const videoHeight = extraData[heightKey] ? parseInt(extraData[heightKey] as string, 10) : undefined;
-        const aspectRatio = videoWidth && videoHeight && videoHeight !== 0 ? videoWidth / videoHeight : 9 / 16;
+        const rawWidth = metadata[widthKey];
+        const rawHeight = metadata[heightKey];
+        const videoWidth = rawWidth ? parseInt(String(rawWidth), 10) : undefined;
+        const videoHeight = rawHeight ? parseInt(String(rawHeight), 10) : undefined;
+        const hasValidDimensions = typeof videoWidth === "number" && typeof videoHeight === "number" && videoWidth > 0 && videoHeight > 0;
+        const aspectRatio = hasValidDimensions ? videoWidth / videoHeight : 9 / 16;
+
+        if (!normalized.streamUrl) {
+          const clientIdKey = `video.${index}.clientId`;
+          const fallback = buildStreamUrlFromClientId(metadata[clientIdKey] as string | undefined);
+          if (!fallback?.streamUrl) {
+            return null;
+          }
+
+          return (
+            <VideoPlayer
+              key={`${metadata[clientIdKey] ?? index}`}
+              streamUrl={fallback.streamUrl}
+              posterUrl={fallback.posterUrl}
+              aspectRatio={aspectRatio}
+              isDark={isDark}
+              isLast={index === videoUrls.length - 1}
+            />
+          );
+        }
 
         return (
           <VideoPlayer
             key={url}
-            streamUrl={streamUrl}
-            posterUrl={posterUrl}
+            streamUrl={normalized.streamUrl}
+            posterUrl={normalized.posterUrl}
             aspectRatio={aspectRatio}
             isDark={isDark}
             isLast={index === videoUrls.length - 1}

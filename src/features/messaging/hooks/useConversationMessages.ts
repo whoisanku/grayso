@@ -87,12 +87,12 @@ export const useConversationMessages = ({
                 const senderKey =
                     message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
                 const uniqueKey = `${timestamp}-${senderKey}`;
-                
+
                 // Track content for duplicate detection
                 const contentKey = getContentKey(message);
                 const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
                 const existingTimestamp = contentMap.get(contentKey);
-                
+
                 // Only add if we don't have this exact content from same sender within 60 seconds
                 if (!existingTimestamp || Math.abs(msgTimestamp - existingTimestamp) > 60000 * 1e6) {
                     map.set(uniqueKey, message);
@@ -115,7 +115,7 @@ export const useConversationMessages = ({
                 const contentKey = getContentKey(message);
                 const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
                 const existingTimestamp = contentMap.get(contentKey);
-                
+
                 // Skip if same content from same sender exists within 60 seconds
                 if (existingTimestamp && Math.abs(msgTimestamp - existingTimestamp) < 60000 * 1e6) {
                     return;
@@ -388,7 +388,7 @@ export const useConversationMessages = ({
     );
 
     const handleComposerMessageSent = useCallback(
-        (messageText: string) => {
+        (messageText: string, extraData?: Record<string, any>) => {
             const timestampNanos = Math.round(Date.now() * 1e6);
             if (messageText.trim() === "🚀") {
                 DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
@@ -399,6 +399,7 @@ export const useConversationMessages = ({
                     threadPublicKey: counterPartyPublicKey,
                     threadAccessGroupKeyName,
                     userAccessGroupKeyName,
+                    extraData
                 });
                 return;
             }
@@ -408,6 +409,7 @@ export const useConversationMessages = ({
                 MessageInfo: {
                     TimestampNanos: timestampNanos,
                     TimestampNanosString: String(timestampNanos),
+                    ExtraData: extraData,
                 },
                 SenderInfo: {
                     OwnerPublicKeyBase58Check: userPublicKey,

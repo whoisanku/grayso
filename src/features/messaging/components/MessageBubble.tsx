@@ -80,6 +80,8 @@ export const MessageBubble = React.memo(function MessageBubble({
     }, []);
 
     const extraData = item.MessageInfo?.ExtraData || {};
+    const decryptedImageURLs = extraData?.decryptedImageURLs;
+    const decryptedVideoURLs = extraData?.decryptedVideoURLs;
     const senderPk = item.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
     const isMine = Boolean(item.IsSender);
     const hasError = (item as any).error;
@@ -112,10 +114,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
 
-    const hasMedia = Boolean(
-        (extraData as Record<string, unknown>).decryptedImageURLs ||
-        (extraData as Record<string, unknown>).decryptedVideoURLs
-    );
+    const hasMedia = Boolean(decryptedImageURLs || decryptedVideoURLs);
 
     // Reply logic
     const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
@@ -408,13 +407,13 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 )}
                                 {renderReplyPreview()}
                                 <FileAndMessageBubble
-                                    decryptedImageURLs={extraData.decryptedImageURLs as string}
+                                    decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
                                     extraData={extraData}
                                     isDark={isDark}
                                     onImagePress={handleImagePress}
                                 />
                                 <VideoMessageBubble
-                                    decryptedVideoURLs={extraData.decryptedVideoURLs as string}
+                                    decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
                                     extraData={extraData}
                                     isDark={isDark}
                                 />

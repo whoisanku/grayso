@@ -50,7 +50,7 @@ export type ComposerProps = {
     userAccessGroupKeyName: string;
     conversationId: string;
     chatType: ChatType;
-    onMessageSent?: (messageText: string) => void;
+    onMessageSent?: (text: string, extraData?: Record<string, any>) => void;
     onSendingChange?: (sending: boolean) => void;
     bottomInset?: number;
     recipientAccessGroupPublicKeyBase58Check?: string;
@@ -63,6 +63,46 @@ export type ComposerProps = {
     onCancelEdit?: () => void;
     onSaveEdit?: () => void;
     isSavingEdit?: boolean;
+};
+
+const extractVideoId = (url: string): string | null => {
+    try {
+        const parsed = new URL(url);
+        const pathSegments = parsed.pathname.split('/').filter(Boolean);
+        if (pathSegments.length > 0) {
+            return pathSegments[pathSegments.length - 1];
+        }
+        return parsed.hostname === "iframe.videodelivery.net" ? parsed.pathname.replace(/^\//, '') : null;
+    } catch {
+        return null;
+    }
+};
+
+const normalizeVideoUploadMetadata = (
+    url: string,
+    index: number,
+    width: number,
+    height: number,
+    extraData: Record<string, string>
+) => {
+    if (!url) return;
+
+    const appendBaseMetadata = (clientIdValue: string) => {
+        const sanitizedClientId = clientIdValue.split('?')[0];
+        if (sanitizedClientId) {
+            extraData[`video.${index}.clientId`] = sanitizedClientId;
+        }
+        extraData[`video.${index}.width`] = String(width);
+        extraData[`video.${index}.height`] = String(height);
+        extraData[`video.${index}.orientation`] = width > height ? "landscape" : "portrait";
+        // Placeholder average color until backend provides actual value
+        if (!extraData[`video.${index}.avgColor`]) {
+            extraData[`video.${index}.avgColor`] = JSON.stringify("");
+        }
+    };
+
+    const extractedId = extractVideoId(url) || url.split('/').pop() || '';
+    appendBaseMetadata(extractedId);
 };
 
 export const Composer = React.memo(function Composer({
@@ -418,7 +458,8 @@ export const Composer = React.memo(function Composer({
                 onSendingChange?.(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-                const extraData: { [k: string]: string } = {};
+                const extraData: { [k: string]: string } = { isMarkdown: "false" };
+                const optimisticVideoUrls: string[] = [];
 
                 // Handle image uploads if any
                 const imageURLs: string[] = [];
@@ -464,15 +505,14 @@ export const Composer = React.memo(function Composer({
                         videosToUpload.forEach((vid, i) => {
                             if (vid.uploadedUrl) {
                                 videoURLs.push(vid.uploadedUrl);
-                                // Extract clientId from URL (e.g. https://iframe.videodelivery.net/<id> -> <id>)
-                                const clientId = vid.uploadedUrl.split('/').pop();
-                                if (clientId) {
-                                    extraData[`video.${i}.clientId`] = clientId;
-                                }
-                                extraData[`video.${i}.width`] = String(vid.width);
-                                extraData[`video.${i}.height`] = String(vid.height);
-                                // Default to portrait for now, or calculate if possible
-                                extraData[`video.${i}.orientation`] = vid.width > vid.height ? "landscape" : "portrait";
+                                optimisticVideoUrls.push(vid.uploadedUrl);
+                                normalizeVideoUploadMetadata(
+                                    vid.uploadedUrl,
+                                    i,
+                                    vid.width,
+                                    vid.height,
+                                    extraData
+                                );
                             }
                         });
 
@@ -493,6 +533,13 @@ export const Composer = React.memo(function Composer({
                     }
                 }
 
+                const networkExtraData = { ...extraData };
+
+                const optimisticExtraData = { ...networkExtraData };
+                if (optimisticVideoUrls.length > 0) {
+                    optimisticExtraData.decryptedVideoURLs = JSON.stringify(optimisticVideoUrls);
+                }
+
                 await encryptAndSendNewMessage(
                     currentText.trim(), // Can be empty string if only sending images
                     userPublicKey,
@@ -500,13 +547,13 @@ export const Composer = React.memo(function Composer({
                     threadAccessGroupKeyName,
                     userAccessGroupKeyName,
                     recipientAccessGroupPublicKeyBase58Check,
-                    extraData,
+                    networkExtraData,
                     imageURLs,
                     videoURLs
                 );
 
                 const timestampNanos = Math.round(Date.now() * 1e6);
-                onMessageSent?.(currentText.trim());
+                onMessageSent?.(currentText.trim(), optimisticExtraData);
                 if (onCancelReply) onCancelReply();
 
                 DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
@@ -517,7 +564,7 @@ export const Composer = React.memo(function Composer({
                     threadPublicKey: counterPartyPublicKey,
                     threadAccessGroupKeyName,
                     userAccessGroupKeyName,
-                    extraData // Include extraData for optimistic UI if needed
+                    extraData: optimisticExtraData // Include extraData for optimistic UI if needed
                 });
 
                 setText("");

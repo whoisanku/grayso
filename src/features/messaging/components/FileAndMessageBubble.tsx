@@ -7,7 +7,7 @@ const MAX_BUBBLE_WIDTH = SCREEN_WIDTH * 0.72; // 80% max-width minus padding
 
 type FileAndMessageBubbleProps = {
     decryptedImageURLs?: string;
-    extraData: Record<string, any>;
+    extraData?: Record<string, any> | null;
     isDark: boolean;
     onImagePress?: (images: string[], index: number) => void;
 };
@@ -127,6 +127,7 @@ export const FileAndMessageBubble = React.memo(({
     onImagePress,
 }: FileAndMessageBubbleProps) => {
     let imageUrls: string[] = [];
+    const metadata: Record<string, any> = extraData ?? {};
 
     try {
         if (decryptedImageURLs && typeof decryptedImageURLs === 'string') {
@@ -144,7 +145,7 @@ export const FileAndMessageBubble = React.memo(({
             let index = 0;
             while (true) {
                 const clientIdKey = `image.${index}.clientId`;
-                const clientId = extraData[clientIdKey];
+                const clientId = metadata[clientIdKey];
 
                 if (!clientId) break;
 
@@ -163,8 +164,10 @@ export const FileAndMessageBubble = React.memo(({
         const getAspectRatio = (index: number): number => {
             const widthKey = `image.${index}.width`;
             const heightKey = `image.${index}.height`;
-            const imgWidth = extraData[widthKey] ? parseInt(extraData[widthKey] as string, 10) : undefined;
-            const imgHeight = extraData[heightKey] ? parseInt(extraData[heightKey] as string, 10) : undefined;
+            const rawWidth = metadata[widthKey];
+            const rawHeight = metadata[heightKey];
+            const imgWidth = rawWidth ? parseInt(String(rawWidth), 10) : undefined;
+            const imgHeight = rawHeight ? parseInt(String(rawHeight), 10) : undefined;
             return (imgWidth && imgHeight) ? imgWidth / imgHeight : 1;
         };
 

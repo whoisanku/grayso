@@ -106,6 +106,9 @@ export const uploadVideo = async (
             throw new Error("No Location header in video upload response");
         }
 
+        const initStreamMediaId = initResponse.headers.get("stream-media-id") || initResponse.headers.get("Stream-Media-Id");
+        let resolvedStreamId = initStreamMediaId ? initStreamMediaId.trim() : "";
+
         // Use XHR for the actual file upload to track progress
         await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
@@ -124,6 +127,10 @@ export const uploadVideo = async (
 
             xhr.onload = () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
+                    const uploadStreamId = xhr.getResponseHeader("stream-media-id") || xhr.getResponseHeader("Stream-Media-Id");
+                    if (uploadStreamId) {
+                        resolvedStreamId = uploadStreamId.trim();
+                    }
                     resolve();
                 } else {
                     reject(new Error(`Video upload failed: ${xhr.status} ${xhr.responseText}`));
@@ -136,17 +143,19 @@ export const uploadVideo = async (
             xhr.send(blob);
         });
 
-        // Extract ID and poll
-        // The uploadUrl usually contains the ID.
-        // Actually, for Tus, the Location URL often has the ID.
-        // Let's try to extract from Location URL first as it's reliable for Tus.
-        const parts = uploadUrl.split("/");
-        const potentialId = parts[parts.length - 1];
+        if (!resolvedStreamId) {
+            const parts = uploadUrl.split("/");
+            resolvedStreamId = parts[parts.length - 1] || "";
+        }
+
+        if (!resolvedStreamId) {
+            throw new Error("Unable to determine Stream-Media-Id after upload");
+        }
 
         // Poll for video status
-        await pollVideoStatus(potentialId);
+        await pollVideoStatus(resolvedStreamId);
 
-        return `https://iframe.videodelivery.net/${potentialId}`;
+        return `https://iframe.videodelivery.net/${resolvedStreamId}`;
 
     } catch (error) {
         console.error("[MediaService] Video upload error:", error);
