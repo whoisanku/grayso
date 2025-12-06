@@ -170,6 +170,10 @@ export const VideoMessageBubble = React.memo(({ decryptedVideoURLs, extraData, i
   const metadata: Record<string, any> = extraData ?? {};
 
   // Fallback: Check for videos in extraData if no decrypted URLs found
+  if ((!videoUrls || videoUrls.length === 0) && typeof extraData?.decryptedVideoURLs === "string") {
+    videoUrls = parseVideoUrls(extraData.decryptedVideoURLs as string);
+  }
+
   if ((!videoUrls || videoUrls.length === 0) && extraData) {
     let index = 0;
     while (true) {

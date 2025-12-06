@@ -131,18 +131,28 @@ export const FileAndMessageBubble = React.memo(({
     let imageUrls: string[] = [];
     const metadata: Record<string, any> = extraData ?? {};
 
-    try {
-        if (decryptedImageURLs && typeof decryptedImageURLs === 'string') {
-            try {
-                imageUrls = JSON.parse(decryptedImageURLs);
-            } catch {
-                if (decryptedImageURLs.startsWith('http')) {
-                    imageUrls = [decryptedImageURLs];
-                }
+    const pushUrls = (value?: string) => {
+        if (!value || typeof value !== 'string') return;
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+                imageUrls = parsed.filter((url) => typeof url === 'string' && url.length > 0);
+            }
+        } catch {
+            if (value.startsWith('http')) {
+                imageUrls = [value];
             }
         }
+    };
 
-        // Fallback: Check for images in extraData if no decrypted URLs found
+    try {
+        pushUrls(decryptedImageURLs);
+
+        if ((!imageUrls || imageUrls.length === 0) && extraData?.decryptedImageURLs) {
+            pushUrls(extraData.decryptedImageURLs as string);
+        }
+
+        // Fallback: Check for images in extraData if no URLs found
         if ((!imageUrls || imageUrls.length === 0) && extraData) {
             let index = 0;
             while (true) {

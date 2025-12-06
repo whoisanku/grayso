@@ -101,7 +101,7 @@ export const useConversationMessages = ({
   }, [data]);
 
   const handleComposerMessageSent = useCallback(
-    (messageText: string) => {
+    (messageText: string, extraData?: Record<string, any>) => {
       const timestampNanos = Math.round(Date.now() * 1e6);
       if (messageText.trim() === "🚀") {
          // Keep existing event emitter logic if needed
@@ -123,6 +123,7 @@ export const useConversationMessages = ({
         MessageInfo: {
           TimestampNanos: timestampNanos,
           TimestampNanosString: String(timestampNanos),
+          ExtraData: extraData ? { ...extraData } : undefined,
         },
         SenderInfo: {
           OwnerPublicKeyBase58Check: userPublicKey,
@@ -135,6 +136,22 @@ export const useConversationMessages = ({
         queryKey,
         (oldData) => {
           if (!oldData) return oldData;
+          const decryptedUrls = extraData?.decryptedImageURLs || extraData?.decryptedVideoURLs;
+          if (decryptedUrls) {
+            try {
+              const parsed = JSON.parse(decryptedUrls);
+              if (Array.isArray(parsed) && optimisticMessage.MessageInfo?.ExtraData) {
+                if (extraData?.decryptedImageURLs) {
+                  optimisticMessage.MessageInfo.ExtraData.decryptedImageURLs = decryptedUrls;
+                }
+                if (extraData?.decryptedVideoURLs) {
+                  optimisticMessage.MessageInfo.ExtraData.decryptedVideoURLs = decryptedUrls;
+                }
+              }
+            } catch {
+              // ignore JSON parse errors for optimistic updates
+            }
+          }
           const newPages = [...oldData.pages];
           if (newPages.length > 0) {
               // Add to first page

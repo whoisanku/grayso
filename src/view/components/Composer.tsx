@@ -565,6 +565,9 @@ export const Composer = React.memo(function Composer({
                 if (optimisticVideoUrls.length > 0) {
                     optimisticExtraData.decryptedVideoURLs = JSON.stringify(optimisticVideoUrls);
                 }
+                if (imageURLs.length > 0) {
+                    optimisticExtraData.decryptedImageURLs = JSON.stringify(imageURLs);
+                }
 
                 await encryptAndSendNewMessage(
                     currentText.trim(), // Can be empty string if only sending images
@@ -646,11 +649,31 @@ export const Composer = React.memo(function Composer({
 
                             {/* Progress Overlay */}
                             {image.uploadStatus === 'uploading' && (
-                                <View className="absolute inset-0 items-center justify-center bg-black/30 rounded-xl">
-                                    <ActivityIndicator size="small" color="#fff" />
-                                    <Text className="text-white text-[10px] font-bold mt-1">
-                                        {Math.round(image.progress * 100)}%
-                                    </Text>
+                                <View className="absolute inset-0 items-center justify-center bg-black/35 rounded-xl px-4">
+                                    <View
+                                        style={{
+                                            width: 44,
+                                            height: 44,
+                                            borderRadius: 22,
+                                            borderWidth: 2,
+                                            borderColor: 'rgba(59,130,246,0.55)',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            backgroundColor: 'rgba(59,130,246,0.18)',
+                                        }}
+                                    >
+                                        <ActivityIndicator size="small" color="#3b82f6" />
+                                    </View>
+                                    <View className="w-full h-1.5 bg-white/30 rounded-full mt-3">
+                                        <View
+                                            style={{
+                                                width: `${Math.max(5, Math.min(100, Math.round((image.progress || 0) * 100)))}%`,
+                                                height: '100%',
+                                                backgroundColor: '#3b82f6',
+                                                borderRadius: 999,
+                                            }}
+                                        />
+                                    </View>
                                 </View>
                             )}
 
