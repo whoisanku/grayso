@@ -8,15 +8,32 @@ type FileAndMessageBubbleProps = {
 };
 
 export const FileAndMessageBubble = React.memo(({ decryptedImageURLs, extraData, isDark }: FileAndMessageBubbleProps) => {
-    if (!decryptedImageURLs || typeof decryptedImageURLs !== 'string') return null;
+    let imageUrls: string[] = [];
 
     try {
-        let imageUrls: string[] = [];
-        try {
-            imageUrls = JSON.parse(decryptedImageURLs);
-        } catch {
-            if (decryptedImageURLs.startsWith('http')) {
-                imageUrls = [decryptedImageURLs];
+        if (decryptedImageURLs && typeof decryptedImageURLs === 'string') {
+            try {
+                imageUrls = JSON.parse(decryptedImageURLs);
+            } catch {
+                if (decryptedImageURLs.startsWith('http')) {
+                    imageUrls = [decryptedImageURLs];
+                }
+            }
+        }
+
+        // Fallback: Check for images in extraData if no decrypted URLs found
+        if ((!imageUrls || imageUrls.length === 0) && extraData) {
+            let index = 0;
+            while (true) {
+                const clientIdKey = `image.${index}.clientId`;
+                const clientId = extraData[clientIdKey];
+
+                if (!clientId) break;
+
+                // Construct URL using the known DeSo images base URL
+                // Note: clientId usually includes extension, e.g. "c710c3eae4150.webp"
+                imageUrls.push(`https://images.deso.org/${clientId}`);
+                index++;
             }
         }
 

@@ -76,7 +76,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         isEditedValue(extraData?.edited) || Boolean(editedMessageText);
     const baseMessageText =
         item.DecryptedMessage ||
-        (hasError ? "Unable to decrypt this message." : "Decrypting…");
+        (hasError ? "Unable to decrypt this message." : "");
     const messageText =
         (isEditedMessage && editedMessageText ? editedMessageText : baseMessageText) ||
         baseMessageText;
