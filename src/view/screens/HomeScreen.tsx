@@ -407,15 +407,74 @@ export default function HomeScreen() {
               Chats
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => rootNavigation.navigate("NewChat")}
-            activeOpacity={0.7}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </View>
-          </TouchableOpacity>
+          
+          {/* Header Right Icons */}
+          <View className="flex-row items-center">
+            {/* New Group Chat Button */}
+            <TouchableOpacity
+              onPress={() => setShowGroupComposerModal(true)}
+              activeOpacity={0.7}
+              className="mr-1"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+
+            {/* New Chat Button */}
+            <TouchableOpacity
+              onPress={() => setShowNewChatModal(true)}
+              activeOpacity={0.7}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* WhatsApp-style filter chips */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
+          {([
+            { key: "inbox", label: "Inbox" },
+            { key: "spam", label: "Spam" },
+          ] as const).map((filter) => {
+            const isActive = activeMailbox === filter.key;
+            
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                onPress={() => setActiveMailbox(filter.key)}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: isActive 
+                    ? '#0085ff'
+                    : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                  borderWidth: 1,
+                  borderColor: isActive 
+                    ? '#0085ff' 
+                    : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: isActive 
+                      ? '#ffffff' 
+                      : (isDark ? '#94a3b8' : '#64748b'),
+                  }}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#0085ff" />
         </View>
