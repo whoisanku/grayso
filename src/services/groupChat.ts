@@ -4,6 +4,10 @@ import {
     encrypt,
     getBulkAccessGroups,
     identity,
+    getAllAccessGroupsMemberOnly,
+    publicKeyToBase58Check,
+    removeAccessGroupMembers,
+    waitForTransactionFound,
 } from "deso-protocol";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../constants/messaging";
 import { encryptAndSendNewMessage } from "./conversations";
@@ -90,6 +94,143 @@ export const createGroupChat = async (
         return `${currentUserPublicKey}${accessGroupKeys.AccessGroupKeyName}`;
     } catch (error) {
         console.error("Error creating group chat:", error);
+        throw error;
+    }
+};
+
+export const addMembersToGroup = async (
+    groupName: string,
+    memberKeys: string[],
+    userPublicKey: string
+) => {
+    try {
+        let accessGroupKeyInfo: {
+            AccessGroupPublicKeyBase58Check: string;
+            AccessGroupPrivateKeyHex: string;
+            AccessGroupKeyName: string;
+        };
+
+        // 1. Try to recover the group's private key
+        try {
+            const resp = await getAllAccessGroupsMemberOnly({
+                PublicKeyBase58Check: userPublicKey,
+            });
+
+            const encryptedKey = (resp.AccessGroupsMember ?? []).find(
+                (accessGroupEntry) =>
+                    accessGroupEntry &&
+                    accessGroupEntry.AccessGroupOwnerPublicKeyBase58Check ===
+                    userPublicKey &&
+                    accessGroupEntry.AccessGroupKeyName === groupName &&
+                    accessGroupEntry.AccessGroupMemberEntryResponse
+            )?.AccessGroupMemberEntryResponse?.EncryptedKey;
+
+            if (encryptedKey) {
+                const keys = await identity.decryptAccessGroupKeyPair(encryptedKey);
+                const pkBs58Check = await publicKeyToBase58Check(keys.public);
+
+                accessGroupKeyInfo = {
+                    AccessGroupPublicKeyBase58Check: pkBs58Check,
+                    AccessGroupPrivateKeyHex: keys.seedHex,
+                    AccessGroupKeyName: groupName,
+                };
+            } else {
+                // Fallback to standard derivation if no encrypted key found (e.g. legacy groups)
+                accessGroupKeyInfo = await identity.accessGroupStandardDerivation(groupName);
+            }
+        } catch (e) {
+            console.warn("Failed to decrypt group key, falling back to derivation", e);
+            accessGroupKeyInfo = await identity.accessGroupStandardDerivation(groupName);
+        }
+
+        // 2. Get public keys for new members to encrypt the group key for them
+        // We need their public keys. The input `memberKeys` are public keys.
+        // We need to fetch their AccessGroupPublicKeyBase58Check? 
+        // Actually, for `addAccessGroupMembers`, we encrypt the group's private key 
+        // using the *member's* public key (or their default access group key).
+        // The standard is to encrypt to the member's main public key (AccessGroupOwnerPublicKeyBase58Check)
+        // and AccessGroupKeyName (usually default).
+
+        // We need to get the AccessGroupEntry for each member to know their public key to encrypt against.
+        // However, if we assume they are just users, we can encrypt to their main key (default group).
+        // Let's verify what `getBulkAccessGroups` does.
+
+        const { AccessGroupEntries } = await getBulkAccessGroups({
+            GroupOwnerAndGroupKeyNamePairs: memberKeys.map(key => ({
+                GroupOwnerPublicKeyBase58Check: key,
+                GroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            }))
+        });
+
+        const accessGroupMemberList = await Promise.all(
+            AccessGroupEntries.map(async (accessGroupEntry) => {
+                return {
+                    AccessGroupMemberPublicKeyBase58Check:
+                        accessGroupEntry.AccessGroupOwnerPublicKeyBase58Check,
+                    AccessGroupMemberKeyName: accessGroupEntry.AccessGroupKeyName,
+                    EncryptedKey: await encrypt(
+                        accessGroupEntry.AccessGroupPublicKeyBase58Check,
+                        accessGroupKeyInfo.AccessGroupPrivateKeyHex
+                    ),
+                };
+            })
+        );
+
+        const { submittedTransactionResponse } = await addAccessGroupMembers({
+            AccessGroupOwnerPublicKeyBase58Check: userPublicKey,
+            AccessGroupKeyName: groupName,
+            AccessGroupMemberList: accessGroupMemberList,
+            MinFeeRateNanosPerKB: 1000,
+        });
+
+        if (!submittedTransactionResponse) {
+            throw new Error("Failed to submit transaction to add members to group.");
+        }
+
+        return waitForTransactionFound(submittedTransactionResponse.TxnHashHex);
+
+    } catch (error) {
+        console.error("Error adding members to group:", error);
+        throw error;
+    }
+};
+
+export const removeMembersFromGroup = async (
+    groupName: string,
+    memberKeys: string[],
+    userPublicKey: string
+) => {
+    try {
+        // We just need to construct the list of members to remove.
+        // EncryptedKey is empty for removal (or we can just pass empty string/dummy).
+        // The API expects AccessGroupMemberList with EncryptedKey, but for removal 
+        // we use `removeAccessGroupMembers` which also takes a list.
+
+        // Wait, `removeAccessGroupMembers` takes `AccessGroupMemberList`?
+        // Let's check the import. Yes, it's imported.
+        // The type definition usually requires the same structure.
+
+        const accessGroupMemberList = memberKeys.map(key => ({
+            AccessGroupMemberPublicKeyBase58Check: key,
+            AccessGroupMemberKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME, // Assuming default
+            EncryptedKey: "", // Not needed for removal
+        }));
+
+        const { submittedTransactionResponse } = await removeAccessGroupMembers({
+            AccessGroupOwnerPublicKeyBase58Check: userPublicKey,
+            AccessGroupKeyName: groupName,
+            AccessGroupMemberList: accessGroupMemberList,
+            MinFeeRateNanosPerKB: 1000,
+        });
+
+        if (!submittedTransactionResponse) {
+            throw new Error("Failed to submit transaction to remove members from group.");
+        }
+
+        return waitForTransactionFound(submittedTransactionResponse.TxnHashHex);
+
+    } catch (error) {
+        console.error("Error removing members from group:", error);
         throw error;
     }
 };
