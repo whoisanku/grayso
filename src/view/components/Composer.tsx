@@ -21,7 +21,6 @@ import Reanimated, {
 import { Platform } from "react-native";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useColorScheme } from "nativewind";
 import { ChatType, DecryptedMessageEntryResponse, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { encryptAndSendNewMessage } from "../../services/conversations";
 import { broadcastMessageUpdate } from "../../lib/supabaseClient";
@@ -30,6 +29,7 @@ import { getProfileDisplayName } from "../../utils/deso";
 import { getDisplayedMessageText } from "../../utils/messageUtils";
 import * as ImagePicker from "expo-image-picker";
 import { uploadImage, uploadVideo } from "../../services/media";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Type for selected images (for future API integration)
 export type SelectedImage = {
@@ -138,8 +138,7 @@ export const Composer = React.memo(function Composer({
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const [selection, setSelection] = useState({ start: 0, end: 0 });
     const textInputRef = useRef<TextInput>(null);
-    const { colorScheme } = useColorScheme();
-    const isDark = colorScheme === "dark";
+    const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
 
     // Typing indicator throttling
     const lastTypingSentRef = useRef<number>(0);
@@ -835,20 +834,20 @@ export const Composer = React.memo(function Composer({
                                             height: 44,
                                             borderRadius: 22,
                                             borderWidth: 2,
-                                            borderColor: 'rgba(59,130,246,0.55)',
+                                            borderColor: accentStrong,
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            backgroundColor: 'rgba(59,130,246,0.18)',
+                                            backgroundColor: accentSoft,
                                         }}
                                     >
-                                        <ActivityIndicator size="small" color="#3b82f6" />
+                                        <ActivityIndicator size="small" color={accentColor} />
                                     </View>
                                     <View className="w-full h-1.5 bg-white/30 rounded-full mt-3">
                                         <View
                                             style={{
                                                 width: `${Math.max(5, Math.min(100, Math.round((image.progress || 0) * 100)))}%`,
                                                 height: '100%',
-                                                backgroundColor: '#3b82f6',
+                                                backgroundColor: accentColor,
                                                 borderRadius: 999,
                                             }}
                                         />
@@ -977,7 +976,7 @@ export const Composer = React.memo(function Composer({
                                 justifyContent: 'center',
                                 backgroundColor: !hasContent
                                     ? (isDark ? '#334155' : '#e2e8f0')
-                                    : (isEditMode ? '#f59e0b' : '#0085ff'),
+                                    : (isEditMode ? '#f59e0b' : accentColor),
                             }}
                         >
                             {(sending || isSavingEdit) ? (

@@ -38,9 +38,9 @@ import { searchProfiles, ProfileSearchResult } from "../../services/desoGraphql"
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/events";
-import { useColorScheme } from "nativewind";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import type { ConversationMap } from "../../services/conversations";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -96,8 +96,7 @@ const formatTimestamp = (timestampMs: number) => {
 };
 
 export default function HomeScreen() {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
@@ -118,6 +117,7 @@ export default function HomeScreen() {
   const [groupName, setGroupName] = useState("");
   const [groupImageUri, setGroupImageUri] = useState<string | null>(null);
   const [selectedMembers, setSelectedMembers] = useState<{publicKey: string; username: string; profilePic?: string | null}[]>([]);
+  const canCreateGroup = selectedMembers.length >= 2;
   
   // New chat modal state
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
@@ -451,11 +451,11 @@ export default function HomeScreen() {
                   paddingVertical: 8,
                   borderRadius: 20,
                   backgroundColor: isActive 
-                    ? '#0085ff'
+                    ? accentColor
                     : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
                   borderWidth: 1,
                   borderColor: isActive 
-                    ? '#0085ff' 
+                    ? accentStrong 
                     : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
                 }}
               >
@@ -476,7 +476,7 @@ export default function HomeScreen() {
         </View>
 
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0085ff" />
+          <ActivityIndicator color={accentColor} />
         </View>
       </SafeAreaView>
     );
@@ -613,11 +613,11 @@ export default function HomeScreen() {
                 paddingVertical: 8,
                 borderRadius: 20,
                 backgroundColor: isActive 
-                  ? '#0085ff'
+                  ? accentColor
                   : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
                 borderWidth: 1,
                 borderColor: isActive 
-                  ? '#0085ff' 
+                  ? accentStrong 
                   : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
               }}
             >
@@ -653,8 +653,8 @@ export default function HomeScreen() {
             <RefreshControl
               refreshing={isLoading}
               onRefresh={reload}
-              tintColor="#0085ff"
-              colors={["#0085ff"]}
+              tintColor={accentColor}
+              colors={[accentColor]}
             />
           }
           renderItem={({ item }) => (
@@ -699,8 +699,14 @@ export default function HomeScreen() {
                     className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
                   />
                 ) : (
-                  <View className="h-14 w-14 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-                    <Text className="text-xl font-bold text-indigo-600 dark:text-indigo-300">
+                  <View
+                    className="h-14 w-14 items-center justify-center rounded-full"
+                    style={{ backgroundColor: accentSoft }}
+                  >
+                    <Text
+                      className="text-xl font-bold"
+                      style={{ color: accentStrong }}
+                    >
                       {item.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
@@ -723,8 +729,14 @@ export default function HomeScreen() {
                 </View>
                 <View className="flex-row items-center">
                   {item.isGroup ? (
-                    <View className="mr-2 rounded-full bg-blue-50 px-2 py-0.5 dark:bg-blue-900/30">
-                      <Text className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-300">
+                    <View
+                      className="mr-2 rounded-full px-2 py-0.5"
+                      style={{ backgroundColor: accentSoft }}
+                    >
+                      <Text
+                        className="text-[10px] font-bold uppercase"
+                        style={{ color: accentStrong }}
+                      >
                         Group
                       </Text>
                     </View>
@@ -741,7 +753,7 @@ export default function HomeScreen() {
           )}
           ListEmptyComponent={() => (
             <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
-              <Feather name="inbox" size={40} color={colorScheme === "dark" ? "#64748b" : "#9ca3af"} />
+              <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />
               <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
                 {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
               </Text>
@@ -762,9 +774,17 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  className="mt-6 rounded-full bg-[#0085ff] px-6 py-3 shadow-lg shadow-blue-200 dark:shadow-none"
+                  className="mt-6 rounded-full px-6 py-3"
                   activeOpacity={0.85}
                   onPress={handleCompose}
+                  style={{
+                    backgroundColor: accentColor,
+                    shadowColor: accentColor,
+                    shadowOpacity: isDark ? 0.15 : 0.25,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: 4,
+                  }}
                 >
                   <Text className="text-sm font-bold text-white">
                     Start a message
@@ -858,12 +878,16 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={member.publicKey}
                       onPress={() => setSelectedMembers(prev => prev.filter(m => m.publicKey !== member.publicKey))}
-                      className="flex-row items-center rounded-full bg-blue-100 px-3 py-1.5 dark:bg-blue-900/30"
+                      className="flex-row items-center rounded-full px-3 py-1.5"
+                      style={{ backgroundColor: accentSoft }}
                     >
-                      <Text className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      <Text
+                        className="text-sm font-medium"
+                        style={{ color: accentStrong }}
+                      >
                         {member.username}
                       </Text>
-                      <Feather name="x" size={14} color={isDark ? "#93c5fd" : "#1d4ed8"} className="ml-1" />
+                      <Feather name="x" size={14} color={accentStrong} className="ml-1" />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -887,13 +911,20 @@ export default function HomeScreen() {
           {/* Create Group Button */}
           <View className="px-4 pb-6" style={{ paddingBottom: Math.max(insets.bottom, 24) }}>
             <TouchableOpacity
-              className={`h-14 items-center justify-center rounded-xl ${
-                selectedMembers.length < 2 
-                  ? 'bg-slate-200 dark:bg-slate-800' 
-                  : 'bg-[#0085ff]'
-              }`}
+              className="h-14 items-center justify-center rounded-xl"
               activeOpacity={0.85}
-              disabled={selectedMembers.length < 2}
+              disabled={!canCreateGroup}
+              style={{
+                backgroundColor: canCreateGroup
+                  ? accentColor
+                  : isDark
+                    ? "rgba(30, 41, 59, 0.85)"
+                    : "#e2e8f0",
+                shadowColor: canCreateGroup ? accentColor : undefined,
+                shadowOpacity: canCreateGroup ? 0.2 : 0,
+                shadowRadius: canCreateGroup ? 10 : 0,
+                shadowOffset: { width: 0, height: 6 },
+              }}
               onPress={() => {
                 // TODO: Create group chat
                 console.log("Create group with members:", selectedMembers);
@@ -901,9 +932,9 @@ export default function HomeScreen() {
               }}
             >
               <Text className={`text-base font-bold ${
-                selectedMembers.length < 2 
-                  ? 'text-slate-400 dark:text-slate-600' 
-                  : 'text-white'
+                canCreateGroup
+                  ? 'text-white'
+                  : 'text-slate-400 dark:text-slate-600'
               }`}>
                 Create Group {selectedMembers.length > 0 ? `(${selectedMembers.length})` : ''}
               </Text>
@@ -948,7 +979,7 @@ export default function HomeScreen() {
           {/* Search Results */}
           {isSearchingNewChat ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color="#0085ff" />
+              <ActivityIndicator color={accentColor} />
             </View>
           ) : hasSearchedNewChat && newChatResults.length === 0 ? (
             <View className="flex-1 items-center justify-center px-8">

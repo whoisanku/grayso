@@ -6,6 +6,7 @@ import { getProfileDisplayName } from "../../utils/deso";
 import { getDisplayedMessageText, isEditedValue, formatTimestamp } from "../../utils/messageUtils";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import { BlurView } from "expo-blur";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 const ACTION_SHEET_WIDTH = 240;
 const ESTIMATED_ACTION_HEIGHT = 100;
@@ -126,6 +127,7 @@ export function SelectedBubblePreview({
     const extra = message.MessageInfo?.ExtraData as Record<string, any> | undefined;
     const isEdited = isEditedValue(extra?.edited) || Boolean(extra?.editedMessage);
     const timestamp = message.MessageInfo?.TimestampNanos;
+    const { accentColor, accentStrong, accentSoft, onAccent } = useAccentColor();
 
     // Reply logic
     const repliedToMessageId = extra?.RepliedToMessageId;
@@ -149,9 +151,9 @@ export function SelectedBubblePreview({
         return (
             <View
                 style={{
-                    backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.05)",
+                    backgroundColor: isMine ? "rgba(255, 255, 255, 0.2)" : accentSoft,
                     borderLeftWidth: 4,
-                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.6)" : accentColor,
                     borderRadius: 4,
                     padding: 6,
                     marginBottom: 6,
@@ -161,7 +163,7 @@ export function SelectedBubblePreview({
                     style={{
                         fontSize: 11,
                         fontWeight: "700",
-                        color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+                        color: isMine ? onAccent : accentColor,
                         marginBottom: 2,
                     }}
                     numberOfLines={1}
@@ -190,13 +192,14 @@ export function SelectedBubblePreview({
             }}
         >
             <View
-                className={`${isMine ? "bg-[#2563eb]" : "bg-white dark:bg-[#1e293b]"} px-4 py-3`}
+                className="px-4 py-3"
                 style={{
                     width: layout?.width,
                     borderRadius: 22,
                     borderWidth: isMine ? 0 : 1,
                     borderColor: isMine ? "transparent" : (isDark ? "#334155" : "#e2e8f0"),
-                    shadowColor: isDark ? "#000" : "#0f172a",
+                    backgroundColor: isMine ? accentColor : (isDark ? "#1e293b" : "#ffffff"),
+                    shadowColor: isMine ? accentStrong : (isDark ? "#000" : "#0f172a"),
                     shadowOpacity: 0.25,
                     shadowRadius: 18,
                     shadowOffset: { width: 0, height: 10 },
@@ -216,9 +219,14 @@ export function SelectedBubblePreview({
                 )}
                 {renderReplyPreview()}
                 <Text
-                    className={`text-[16px] leading-[22px] ${isMine ? "text-white" : "text-[#1e293b] dark:text-[#f1f5f9]"
-                        }`}
-                    style={{ marginTop: isMine ? 0 : 2 }}
+                    className="text-[16px] leading-[22px]"
+                    textBreakStrategy="balanced"
+                    selectable={false}
+                    selectionColor={accentColor}
+                    style={{
+                        marginTop: isMine ? 0 : 2,
+                        color: isMine ? onAccent : (isDark ? "#f1f5f9" : "#1e293b"),
+                    } as any}
                 >
                     {text}
                 </Text>
@@ -228,16 +236,16 @@ export function SelectedBubblePreview({
                 >
                     {isEdited ? (
                         <Text
-                            className={`mr-2 text-[11px] font-semibold ${isMine ? "text-blue-100" : "text-slate-500 dark:text-slate-400"
-                                }`}
+                            className="mr-2 text-[11px] font-semibold"
+                            style={{ color: isMine ? onAccent : (isDark ? "#cbd5e1" : "#475569") }}
                         >
                             Edited
                         </Text>
                     ) : null}
                     {timestamp ? (
                         <Text
-                            className={`text-[11px] ${isMine ? "text-blue-100" : "text-slate-400 dark:text-slate-500"
-                                }`}
+                            className="text-[11px]"
+                            style={{ color: isMine ? onAccent : (isDark ? "#94a3b8" : "#94a3b8") }}
                         >
                             {formatTimestamp(timestamp)}
                         </Text>

@@ -16,7 +16,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type RootStackParamList } from "../../navigation/types";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../../utils/deso";
@@ -25,6 +24,7 @@ import CircularProgressIndicator from "../../components/CircularProgressIndicato
 import { BlurView } from "expo-blur";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -56,8 +56,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   }[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
 
   // Keyboard animation for toolbar positioning
@@ -255,12 +254,20 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      className={`rounded-full p-2.5 ${disabled ? 'opacity-40' : 'active:opacity-70'} ${isDark ? 'bg-slate-800/80' : 'bg-indigo-500/10'}`}
+      className="rounded-full p-2.5"
+      style={{
+        backgroundColor: disabled
+          ? isDark
+            ? "rgba(51, 65, 85, 0.6)"
+            : "#e2e8f0"
+          : accentSoft,
+        opacity: disabled ? 0.45 : 1,
+      }}
     >
       <Feather 
         name={icon} 
         size={20} 
-        color={disabled ? (isDark ? '#475569' : '#94a3b8') : '#0085ff'} 
+        color={disabled ? (isDark ? '#475569' : '#94a3b8') : accentColor} 
       />
     </TouchableOpacity>
   );
@@ -339,24 +346,32 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           <TouchableOpacity
             onPress={onPost}
             disabled={!canPost || isPosting}
-            className={`rounded-full px-6 py-2 ${canPost
-              ? "bg-[#0085ff]"
-              : "bg-slate-200 dark:bg-slate-800"
-              }`}
+            className="rounded-full px-6 py-2"
             activeOpacity={0.8}
-            style={canPost ? {
-              shadowColor: "#0085ff",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 5,
-            } : undefined}
+            style={
+              canPost
+                ? {
+                    backgroundColor: accentColor,
+                    shadowColor: accentStrong,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 8,
+                    elevation: 5,
+                  }
+                : {
+                    backgroundColor: isDark ? "rgba(30, 41, 59, 0.9)" : "#e2e8f0",
+                  }
+            }
           >
             {isPosting ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text className={`text-base font-bold ${canPost ? "text-white" : "text-slate-400 dark:text-slate-500"
-                }`}>
+              <Text
+                className="text-base font-bold"
+                style={{
+                  color: canPost ? "#ffffff" : isDark ? "#94a3b8" : "#94a3b8",
+                }}
+              >
                 Post
               </Text>
             )}
@@ -462,4 +477,3 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     </ScreenWrapper>
   );
 }
-
