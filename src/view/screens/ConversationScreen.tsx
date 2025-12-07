@@ -177,16 +177,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const headerProfile = profiles[counterPartyPublicKey];
   const headerDisplayName = useMemo(() => {
     if (title?.trim()) return title.trim();
-    if (isGroupChat) return recipientInfo?.AccessGroupKeyName || headerProfile?.Username || "Group";
+    if (isGroupChat) {
+      const extraData = (recipientInfo as any)?.ExtraData;
+      if (extraData?.GroupDisplayName) return extraData.GroupDisplayName;
+      return recipientInfo?.AccessGroupKeyName || headerProfile?.Username || "Group";
+    }
     return getProfileDisplayName(headerProfile, counterPartyPublicKey);
-  }, [counterPartyPublicKey, headerProfile, isGroupChat, recipientInfo?.AccessGroupKeyName, title]);
+  }, [counterPartyPublicKey, headerProfile, isGroupChat, recipientInfo, title]);
 
   const headerAvatarUri = useMemo(() => {
     if (isGroupChat) {
+      const extraData = (recipientInfo as any)?.ExtraData;
+      if (extraData?.GroupChatImageURL) return extraData.GroupChatImageURL;
       return getProfileImageUrl(recipientOwnerKey ?? counterPartyPublicKey, { groupChat: true }) || FALLBACK_PROFILE_IMAGE;
     }
     return getProfileImageUrl(counterPartyPublicKey) || FALLBACK_PROFILE_IMAGE;
-  }, [counterPartyPublicKey, isGroupChat, recipientOwnerKey]);
+  }, [counterPartyPublicKey, isGroupChat, recipientInfo, recipientOwnerKey]);
 
   // GraphQL returns messages newest-first (TIMESTAMP_DESC)
   const displayMessages = messages;

@@ -986,6 +986,7 @@ export async function fetchPaginatedGroupThreadMessages(
             AccessGroupPublicKeyBase58Check:
               node.recipientAccessGroupPublicKey ?? "",
             AccessGroupKeyName: recipientAccessGroupKeyName,
+            ExtraData: node.receiverAccessGroup?.extraData ?? {},
           },
           MessageInfo: {
             EncryptedText: node.encryptedText,

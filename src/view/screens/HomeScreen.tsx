@@ -238,8 +238,17 @@ export default function HomeScreen() {
           );
       }
 
+      let id = `${c.firstMessagePublicKey}-${c.ChatType}`;
+      if (isGroup) {
+        // For groups, we need OwnerPK + AccessGroupKeyName to be unique
+        const info = last?.RecipientInfo as any;
+        if (info?.OwnerPublicKeyBase58Check && info?.AccessGroupKeyName) {
+          id = `${info.OwnerPublicKeyBase58Check}-${info.AccessGroupKeyName}`;
+        }
+      }
+
       return {
-        id: `${c.firstMessagePublicKey}-${c.ChatType}`,
+        id,
         name,
         preview,
         time,
