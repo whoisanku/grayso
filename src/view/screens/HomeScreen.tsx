@@ -527,11 +527,11 @@ export default function HomeScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
               </LiquidGlassView>
             ) : (
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
               </View>
             )}
           </TouchableOpacity>

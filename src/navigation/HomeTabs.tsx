@@ -4,7 +4,7 @@ import HomeScreen from "../view/screens/HomeScreen";
 import ProfileScreen from "../view/screens/profile/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
-import PlusIcon from "../assets/navIcons/plus.svg";
+import EditIcon from "../assets/navIcons/edit.svg";
 import { View, TouchableOpacity, Platform, StyleSheet } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
@@ -57,7 +57,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             elevation: 5,
           }}
         >
-          <PlusIcon width={24} height={24} stroke="white" strokeWidth={2.5} />
+          <EditIcon width={24} height={24} stroke="white" strokeWidth={2.5} />
         </TouchableOpacity>
       );
     }
