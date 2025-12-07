@@ -215,26 +215,23 @@ export default function ConversationScreen({ navigation, route }: Props) {
     }
   };
 
+  // Remove Member Modal State
+  const [memberToRemove, setMemberToRemove] = useState<{ publicKey: string; username: string } | null>(null);
+
   const handleRemoveMember = (memberPublicKey: string, username: string) => {
-    Alert.alert(
-      "Remove Member",
-      `Are you sure you want to remove ${username || "this user"} from the group?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await removeMembers([memberPublicKey]);
-              // Alert.alert("Success", "Member removed.");
-            } catch (e) {
-              Alert.alert("Error", "Failed to remove member.");
-            }
-          },
-        },
-      ]
-    );
+    setMemberToRemove({ publicKey: memberPublicKey, username });
+  };
+
+  const confirmRemoveMember = async () => {
+    if (!memberToRemove) return;
+
+    try {
+      await removeMembers([memberToRemove.publicKey]);
+      setMemberToRemove(null);
+    } catch (e) {
+      console.error("Failed to remove member:", e);
+      Alert.alert("Error", "Failed to remove member.");
+    }
   };
 
   // Presence tracking
@@ -898,6 +895,51 @@ export default function ConversationScreen({ navigation, route }: Props) {
             }
           />
         </SafeAreaView>
+      </Modal>
+
+      {/* Remove Member Confirmation Modal */}
+      <Modal
+        visible={!!memberToRemove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMemberToRemove(null)}
+      >
+        <View className="flex-1 justify-center items-center bg-black/50 px-4">
+          <View className="bg-white dark:bg-[#1e293b] rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <View className="items-center mb-4">
+              <View className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-4">
+                <Feather name="user-x" size={24} color="#ef4444" />
+              </View>
+              <Text className="text-xl font-bold text-slate-900 dark:text-white text-center">
+                Remove Member?
+              </Text>
+              <Text className="text-slate-500 dark:text-slate-400 text-center mt-2">
+                Are you sure you want to remove <Text className="font-semibold text-slate-900 dark:text-white">{memberToRemove?.username || "this user"}</Text> from the group?
+              </Text>
+            </View>
+
+            <View className="flex-row space-x-3">
+              <TouchableOpacity
+                onPress={() => setMemberToRemove(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"
+              >
+                <Text className="text-slate-900 dark:text-white font-semibold text-center">Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={confirmRemoveMember}
+                disabled={isRemovingMember}
+                className="flex-1 py-3 rounded-xl bg-red-500"
+              >
+                {isRemovingMember ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text className="text-white font-semibold text-center">Remove</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </ScreenWrapper >
   );

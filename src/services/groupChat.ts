@@ -201,18 +201,18 @@ export const removeMembersFromGroup = async (
     userPublicKey: string
 ) => {
     try {
-        // We just need to construct the list of members to remove.
-        // EncryptedKey is empty for removal (or we can just pass empty string/dummy).
-        // The API expects AccessGroupMemberList with EncryptedKey, but for removal 
-        // we use `removeAccessGroupMembers` which also takes a list.
+        // 1. Get Bulk Access Groups to ensure we have the correct KeyName (usually default)
+        const { AccessGroupEntries } = await getBulkAccessGroups({
+            GroupOwnerAndGroupKeyNamePairs: memberKeys.map(key => ({
+                GroupOwnerPublicKeyBase58Check: key,
+                GroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            }))
+        });
 
-        // Wait, `removeAccessGroupMembers` takes `AccessGroupMemberList`?
-        // Let's check the import. Yes, it's imported.
-        // The type definition usually requires the same structure.
-
-        const accessGroupMemberList = memberKeys.map(key => ({
-            AccessGroupMemberPublicKeyBase58Check: key,
-            AccessGroupMemberKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME, // Assuming default
+        // 2. Construct the list of members to remove
+        const accessGroupMemberList = AccessGroupEntries.map(accessGroupEntry => ({
+            AccessGroupMemberPublicKeyBase58Check: accessGroupEntry.AccessGroupOwnerPublicKeyBase58Check,
+            AccessGroupMemberKeyName: accessGroupEntry.AccessGroupKeyName,
             EncryptedKey: "", // Not needed for removal
         }));
 
