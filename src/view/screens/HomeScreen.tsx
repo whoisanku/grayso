@@ -18,6 +18,7 @@ import { ChatType, buildProfilePictureUrl } from "deso-protocol";
 import {
   CompositeNavigationProp,
   useNavigation,
+  useFocusEffect,
 } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -103,6 +104,14 @@ export default function HomeScreen() {
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { conversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
+  
+  // Reload conversations when screen gains focus (e.g., returning from a conversation)
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload])
+  );
+
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const drawerRef = useRef<View | null>(null);
   const [optimisticPreviews, setOptimisticPreviews] = useState<
@@ -165,13 +174,12 @@ export default function HomeScreen() {
     if (!userPk) return [];
 
     return Object.values(conversations).map((c) => {
-      // Find the last (newest) non-edited message since messages are now sorted oldest-first
-      // Edited messages have newer timestamps but represent old content
-      const reversedMessages = [...c.messages].reverse();
-      const last = reversedMessages.find(msg => {
+      // Messages are sorted newest-first (descending) from getConversationsNewMap
+      // Find the first non-edited message (which is the newest real message)
+      const last = c.messages.find(msg => {
         const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
         return extraData?.edited !== 'true';
-      }) || c.messages[c.messages.length - 1]; // Fallback to last message if all are edited (unlikely)
+      }) || c.messages[0]; // Fallback to first (newest) message if all are edited
 
       const info = last?.MessageInfo || {};
       const time = formatTimestamp(
@@ -218,8 +226,20 @@ export default function HomeScreen() {
           );
       }
 
+      // Create a unique ID that matches ConversationScreen's conversationId:
+      // For group chats: publicKey-accessGroupKeyName  
+      // For DMs: sorted public keys with -DM suffix for consistency
+      let uniqueId: string;
+      if (isGroup) {
+        uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
+      } else {
+        // Sort public keys alphabetically for consistent DM ID (matches ConversationScreen)
+        const sortedKeys = [userPk, otherPk].sort();
+        uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
+      }
+      
       return {
-        id: `${c.firstMessagePublicKey}-${c.ChatType}`,
+        id: uniqueId,
         name,
         preview,
         time,
@@ -241,9 +261,9 @@ export default function HomeScreen() {
   }, [conversations, profiles, groupMembers, currentUser?.PublicKeyBase58Check]);
 
   const enhancedItems = useMemo(() => {
-    return items.map((item) => {
-      const conversationId = `${item.threadPublicKey}-${item.chatType}`;
-      const optimistic = optimisticPreviews[conversationId];
+    const mapped = items.map((item) => {
+      // Use the item's unique ID for optimistic preview lookup
+      const optimistic = optimisticPreviews[item.id];
 
       if (optimistic) {
         const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
@@ -264,7 +284,15 @@ export default function HomeScreen() {
 
       return item;
     });
+    
+    // Sort by most recent message first
+    return mapped.sort((a, b) => {
+      const aTime = a.lastTimestampNanos ?? 0;
+      const bTime = b.lastTimestampNanos ?? 0;
+      return bTime - aTime;
+    });
   }, [items, optimisticPreviews]);
+
 
   const handlePress = useCallback(
     (item: MockConversation) => {

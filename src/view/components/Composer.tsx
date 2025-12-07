@@ -24,6 +24,7 @@ import * as Haptics from "expo-haptics";
 import { useColorScheme } from "nativewind";
 import { ChatType, DecryptedMessageEntryResponse, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { encryptAndSendNewMessage } from "../../services/conversations";
+import { broadcastMessageUpdate } from "../../lib/supabaseClient";
 import { OUTGOING_MESSAGE_EVENT } from "../../constants/events";
 import { getProfileDisplayName } from "../../utils/deso";
 import { getDisplayedMessageText } from "../../utils/messageUtils";
@@ -64,6 +65,9 @@ export type ComposerProps = {
     onCancelEdit?: () => void;
     onSaveEdit?: () => void;
     isSavingEdit?: boolean;
+    recipientOnline?: boolean;
+    onSendEphemeral?: (content: string) => Promise<void>;
+    isSendingEphemeral?: boolean;
 };
 
 const extractVideoId = (url: string): string | null => {
@@ -136,6 +140,80 @@ export const Composer = React.memo(function Composer({
     const textInputRef = useRef<TextInput>(null);
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
+
+    // Typing indicator throttling
+    const lastTypingSentRef = useRef<number>(0);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleTextChange = useCallback((newText: string) => {
+        if (editingMessage) {
+            onEditDraftChange?.(newText);
+            return;
+        }
+
+        setText(newText);
+
+        // Don't send typing events if empty (handled by stop typing logic) or if sending
+        if (sending) return;
+
+        const now = Date.now();
+        const THROTTLE_MS = 3000; // Send at most every 3 seconds
+
+        // If user is typing (text not empty)
+        if (newText.length > 0) {
+            // Send "is_typing: true" if enough time has passed
+            if (now - lastTypingSentRef.current > THROTTLE_MS) {
+                lastTypingSentRef.current = now;
+                broadcastMessageUpdate(
+                    {
+                        conversationId,
+                        timestampNanos: Date.now() * 1e6,
+                        senderPublicKey: userPublicKey,
+                        is_typing: true
+                    },
+                    `messages-${conversationId}`,
+                    undefined,
+                    { keepAlive: true }
+                ).catch(err => console.warn('[Composer] Failed to broadcast typing:', err));
+            }
+
+            // Clear existing stop timeout
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+
+            // Set new stop timeout (debounce)
+            typingTimeoutRef.current = setTimeout(() => {
+                broadcastMessageUpdate(
+                    {
+                        conversationId,
+                        timestampNanos: Date.now() * 1e6,
+                        senderPublicKey: userPublicKey,
+                        is_typing: false
+                    },
+                    `messages-${conversationId}`,
+                    undefined,
+                    { keepAlive: true }
+                ).catch(err => console.warn('[Composer] Failed to broadcast stop typing:', err));
+            }, 2000); // Consider stopped after 2 seconds of inactivity
+        } else {
+            // If text became empty, send stop immediately
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+            broadcastMessageUpdate(
+                {
+                    conversationId,
+                    timestampNanos: Date.now() * 1e6,
+                    senderPublicKey: userPublicKey,
+                    is_typing: false
+                },
+                `messages-${conversationId}`,
+                undefined,
+                { keepAlive: true }
+            ).catch(err => console.warn('[Composer] Failed to broadcast stop typing:', err));
+        }
+    }, [conversationId, userPublicKey, sending, editingMessage, onEditDraftChange]);
 
     // Keyboard avoidance is now handled by ScreenWrapper's KeyboardAvoidingView
     // This ensures the entire content (including FlatList) moves up with keyboard
@@ -256,7 +334,14 @@ export const Composer = React.memo(function Composer({
                 }
             }
 
-            await encryptAndSendNewMessage(
+            const {
+                EncryptedMessageText,
+                ExtraData,
+                SenderAccessGroupPublicKeyBase58Check,
+                SenderAccessGroupKeyName,
+                RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                RecipientAccessGroupKeyName,
+            } = await encryptAndSendNewMessage(
                 textToSend,
                 userPublicKey,
                 counterPartyPublicKey,
@@ -267,6 +352,37 @@ export const Composer = React.memo(function Composer({
             );
 
             const timestampNanos = Math.round(Date.now() * 1e6);
+
+            // Broadcast message via Supabase for instant delivery when both users are online
+            try {
+                const broadcastChannel = `messages-${conversationId}`;
+                console.log('[Composer] Broadcasting to channel:', broadcastChannel);
+
+                await broadcastMessageUpdate(
+                    {
+                        conversationId,
+                        timestampNanos,
+                        senderPublicKey: userPublicKey,
+                        recipients: [counterPartyPublicKey],
+                        metadata: {
+                            chatType,
+                        },
+                        EncryptedMessageText,
+                        ExtraData,
+                        SenderAccessGroupPublicKeyBase58Check,
+                        SenderAccessGroupKeyName,
+                        RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                        RecipientAccessGroupKeyName,
+                    },
+                    broadcastChannel, // Use conversation-specific channel
+                    undefined, // default event
+                    { keepAlive: true } // Keep channel open for useConversationMessages
+                );
+                console.log('[Composer] Message broadcast via Supabase successfully');
+            } catch (broadcastError) {
+                console.warn('[Composer] Supabase broadcast failed (message still sent to blockchain):', broadcastError);
+            }
+
             onMessageSent?.(textToSend);
             if (onCancelReply) onCancelReply();
             DeviceEventEmitter.emit(OUTGOING_MESSAGE_EVENT, {
@@ -466,13 +582,7 @@ export const Composer = React.memo(function Composer({
     const currentText = isEditMode ? editDraft : text;
     const currentHasText = currentText.trim().length > 0;
 
-    const handleTextChange = (newText: string) => {
-        if (isEditMode) {
-            onEditDraftChange?.(newText);
-        } else {
-            setText(newText);
-        }
-    };
+
 
     const handleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
         setSelection(event.nativeEvent.selection);
@@ -577,7 +687,14 @@ export const Composer = React.memo(function Composer({
                     optimisticExtraData.decryptedImageURLs = JSON.stringify(imageURLs);
                 }
 
-                await encryptAndSendNewMessage(
+                const {
+                    EncryptedMessageText,
+                    ExtraData,
+                    SenderAccessGroupPublicKeyBase58Check,
+                    SenderAccessGroupKeyName,
+                    RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                    RecipientAccessGroupKeyName,
+                } = await encryptAndSendNewMessage(
                     currentText.trim(), // Can be empty string if only sending images
                     userPublicKey,
                     counterPartyPublicKey,
@@ -590,6 +707,37 @@ export const Composer = React.memo(function Composer({
                 );
 
                 const timestampNanos = Math.round(Date.now() * 1e6);
+
+                // Broadcast message via Supabase for instant delivery when both users are online
+                try {
+                    const broadcastChannel = `messages-${conversationId}`;
+                    console.log('[Composer] Broadcasting to channel:', broadcastChannel);
+
+                    await broadcastMessageUpdate(
+                        {
+                            conversationId,
+                            timestampNanos,
+                            senderPublicKey: userPublicKey,
+                            recipients: [counterPartyPublicKey],
+                            metadata: {
+                                chatType,
+                            },
+                            EncryptedMessageText,
+                            ExtraData,
+                            SenderAccessGroupPublicKeyBase58Check,
+                            SenderAccessGroupKeyName,
+                            RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                            RecipientAccessGroupKeyName,
+                        },
+                        broadcastChannel,
+                        undefined,
+                        { keepAlive: true }
+                    );
+                    console.log('[Composer] Message broadcast via Supabase successfully');
+                } catch (broadcastError) {
+                    console.warn('[Composer] Supabase broadcast failed (message still sent to blockchain):', broadcastError);
+                }
+
                 onMessageSent?.(currentText.trim(), optimisticExtraData);
                 if (onCancelReply) onCancelReply();
 
@@ -739,7 +887,7 @@ export const Composer = React.memo(function Composer({
                 </ScrollView>
             )}
 
-            <View 
+            <View
                 style={{
                     flexDirection: 'row',
                     alignItems: 'flex-end',
@@ -771,7 +919,7 @@ export const Composer = React.memo(function Composer({
                     </TouchableOpacity>
                 )}
 
-                <View 
+                <View
                     style={{
                         flex: 1,
                         borderRadius: 24,
@@ -820,15 +968,15 @@ export const Composer = React.memo(function Composer({
                         activeOpacity={0.85}
                         style={{ marginLeft: 8 }}
                     >
-                        <View 
+                        <View
                             style={{
                                 width: 36,
                                 height: 36,
                                 borderRadius: 18,
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                backgroundColor: !hasContent 
-                                    ? (isDark ? '#334155' : '#e2e8f0') 
+                                backgroundColor: !hasContent
+                                    ? (isDark ? '#334155' : '#e2e8f0')
                                     : (isEditMode ? '#f59e0b' : '#0085ff'),
                             }}
                         >

@@ -32,3 +32,6 @@ android/app/src/main/assets/
 .DS_Store
 coverage/
 web-build/ 
+
+# Envs
+.env
