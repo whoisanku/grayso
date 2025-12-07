@@ -75,6 +75,7 @@ const ACCESS_GROUPS_QUERY = `
             endCursor
           }
         }
+        extraData
       }
       pageInfo {
         hasNextPage
@@ -148,6 +149,7 @@ type AccessGroupNode = {
       endCursor?: string | null;
     };
   };
+  extraData?: Record<string, string> | null;
 };
 
 export function normalizeTimestampToNanos(
@@ -273,7 +275,7 @@ export async function fetchDmMessagesViaGraphql({
   afterCursor,
   beforeCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: FetchDmMessagesInput): Promise<{
   nodes: GraphqlMessageNode[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -413,7 +415,7 @@ export async function fetchGroupMessagesViaGraphql({
   afterCursor,
   beforeCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: FetchGroupMessagesInput): Promise<{
   nodes: GraphqlMessageNode[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -484,7 +486,7 @@ export async function fetchGroupMessagesViaGraphql({
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
+      "GraphQL query failed"
     );
   }
 
@@ -514,7 +516,7 @@ export async function fetchAccessGroupMembers({
   limit = 50,
   afterCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: {
   accessGroupKeyName: string;
   accessGroupOwnerPublicKey: string;
@@ -524,6 +526,7 @@ export async function fetchAccessGroupMembers({
 }): Promise<{
   members: GroupMember[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  extraData?: Record<string, string> | null;
 }> {
   const filter: Record<string, unknown> = {
     accessGroupKeyName: { equalTo: accessGroupKeyName },
@@ -570,18 +573,19 @@ export async function fetchAccessGroupMembers({
         pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       } | null;
     } | null;
-    errors?: Array<{ message?: string }>;  };
+    errors?: Array<{ message?: string }>;
+  };
 
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
+      "GraphQL query failed"
     );
   }
 
   const accessGroupsConnection = json.data?.accessGroups;
   const firstAccessGroup = accessGroupsConnection?.nodes?.[0];
-  
+
   if (!firstAccessGroup?.accessGroupMembers) {
     return {
       members: [],
@@ -612,6 +616,7 @@ export async function fetchAccessGroupMembers({
           ? membersConnection.pageInfo.endCursor
           : null,
     },
+    extraData: firstAccessGroup.extraData || null,
   };
 }
 
@@ -668,7 +673,7 @@ export async function searchProfiles({
   query,
   limit = 20,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: {
   query: string;
   limit?: number;
@@ -703,7 +708,7 @@ export async function searchProfiles({
 
   const response = await performGraphqlRequest(body, graphqlEndpoint);
   const contentType = response.headers.get("content-type") ?? "";
-  
+
   if (!contentType.includes("application/json")) {
     const text = await response.text().catch(() => "");
     throw new Error(
@@ -719,12 +724,12 @@ export async function searchProfiles({
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
+      "GraphQL query failed"
     );
   }
 
   const nodes = json.data?.profiles?.nodes ?? [];
-  
+
   const results: ProfileSearchResult[] = nodes
     .filter((node) => node?.account?.publicKey && node?.account?.username)
     .slice(0, limit)

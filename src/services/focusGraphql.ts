@@ -30,7 +30,6 @@ const INBOX_THREADS_QUERY = `
               id
               encryptedText
               timestamp
-              extraData
               isGroupChatMessage
               threadIdentifier
               sender {
@@ -113,6 +112,9 @@ export type FocusThreadNode = {
     accessGroupKeyName?: string | null;
     accessGroupOwnerPublicKey?: string | null;
     threadIdentifier?: string | null;
+    accessGroup?: {
+      extraData?: Record<string, string> | null;
+    } | null;
     messages?: { nodes?: FocusMessageNode[] | null } | null;
   } | null;
 };
@@ -173,7 +175,7 @@ export async function fetchInboxMessageThreads({
   isSpam = false,
   filter,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   userPublicKey: string;
   first?: number;
@@ -226,7 +228,7 @@ export async function fetchInboxMessageThreads({
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((err) => err.message).filter(Boolean).join("; ") ||
-        "GraphQL query returned errors"
+      "GraphQL query returned errors"
     );
   }
 

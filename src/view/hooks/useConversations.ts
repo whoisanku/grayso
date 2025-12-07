@@ -6,9 +6,6 @@ import { identity } from "deso-protocol";
 import {
   getSupabaseClient,
   isSupabaseConfigured,
-  SUPABASE_MESSAGES_FILTER_COLUMN,
-  SUPABASE_MESSAGES_TABLE,
-  SUPABASE_REALTIME_SCHEMA,
 } from "../../lib/supabaseClient";
 
 export const useConversations = () => {
@@ -23,23 +20,23 @@ export const useConversations = () => {
   } = useQuery({
     queryKey: getConversationsQueryKey(currentUser?.PublicKeyBase58Check),
     queryFn: async () => {
-        try {
-             return await fetchConversations(currentUser!.PublicKeyBase58Check);
-        } catch (e: any) {
-             const message: string = e?.message ?? "";
-            if (message.includes("Cannot decrypt messages")) {
-                console.warn("Unable to decrypt conversations for current user", {
-                    publicKey: currentUser?.PublicKeyBase58Check,
-                    error: e,
-                });
-                try {
-                    await identity.logout();
-                } catch (logoutError) {
-                    console.warn("Failed to logout after decryption error", logoutError);
-                }
-            }
-            throw e;
+      try {
+        return await fetchConversations(currentUser!.PublicKeyBase58Check);
+      } catch (e: any) {
+        const message: string = e?.message ?? "";
+        if (message.includes("Cannot decrypt messages")) {
+          console.warn("Unable to decrypt conversations for current user", {
+            publicKey: currentUser?.PublicKeyBase58Check,
+            error: e,
+          });
+          try {
+            await identity.logout();
+          } catch (logoutError) {
+            console.warn("Failed to logout after decryption error", logoutError);
+          }
         }
+        throw e;
+      }
     },
     enabled: !!currentUser?.PublicKeyBase58Check,
     staleTime: 1000 * 30, // 30 seconds
@@ -48,16 +45,13 @@ export const useConversations = () => {
   useEffect(() => {
     const userPublicKey = currentUser?.PublicKeyBase58Check;
     const supabaseEnabled = isSupabaseConfigured();
-    const schema = SUPABASE_REALTIME_SCHEMA?.trim();
-    const table = SUPABASE_MESSAGES_TABLE?.trim();
 
-    if (!supabaseEnabled || !userPublicKey || !schema || !table) {
+    if (!supabaseEnabled || !userPublicKey) {
       return;
     }
 
     const supabase = getSupabaseClient();
     const channelIdentifier = `messages:${userPublicKey}`;
-    const filterColumn = SUPABASE_MESSAGES_FILTER_COLUMN?.trim();
 
     const channel = supabase
       .channel(channelIdentifier)
@@ -65,9 +59,8 @@ export const useConversations = () => {
         "postgres_changes",
         {
           event: "*",
-          schema,
-          table,
-          filter: filterColumn ? `${filterColumn}=eq.${userPublicKey}` : undefined,
+          schema: "public",
+          table: "messages",
         },
         () => {
           void refetch();
@@ -91,6 +84,7 @@ export const useConversations = () => {
     spamConversations: data?.spamConversations ?? {},
     profiles: data?.profiles ?? {},
     groupMembers: data?.groupMembers ?? {},
+    groupExtraData: data?.groupExtraData ?? {},
     isLoading,
     error: isError ? (error as Error).message : null,
     reload: refetch,

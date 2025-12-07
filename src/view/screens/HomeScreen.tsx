@@ -41,6 +41,8 @@ import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/even
 import { useColorScheme } from "nativewind";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import type { ConversationMap } from "../../services/conversations";
+import { NewGroupChatModal } from "../components/NewGroupChatModal";
+import { UserSearchResult } from "../../services/userSearch";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -102,9 +104,9 @@ export default function HomeScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { conversations, spamConversations, profiles, groupMembers, isLoading, error, reload } =
+  const { conversations, spamConversations, profiles, groupMembers, groupExtraData, isLoading, error, reload } =
     useConversations();
-  
+
   // Reload conversations when screen gains focus (e.g., returning from a conversation)
   useFocusEffect(
     useCallback(() => {
@@ -114,11 +116,9 @@ export default function HomeScreen() {
 
   const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
-  const [groupSearchQuery, setGroupSearchQuery] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [groupImageUri, setGroupImageUri] = useState<string | null>(null);
-  const [selectedMembers, setSelectedMembers] = useState<{publicKey: string; username: string; profilePic?: string | null}[]>([]);
-  
+
+
+
   // New chat modal state
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
   const [newChatResults, setNewChatResults] = useState<ProfileSearchResult[]>([]);
@@ -133,7 +133,7 @@ export default function HomeScreen() {
         timestampNanos: number;
       }
     >
-  >({}); 
+  >({});
 
   // Helper to open drawer (controlled by HomeTabs)
   const openDrawer = useCallback(() => {
@@ -251,29 +251,46 @@ export default function HomeScreen() {
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
           : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
         const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
-        const avatarUri = isGroup
-          ? FALLBACK_GROUP_IMAGE
-          : buildProfilePictureUrl(otherPk, {
+
+        // For group chats, check if there's a custom group image in extraData
+        let avatarUri: string;
+        if (isGroup) {
+          const groupKey = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName}`;
+          const extraData = groupExtraData?.[groupKey];
+          avatarUri = extraData?.groupImage || FALLBACK_GROUP_IMAGE;
+        } else {
+          avatarUri = buildProfilePictureUrl(otherPk, {
             fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
           });
+        }
 
         let stackedAvatarUris: string[] = [];
         let isLoadingMembers = false;
+        let hasGroupImage = false;
+
         if (isGroup) {
           const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
-          const members = groupMembers[groupKey] || [];
+          const extraData = groupExtraData?.[groupKey];
 
-          if (members.length === 0) {
-            isLoadingMembers = true;
+          // If there's a custom group image, use it instead of stacked avatars
+          if (extraData?.groupImage) {
+            hasGroupImage = true;
+          } else {
+            // Only fetch/show stacked avatars if there's no custom group image
+            const members = groupMembers[groupKey] || [];
+
+            if (members.length === 0) {
+              isLoadingMembers = true;
+            }
+
+            stackedAvatarUris = members
+              .slice(0, 3)
+              .map((m) =>
+                m.profilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
+                  : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
+              );
           }
-
-          stackedAvatarUris = members
-            .slice(0, 3)
-            .map((m) =>
-              m.profilePic
-                ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
-                : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
-            );
         }
 
         let uniqueId: string;
@@ -302,10 +319,11 @@ export default function HomeScreen() {
           partyGroupOwnerPublicKeyBase58Check: otherPk,
           recipientInfo: last?.RecipientInfo,
           isLoadingMembers,
+          hasGroupImage,
         };
       });
     },
-    [currentUser?.PublicKeyBase58Check, profiles, groupMembers]
+    [currentUser?.PublicKeyBase58Check, profiles, groupMembers, groupExtraData]
   );
 
   const inboxItems = useMemo(
@@ -345,7 +363,7 @@ export default function HomeScreen() {
 
       return item;
     });
-    
+
     // Sort by most recent message first
     return mapped.sort((a, b) => {
       const aTime = a.lastTimestampNanos ?? 0;
@@ -412,7 +430,7 @@ export default function HomeScreen() {
             activeOpacity={0.7}
           >
             <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
             </View>
           </TouchableOpacity>
         </View>
@@ -480,7 +498,7 @@ export default function HomeScreen() {
             Chats
           </Text>
         </View>
-        
+
         {/* Header Right Icons */}
         <View className="flex-row items-center">
           {/* New Group Chat Button */}
@@ -543,7 +561,7 @@ export default function HomeScreen() {
           { key: "spam", label: "Spam" },
         ] as const).map((filter) => {
           const isActive = activeMailbox === filter.key;
-          
+
           return (
             <TouchableOpacity
               key={filter.key}
@@ -553,12 +571,12 @@ export default function HomeScreen() {
                 paddingHorizontal: 16,
                 paddingVertical: 8,
                 borderRadius: 20,
-                backgroundColor: isActive 
+                backgroundColor: isActive
                   ? '#0085ff'
                   : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
                 borderWidth: 1,
-                borderColor: isActive 
-                  ? '#0085ff' 
+                borderColor: isActive
+                  ? '#0085ff'
                   : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
               }}
             >
@@ -566,8 +584,8 @@ export default function HomeScreen() {
                 style={{
                   fontSize: 14,
                   fontWeight: '600',
-                  color: isActive 
-                    ? '#ffffff' 
+                  color: isActive
+                    ? '#ffffff'
                     : (isDark ? '#94a3b8' : '#64748b'),
                 }}
               >
@@ -605,7 +623,12 @@ export default function HomeScreen() {
               onPress={() => handlePress(item)}
             >
               <View className="mr-3">
-                {item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
+                {item.isGroup && item.hasGroupImage ? (
+                  <Image
+                    source={{ uri: item.avatarUri }}
+                    className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                  />
+                ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
                   <View className="h-14 w-14 relative">
                     {item.stackedAvatarUris.map((uri, index) => (
                       <Image
@@ -718,147 +741,35 @@ export default function HomeScreen() {
       </View>
 
       {/* Group Composer Modal */}
-      <Modal
+      <NewGroupChatModal
         visible={showGroupComposerModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowGroupComposerModal(false)}
-      >
-        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-          {/* Header */}
-          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-            <Text className="text-xl font-bold text-[#111] dark:text-white">New Group Chat</Text>
-            <TouchableOpacity onPress={() => setShowGroupComposerModal(false)} className="p-1">
-              <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Group Image & Name Section */}
-          <View className="px-5 py-4 flex-row items-center border-b border-gray-100 dark:border-slate-800">
-            {/* Group Image Upload Placeholder */}
-            <TouchableOpacity
-              onPress={() => {
-                // TODO: Image picker
-                console.log("Pick group image");
-              }}
-              activeOpacity={0.7}
-              className="mr-4"
-            >
-              {groupImageUri ? (
-                <Image
-                  source={{ uri: groupImageUri }}
-                  className="h-16 w-16 rounded-full bg-slate-200 dark:bg-slate-700"
-                />
-              ) : (
-                <View className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 items-center justify-center">
-                  <Feather name="camera" size={24} color={isDark ? "#64748b" : "#94a3b8"} />
-                </View>
-              )}
-            </TouchableOpacity>
-            
-            {/* Group Name Input */}
-            <View className="flex-1">
-              <TextInput
-                className="text-lg font-semibold text-slate-900 dark:text-white"
-                placeholder="Group name"
-                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                value={groupName}
-                onChangeText={setGroupName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                style={{ paddingVertical: 8 }}
-              />
-              <Text className="text-xs text-slate-500 dark:text-slate-400">
-                Tap the camera to add a group photo
-              </Text>
-            </View>
-          </View>
-
-          {/* Search Input */}
-          <View className="px-4 py-3">
-            <View className="h-12 flex-row items-center rounded-xl bg-slate-100 px-4 dark:bg-slate-800">
-              <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
-              <TextInput
-                className="ml-3 flex-1 text-base text-slate-900 dark:text-white"
-                placeholder="Search username..."
-                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                value={groupSearchQuery}
-                onChangeText={setGroupSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          </View>
-
-          {/* Selected Members Chips */}
-          {selectedMembers.length > 0 && (
-            <View className="px-4 pb-3">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-2">
-                  {selectedMembers.map((member) => (
-                    <TouchableOpacity
-                      key={member.publicKey}
-                      onPress={() => setSelectedMembers(prev => prev.filter(m => m.publicKey !== member.publicKey))}
-                      className="flex-row items-center rounded-full bg-blue-100 px-3 py-1.5 dark:bg-blue-900/30"
-                    >
-                      <Text className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                        {member.username}
-                      </Text>
-                      <Feather name="x" size={14} color={isDark ? "#93c5fd" : "#1d4ed8"} className="ml-1" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Search Results / Empty State */}
-          <View className="flex-1 items-center justify-center px-8">
-            <View className="h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-              <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
-            </View>
-            <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
-              Add people to your group
-            </Text>
-            <Text className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
-              Search by username to add members
-            </Text>
-          </View>
-
-          {/* Create Group Button */}
-          <View className="px-4 pb-6" style={{ paddingBottom: Math.max(insets.bottom, 24) }}>
-            <TouchableOpacity
-              className={`h-14 items-center justify-center rounded-xl ${
-                selectedMembers.length < 2 
-                  ? 'bg-slate-200 dark:bg-slate-800' 
-                  : 'bg-[#0085ff]'
-              }`}
-              activeOpacity={0.85}
-              disabled={selectedMembers.length < 2}
-              onPress={() => {
-                // TODO: Create group chat
-                console.log("Create group with members:", selectedMembers);
-                setShowGroupComposerModal(false);
-              }}
-            >
-              <Text className={`text-base font-bold ${
-                selectedMembers.length < 2 
-                  ? 'text-slate-400 dark:text-slate-600' 
-                  : 'text-white'
-              }`}>
-                Create Group {selectedMembers.length > 0 ? `(${selectedMembers.length})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </Modal>
+        onClose={() => setShowGroupComposerModal(false)}
+        onGroupCreated={() => {
+          setShowGroupComposerModal(false);
+          reload(); // Reload conversations to show the new group
+        }}
+        onNavigateToGroup={(groupName, ownerPublicKey, initialMessage) => {
+          setShowGroupComposerModal(false);
+          rootNavigation.navigate("Conversation", {
+            threadPublicKey: ownerPublicKey,
+            chatType: "GROUPCHAT" as any,
+            userPublicKey: currentUser?.PublicKeyBase58Check || '',
+            threadAccessGroupKeyName: groupName,
+            userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            partyGroupOwnerPublicKeyBase58Check: ownerPublicKey,
+            title: groupName,
+            initialMessage: initialMessage, // Pass the initial message
+          });
+        }}
+      />
 
       {/* New Chat Modal */}
-      <Modal
+      < Modal
         visible={showNewChatModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowNewChatModal(false)}
+        onRequestClose={() => setShowNewChatModal(false)
+        }
       >
         <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
           {/* Header */}
@@ -923,8 +834,8 @@ export default function HomeScreen() {
                   activeOpacity={0.7}
                 >
                   <Image
-                    source={{ 
-                      uri: buildProfilePictureUrl(item.publicKey, { fallbackImageUrl: FALLBACK_PROFILE_IMAGE }) 
+                    source={{
+                      uri: buildProfilePictureUrl(item.publicKey, { fallbackImageUrl: FALLBACK_PROFILE_IMAGE })
                     }}
                     className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
                   />
@@ -943,9 +854,9 @@ export default function HomeScreen() {
             />
           )}
         </SafeAreaView>
-      </Modal>
+      </Modal >
 
-    </SafeAreaView>
+    </SafeAreaView >
   );
   return mainContent;
 }

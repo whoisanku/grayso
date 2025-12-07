@@ -13,6 +13,7 @@ export type ConversationRouteParams = {
   title?: string;
   recipientInfo?: any;
   initialGroupMembers?: any[];
+  initialMessage?: string;
 };
 
 export type RootStackParamList = {

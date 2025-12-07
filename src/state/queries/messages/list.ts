@@ -78,6 +78,7 @@ export const fetchConversations = async (userPublicKey: string) => {
   const groupChats = [...inboxGroupChats, ...spamGroupChats];
 
   const membersMap: Record<string, GroupMember[]> = {};
+  const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
 
   await Promise.all(
     groupChats.map(async (chat) => {
@@ -90,7 +91,7 @@ export const fetchConversations = async (userPublicKey: string) => {
       if (!accessGroupKeyName || !ownerPublicKey) return;
 
       try {
-        const { members } = await fetchAccessGroupMembers({
+        const { members, extraData } = await fetchAccessGroupMembers({
           accessGroupKeyName,
           accessGroupOwnerPublicKey: ownerPublicKey,
           limit: 4, // Fetch just enough for the stack
@@ -99,6 +100,7 @@ export const fetchConversations = async (userPublicKey: string) => {
         // Create a unique key for the group
         const groupKey = `${ownerPublicKey}-${accessGroupKeyName}`;
         membersMap[groupKey] = members;
+        groupExtraDataMap[groupKey] = extraData || null;
       } catch (err) {
         console.warn(
           `Failed to fetch members for group ${accessGroupKeyName}`,
@@ -116,5 +118,6 @@ export const fetchConversations = async (userPublicKey: string) => {
       ...spamPublicKeyToProfileEntryResponseMap,
     },
     groupMembers: membersMap,
+    groupExtraData: groupExtraDataMap,
   };
 };
