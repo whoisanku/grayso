@@ -22,11 +22,21 @@ configure({
 });
 
 export default function App() {
-  const { colorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme } = useColorScheme();
 
+  // Restore saved color scheme from localStorage on mount
   useEffect(() => {
     document.title = "Grayso";
-  }, []);
+    
+    // Check localStorage for saved theme
+    const savedScheme = localStorage.getItem("colorScheme") as "light" | "dark" | null;
+    if (savedScheme) {
+      setColorScheme(savedScheme);
+      // Update DOM class
+      document.documentElement.classList.remove("dark", "light");
+      document.documentElement.classList.add(savedScheme);
+    }
+  }, [setColorScheme]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -1,12 +1,30 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import { Feather } from "@expo/vector-icons";
 
 export default function SettingsScreen({ navigation }: any) {
-  const { colorScheme, toggleColorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme, toggleColorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+
+  const handleToggle = () => {
+    const newScheme = isDark ? "light" : "dark";
+    
+    // For web, we need to update the DOM class as well
+    if (Platform.OS === "web") {
+      setColorScheme(newScheme);
+      // Update the root element class for web
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.remove("dark", "light");
+        document.documentElement.classList.add(newScheme);
+        // Persist to localStorage
+        localStorage.setItem("colorScheme", newScheme);
+      }
+    } else {
+      toggleColorScheme();
+    }
+  };
 
   return (
     <ScreenWrapper
@@ -24,7 +42,7 @@ export default function SettingsScreen({ navigation }: any) {
         <View className="mb-6">
            <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Appearance</Text>
            <TouchableOpacity
-             onPress={toggleColorScheme}
+             onPress={handleToggle}
              className="flex-row items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-800/50 p-4"
            >
               <View className="flex-row items-center">

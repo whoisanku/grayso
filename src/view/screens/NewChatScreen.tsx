@@ -155,62 +155,18 @@ export default function NewChatScreen() {
       className="flex-1 bg-white dark:bg-[#0a0f1a]"
       style={{ paddingTop: Platform.OS === "android" ? insets.top : 0 }}
     >
-      {/* Header with pill handle */}
-      <View className="items-center pt-3 pb-2">
-        <View className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
-      </View>
-
-      {/* Title and Close Button */}
-      <View className="flex-row items-center justify-between px-4 pb-4">
-        <Text className="text-lg font-semibold text-slate-900 dark:text-white">
+      {/* Header - matching group composer style */}
+      <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+        <Text className="text-xl font-bold text-[#111] dark:text-white">
           New Message
         </Text>
-        <TouchableOpacity
-          onPress={handleClose}
-          activeOpacity={0.7}
-        >
-          {LiquidGlassView ? (
-            <LiquidGlassView
-              effect="regular"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Feather
-                name="x"
-                size={16}
-                color={isDark ? "#fff" : "#000"}
-              />
-            </LiquidGlassView>
-          ) : (
-            <BlurView
-              intensity={Platform.OS === "ios" ? 60 : 100}
-              tint={isDark ? "dark" : "light"}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-              }}
-            >
-              <Feather
-                name="x"
-                size={16}
-                color={isDark ? "#94a3b8" : "#64748b"}
-              />
-            </BlurView>
-          )}
+        <TouchableOpacity onPress={handleClose} className="p-1">
+          <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
         </TouchableOpacity>
       </View>
 
       {/* Search Input */}
-      <View className="px-4 pb-4">
+      <View className="px-4 py-3">
         <View className="h-12 flex-row items-center rounded-xl bg-slate-100 px-4 dark:bg-slate-800">
           <Feather
             name="search"
@@ -219,7 +175,7 @@ export default function NewChatScreen() {
           />
           <TextInput
             ref={inputRef}
-            className="ml-3 flex-1 text-base leading-5 text-slate-900 dark:text-white"
+            className="ml-3 flex-1 text-base text-slate-900 dark:text-white"
             placeholder="Search username..."
             placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
             value={searchQuery}
@@ -227,14 +183,6 @@ export default function NewChatScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
-            style={{
-              paddingVertical: 0,
-              paddingTop: 0,
-              paddingBottom: 0,
-              includeFontPadding: false,
-              textAlignVertical: "center",
-              height: 40,
-            }}
           />
         </View>
       </View>
