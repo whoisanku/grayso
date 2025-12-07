@@ -7,6 +7,7 @@ import SettingsScreen from "../view/screens/settings/SettingsScreen";
 import ComposerScreen from "../view/screens/ComposerScreen";
 import ConversationScreen from "../view/screens/ConversationScreen";
 import NewChatScreen from "../view/screens/NewChatScreen";
+import CreateGroupChatScreen from "../view/screens/CreateGroupChatScreen";
 import AppLogo from "../assets/app-logo.svg";
 import { useColorScheme } from "nativewind";
 
@@ -83,6 +84,7 @@ export default function RootNavigator() {
           >
             <Stack.Screen name="Composer" component={ComposerScreen} />
             <Stack.Screen name="NewChat" component={NewChatScreen} />
+            <Stack.Screen name="CreateGroupChat" component={CreateGroupChatScreen} />
           </Stack.Group>
         </>
       ) : (

@@ -189,19 +189,39 @@ export default function HomeScreen() {
         : senderPk === userPk
           ? recipientPk
           : senderPk;
+      // Get Group Name and Image from RecipientInfo (AccessGroupEntry)
+      // RecipientInfo is the AccessGroupEntryResponse when ChatType is GROUPCHAT
+      // It might have ExtraData
+      let groupName = "Group";
+      let groupImageUri = null;
+
+      if (isGroup) {
+        const accessGroupInfo = last?.RecipientInfo as any; // AccessGroupEntryResponse
+        if (accessGroupInfo?.ExtraData?.GroupDisplayName) {
+          groupName = accessGroupInfo.ExtraData.GroupDisplayName;
+        } else if (accessGroupInfo?.AccessGroupKeyName) {
+          groupName = accessGroupInfo.AccessGroupKeyName;
+        }
+
+        if (accessGroupInfo?.ExtraData?.GroupChatImageURL) {
+          groupImageUri = accessGroupInfo.ExtraData.GroupChatImageURL;
+        }
+      }
+
       const name = isGroup
-        ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
+        ? groupName
         : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
       const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
       const avatarUri = isGroup
-        ? FALLBACK_GROUP_IMAGE
+        ? (groupImageUri || FALLBACK_GROUP_IMAGE)
         : buildProfilePictureUrl(otherPk, {
           fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
         });
 
       let stackedAvatarUris: string[] = [];
       let isLoadingMembers = false;
-      if (isGroup) {
+      if (isGroup && !groupImageUri) {
+        // Only show stacked avatars if no group image is available
         const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
         const members = groupMembers[groupKey] || [];
 
@@ -316,14 +336,25 @@ export default function HomeScreen() {
               Chats
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => rootNavigation.navigate("NewChat")}
-            activeOpacity={0.7}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </View>
-          </TouchableOpacity>
+          <View className="flex-row items-center space-x-2">
+            <TouchableOpacity
+              onPress={() => rootNavigation.navigate("CreateGroupChat")}
+              activeOpacity={0.7}
+              className="mr-2"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => rootNavigation.navigate("NewChat")}
+              activeOpacity={0.7}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color="#0085ff" />
@@ -390,30 +421,59 @@ export default function HomeScreen() {
           </Text>
         </View>
         
-        {/* New Chat Button */}
-        <TouchableOpacity
-          onPress={() => rootNavigation.navigate("NewChat")}
-          activeOpacity={0.7}
-        >
-          {LiquidGlassView ? (
-            <LiquidGlassView
-              effect="regular"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </LiquidGlassView>
-          ) : (
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </View>
-          )}
-        </TouchableOpacity>
+        {/* Actions */}
+        <View className="flex-row items-center space-x-2">
+          {/* Create Group Button */}
+          <TouchableOpacity
+            onPress={() => rootNavigation.navigate("CreateGroupChat")}
+            activeOpacity={0.7}
+            className="mr-3"
+          >
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </LiquidGlassView>
+            ) : (
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* New Chat Button */}
+          <TouchableOpacity
+            onPress={() => rootNavigation.navigate("NewChat")}
+            activeOpacity={0.7}
+          >
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </LiquidGlassView>
+            ) : (
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Drawer Modal */}

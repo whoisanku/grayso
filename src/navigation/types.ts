@@ -22,6 +22,7 @@ export type RootStackParamList = {
   Conversation: ConversationRouteParams;
   Settings: undefined;
   NewChat: undefined;
+  CreateGroupChat: undefined;
 };
 
 export type HomeTabParamList = {

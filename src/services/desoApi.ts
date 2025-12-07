@@ -23,6 +23,8 @@ async function postJson<TResponse>(endpoint: string, payload: unknown): Promise<
   return response.json() as Promise<TResponse>;
 }
 
+// --- Message Threads ---
+
 export type GetAllUserMessageThreadsRequest = {
   UserPublicKeyBase58Check: string;
 };
@@ -81,6 +83,78 @@ export function getPaginatedMessagesForGroupThread(
 ): Promise<PaginatedMessagesResponse> {
   return postJson<PaginatedMessagesResponse>(
     "get-paginated-messages-for-group-chat-thread",
+    payload
+  );
+}
+
+// --- Access Groups ---
+
+export type CreateAccessGroupRequest = {
+  AccessGroupOwnerPublicKeyBase58Check: string;
+  AccessGroupPublicKeyBase58Check: string;
+  AccessGroupKeyName: string;
+  MinFeeRateNanosPerKB: number;
+  ExtraData?: { [key: string]: string };
+  TransactionFees?: any[];
+};
+
+export type AccessGroupTransactionResponse = {
+  TotalInputNanos: number;
+  ChangeAmountNanos: number;
+  FeeNanos: number;
+  Transaction: any;
+  TransactionHex: string;
+};
+
+export function createAccessGroup(
+  payload: CreateAccessGroupRequest
+): Promise<AccessGroupTransactionResponse> {
+  return postJson<AccessGroupTransactionResponse>(
+    "create-access-group",
+    payload
+  );
+}
+
+export type AccessGroupMember = {
+  AccessGroupMemberPublicKeyBase58Check: string;
+  AccessGroupMemberKeyName: string;
+  EncryptedKey: string;
+  ExtraData?: { [key: string]: string };
+};
+
+export type AddAccessGroupMembersRequest = {
+  AccessGroupOwnerPublicKeyBase58Check: string;
+  AccessGroupKeyName: string;
+  AccessGroupMemberList: AccessGroupMember[];
+  MinFeeRateNanosPerKB: number;
+  ExtraData?: { [key: string]: string };
+  TransactionFees?: any[];
+};
+
+export function addAccessGroupMembers(
+  payload: AddAccessGroupMembersRequest
+): Promise<AccessGroupTransactionResponse> {
+  return postJson<AccessGroupTransactionResponse>(
+    "add-access-group-members",
+    payload
+  );
+}
+
+export type SubmitTransactionRequest = {
+  TransactionHex: string;
+};
+
+export type SubmitTransactionResponse = {
+  TransactionHex: string;
+  TxnHashHex: string;
+  PostEntryResponse?: any;
+};
+
+export function submitTransaction(
+  payload: SubmitTransactionRequest
+): Promise<SubmitTransactionResponse> {
+  return postJson<SubmitTransactionResponse>(
+    "submit-transaction",
     payload
   );
 }

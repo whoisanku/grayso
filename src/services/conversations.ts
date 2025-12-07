@@ -19,6 +19,9 @@ import {
   getPaginatedMessagesForGroupThread,
   GetPaginatedMessagesForDmThreadRequest,
   GetPaginatedMessagesForGroupThreadRequest,
+  createAccessGroup,
+  addAccessGroupMembers,
+  submitTransaction,
 } from "./desoApi";
 import {
   buildDefaultProfileEntry,
@@ -26,6 +29,7 @@ import {
   fetchGroupMessagesViaGraphql,
   normalizeTimestampToNanos,
 } from "./desoGraphql";
+import { generateAccessGroupKeyPair } from "../utils/crypto";
 
 const USER_TO_SEND_MESSAGE_TO = ""; // Add a public key here
 
@@ -749,6 +753,130 @@ export async function fetchPaginatedDmThreadMessages(
     },
   };
 }
+
+export const createGroupChat = async (
+  ownerPublicKey: string,
+  groupName: string,
+  memberPublicKeys: string[],
+  groupImageUri?: string
+): Promise<{ txnHashHex: string; accessGroupKeyName: string }> => {
+  try {
+    // 1. Generate Access Group Key Pair
+    const { publicKeyBase58Check, privateKeyHex } = await generateAccessGroupKeyPair();
+
+    // 2. Create Access Group
+    // We use the group name as the key name for simplicity, but in a real app
+    // we might want a UUID to allow multiple groups with same name.
+    // DeSo AccessGroupKeyName is unique per user.
+    // Let's use a sanitized version of the name or just the name.
+    // Users might want "Family" group. If they try to create another "Family" group, it might fail or update.
+    // To support multiple, we should append a random suffix or use a timestamp.
+    // For this implementation, let's assume unique names or user handles it.
+    // Wait, let's append a random suffix to ensure uniqueness.
+    const randomSuffix = Math.floor(Math.random() * 10000).toString();
+    const accessGroupKeyName = `${groupName.replace(/[^a-zA-Z0-9-_]/g, "")}_${randomSuffix}`;
+
+    const extraData: Record<string, string> = {};
+    if (groupImageUri) {
+      extraData["GroupChatImageURL"] = groupImageUri;
+    }
+    // Also store the human readable name if we used a technical ID
+    extraData["GroupDisplayName"] = groupName;
+    extraData["GroupChatAddedUserPublicKeys"] = JSON.stringify(memberPublicKeys);
+
+    const createTxResponse = await createAccessGroup({
+      AccessGroupOwnerPublicKeyBase58Check: ownerPublicKey,
+      AccessGroupPublicKeyBase58Check: publicKeyBase58Check,
+      AccessGroupKeyName: accessGroupKeyName,
+      MinFeeRateNanosPerKB: 1000,
+      ExtraData: extraData,
+    });
+
+    // Sign the transaction
+    const signedCreateTxHex = await identity.signTx(createTxResponse.TransactionHex);
+
+    // Submit
+    const submittedCreateTx = await submitTransaction({ TransactionHex: signedCreateTxHex });
+
+    // Wait for the transaction to be found to ensure the Access Group exists before adding members.
+    // This prevents race conditions where the second transaction fails because the group is not yet indexed/mined.
+    await waitForTransactionFound(submittedCreateTx.TxnHashHex);
+
+    // 3. Add Members
+    // Prepare members list. Include the owner as well?
+    // The owner implicitly owns the group, but to read messages, does the owner need to be a member?
+    // "AccessGroupOwnerPublicKeyBase58Check ... This user will be the owner of the access group."
+    // Owners always have access. But typically we add members.
+    // The `add-access-group-members` endpoint documentation says "Array of ... representing the users to be added".
+    // We should add the other members.
+
+    const accessGroupMemberList = await Promise.all(
+      memberPublicKeys.map(async (memberPk) => {
+        // Encrypt the group private key for this member
+        // encryptMessage uses the current user (Owner) private key to encrypt for the recipient (Member)
+        const encryptedKeyHex = await identity.encryptMessage(memberPk, privateKeyHex);
+
+        return {
+          AccessGroupMemberPublicKeyBase58Check: memberPk,
+          AccessGroupMemberKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME, // "default-key"
+          EncryptedKey: encryptedKeyHex,
+          ExtraData: {},
+        };
+      })
+    );
+
+    // Also add the owner as a member?
+    // "AccessGroupOwnerPublicKeyBase58Check ... Public key of the access group owner."
+    // Usually the owner doesn't need to add themselves as a member to control it,
+    // BUT to read messages seamlessly using the standard "getAllAccessGroups" -> "AccessGroupsMember" flow,
+    // it's often good practice or required depending on how the frontend fetches groups.
+    // Our frontend uses `getAllAccessGroups`.
+    // Let's check `getAllAccessGroups` response structure: `AccessGroupsOwned` and `AccessGroupsMember`.
+    // If we are owner, it shows in `AccessGroupsOwned`.
+    // Does `identity.decryptMessage` work if we are just owner and not member?
+    // `decryptMessage` takes `accessGroups` list.
+    // If we are owner, we have the private key (if we stored it? No, we just generated it).
+    // WAIT. The Owner needs to store the Private Key somewhere to decrypt messages later!
+    // If the Owner is NOT a member with an encrypted key, where does the Owner get the Private Key from?
+    // The Owner MUST add themselves as a member with the key encrypted for themselves!
+    // Otherwise the key is lost after this session (since we generated it randomly).
+
+    // So YES, add owner as member.
+    const encryptedKeyForOwner = await identity.encryptMessage(ownerPublicKey, privateKeyHex);
+    accessGroupMemberList.push({
+      AccessGroupMemberPublicKeyBase58Check: ownerPublicKey,
+      AccessGroupMemberKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+      EncryptedKey: encryptedKeyForOwner,
+      ExtraData: {},
+    });
+
+    const addMembersTxResponse = await addAccessGroupMembers({
+      AccessGroupOwnerPublicKeyBase58Check: ownerPublicKey,
+      AccessGroupKeyName: accessGroupKeyName,
+      AccessGroupMemberList: accessGroupMemberList,
+      MinFeeRateNanosPerKB: 1000,
+    });
+
+    const signedAddMembersTxHex = await identity.signTx(addMembersTxResponse.TransactionHex);
+    const submittedAddMembersTx = await submitTransaction({ TransactionHex: signedAddMembersTxHex });
+
+    // Wait for member addition to be finalized so UI updates correctly
+    await waitForTransactionFound(submittedAddMembersTx.TxnHashHex);
+
+    // 4. Send Initial Message (Optional)
+    // "Welcome to the group!"
+    // We can do this in the background.
+
+    return {
+      txnHashHex: submittedAddMembersTx.TxnHashHex,
+      accessGroupKeyName,
+    };
+
+  } catch (error) {
+    console.error("Failed to create group chat:", error);
+    throw error;
+  }
+};
 
 export async function fetchPaginatedGroupThreadMessages(
   payload: GetPaginatedMessagesForGroupThreadRequest,
