@@ -258,7 +258,14 @@ export const Composer = React.memo(function Composer({
                 }
             }
 
-            await encryptAndSendNewMessage(
+            const {
+                EncryptedMessageText,
+                ExtraData,
+                SenderAccessGroupPublicKeyBase58Check,
+                SenderAccessGroupKeyName,
+                RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                RecipientAccessGroupKeyName,
+            } = await encryptAndSendNewMessage(
                 textToSend,
                 userPublicKey,
                 counterPartyPublicKey,
@@ -282,10 +289,14 @@ export const Composer = React.memo(function Composer({
                         senderPublicKey: userPublicKey,
                         recipients: [counterPartyPublicKey],
                         metadata: {
-                            messageText: textToSend,
                             chatType,
-                            extraData,
                         },
+                        EncryptedMessageText,
+                        ExtraData,
+                        SenderAccessGroupPublicKeyBase58Check,
+                        SenderAccessGroupKeyName,
+                        RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                        RecipientAccessGroupKeyName,
                     },
                     broadcastChannel, // Use conversation-specific channel
                     undefined, // default event
@@ -600,7 +611,14 @@ export const Composer = React.memo(function Composer({
                     optimisticExtraData.decryptedImageURLs = JSON.stringify(imageURLs);
                 }
 
-                await encryptAndSendNewMessage(
+                const {
+                    EncryptedMessageText,
+                    ExtraData,
+                    SenderAccessGroupPublicKeyBase58Check,
+                    SenderAccessGroupKeyName,
+                    RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                    RecipientAccessGroupKeyName,
+                } = await encryptAndSendNewMessage(
                     currentText.trim(), // Can be empty string if only sending images
                     userPublicKey,
                     counterPartyPublicKey,
@@ -626,10 +644,14 @@ export const Composer = React.memo(function Composer({
                             senderPublicKey: userPublicKey,
                             recipients: [counterPartyPublicKey],
                             metadata: {
-                                messageText: currentText.trim(),
                                 chatType,
-                                extraData: optimisticExtraData,
                             },
+                            EncryptedMessageText,
+                            ExtraData,
+                            SenderAccessGroupPublicKeyBase58Check,
+                            SenderAccessGroupKeyName,
+                            RecipientAccessGroupPublicKeyBase58Check: RecipientAccessGroupPublicKey,
+                            RecipientAccessGroupKeyName,
                         },
                         broadcastChannel,
                         undefined,

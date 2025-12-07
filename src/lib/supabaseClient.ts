@@ -70,6 +70,12 @@ export type MessageBroadcastPayload = {
   recipients?: string[];
   senderPublicKey?: string;
   metadata?: Record<string, unknown>;
+  EncryptedMessageText?: string;
+  ExtraData?: Record<string, string>;
+  SenderAccessGroupPublicKeyBase58Check?: string;
+  SenderAccessGroupKeyName?: string;
+  RecipientAccessGroupPublicKeyBase58Check?: string;
+  RecipientAccessGroupKeyName?: string;
 };
 
 export type PresencePayload = {

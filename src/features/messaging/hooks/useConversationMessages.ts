@@ -4,11 +4,13 @@ import {
     DecryptedMessageEntryResponse,
     PublicKeyToProfileEntryResponseMap,
     AccessGroupEntryResponse,
+    NewMessageEntryResponse,
 } from "deso-protocol";
 import {
     encryptAndSendNewMessage,
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
+    decryptAccessGroupMessages,
 } from "../../../services/conversations";
 import {
     AUTO_LOAD_DELAY_MS,
@@ -498,38 +500,51 @@ export const useConversationMessages = ({
                 return;
             }
 
-            // Construct the new message object
-            const newMessage: DecryptedMessageEntryResponse = {
-                DecryptedMessage: messagePayload.metadata?.messageText as string || "",
-                IsSender: false,
-                error: "", // Required by type
-                MessageInfo: {
-                    TimestampNanos: messagePayload.timestampNanos,
-                    TimestampNanosString: String(messagePayload.timestampNanos),
-                    ExtraData: messagePayload.metadata?.extraData as Record<string, string> || {},
-                    EncryptedText: "", // Not needed for local display
-                },
+            // Construct a NewMessageEntryResponse from the broadcast payload
+            const encryptedMessage: NewMessageEntryResponse = {
+                ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
                 SenderInfo: {
                     OwnerPublicKeyBase58Check: messagePayload.senderPublicKey || "",
-                    AccessGroupPublicKeyBase58Check: "", // Not needed for local display
-                    AccessGroupKeyName: "", // Not needed for local display
+                    AccessGroupPublicKeyBase58Check: messagePayload.SenderAccessGroupPublicKeyBase58Check || "",
+                    AccessGroupKeyName: messagePayload.SenderAccessGroupKeyName || "",
                 },
                 RecipientInfo: {
-                    OwnerPublicKeyBase58Check: "", // Not needed for local display
-                    AccessGroupPublicKeyBase58Check: "", // Not needed for local display
-                    AccessGroupKeyName: "", // Not needed for local display
+                    OwnerPublicKeyBase58Check: (messagePayload.recipients && messagePayload.recipients[0]) || "",
+                    AccessGroupPublicKeyBase58Check: messagePayload.RecipientAccessGroupPublicKeyBase58Check || "",
+                    AccessGroupKeyName: messagePayload.RecipientAccessGroupKeyName || "",
                 },
-                ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
+                MessageInfo: {
+                    EncryptedText: messagePayload.EncryptedMessageText || "",
+                    TimestampNanos: messagePayload.timestampNanos,
+                    TimestampNanosString: String(messagePayload.timestampNanos),
+                    ExtraData: messagePayload.ExtraData || {},
+                },
             };
 
-            console.log('✅ [useConversationMessages] Appending new message locally:', newMessage.MessageInfo?.TimestampNanosString);
+            console.log('🔐 [useConversationMessages] Decrypting incoming broadcast...');
 
-            setMessages((prev) => {
-                const updated = mergeMessages(prev, [newMessage]);
-                // Cache updated messages
-                StorageService.saveChatHistory(conversationId, updated);
-                return updated;
-            });
+            try {
+                // Decrypt the message using the existing access groups
+                const [decryptedMessage] = await decryptAccessGroupMessages(
+                    [encryptedMessage],
+                    accessGroupsRef.current
+                );
+
+                if (decryptedMessage) {
+                    console.log('✅ [useConversationMessages] Decryption successful, appending message:', decryptedMessage.MessageInfo?.TimestampNanosString);
+
+                    setMessages((prev) => {
+                        const updated = mergeMessages(prev, [decryptedMessage]);
+                        // Cache updated messages
+                        StorageService.saveChatHistory(conversationId, updated);
+                        return updated;
+                    });
+                } else {
+                    console.warn('⚠️ [useConversationMessages] Decryption returned null');
+                }
+            } catch (err) {
+                console.error('❌ [useConversationMessages] Failed to decrypt broadcast message:', err);
+            }
         });
 
         channel.subscribe((status) => {
