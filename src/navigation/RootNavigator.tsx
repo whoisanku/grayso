@@ -42,12 +42,15 @@ export default function RootNavigator() {
   if (showSplash) {
     return (
       <Animated.View
-        style={{ flex: 1, opacity: fadeAnim }}
-        className={`flex-1 items-center justify-center ${
-          colorScheme === "dark" ? "bg-[#0a0f1a]" : "bg-white"
-        }`}
+        style={{
+          flex: 1,
+          opacity: fadeAnim,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colorScheme === "dark" ? "#0a0f1a" : "#ffffff"
+        }}
       >
-        <View className="h-20 w-20 items-center justify-center overflow-hidden rounded-2xl">
+        <View style={{ height: 80, width: 80, overflow: 'hidden', borderRadius: 16 }}>
           <AppLogo width="100%" height="100%" />
         </View>
       </Animated.View>
