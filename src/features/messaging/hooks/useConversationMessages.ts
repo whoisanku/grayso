@@ -20,6 +20,7 @@ import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from 
 import { DeviceEventEmitter } from "react-native";
 import { OUTGOING_MESSAGE_EVENT } from "../../../constants/events";
 import { StorageService } from "../../../services/storage";
+import { getSupabaseClient, isSupabaseConfigured, type MessageBroadcastPayload } from "../../../lib/supabaseClient";
 
 type UseConversationMessagesProps = {
     threadPublicKey: string;
@@ -141,7 +142,10 @@ export const useConversationMessages = ({
                 }
             });
 
-            return normalizeAndSortMessages(Array.from(map.values()));
+            // Sort ascending first to handle edits correctly, then reverse to get descending (newest first)
+            // This is required because FlashList is inverted
+            const ascending = normalizeAndSortMessages(Array.from(map.values()));
+            return ascending.reverse();
         },
         []
     );
@@ -466,6 +470,77 @@ export const useConversationMessages = ({
         threadAccessGroupKeyName,
         conversationId,
     ]);
+
+    // Subscribe to Supabase broadcasts for instant message delivery
+    useEffect(() => {
+        if (!isSupabaseConfigured()) {
+            return;
+        }
+
+        const supabase = getSupabaseClient();
+        const channelName = `messages-${conversationId}`;
+
+        console.log('[useConversationMessages] Subscribing to broadcast channel:', channelName);
+
+        const channel = supabase.channel(channelName, {
+            config: {
+                broadcast: { self: false }, // Don't receive own messages
+            },
+        });
+
+        channel.on('broadcast', { event: 'message' }, async ({ payload }) => {
+            const messagePayload = payload as MessageBroadcastPayload;
+            console.log('🔥 [useConversationMessages] INCOMING BROADCAST RECEIVED:', JSON.stringify(messagePayload, null, 2));
+
+            // Only process messages for this conversation
+            if (messagePayload.conversationId !== conversationId) {
+                console.log('⚠️ [useConversationMessages] Ignoring broadcast for different conversation:', messagePayload.conversationId);
+                return;
+            }
+
+            // Construct the new message object
+            const newMessage: DecryptedMessageEntryResponse = {
+                DecryptedMessage: messagePayload.metadata?.messageText as string || "",
+                IsSender: false,
+                error: "", // Required by type
+                MessageInfo: {
+                    TimestampNanos: messagePayload.timestampNanos,
+                    TimestampNanosString: String(messagePayload.timestampNanos),
+                    ExtraData: messagePayload.metadata?.extraData as Record<string, string> || {},
+                    EncryptedText: "", // Not needed for local display
+                },
+                SenderInfo: {
+                    OwnerPublicKeyBase58Check: messagePayload.senderPublicKey || "",
+                    AccessGroupPublicKeyBase58Check: "", // Not needed for local display
+                    AccessGroupKeyName: "", // Not needed for local display
+                },
+                RecipientInfo: {
+                    OwnerPublicKeyBase58Check: "", // Not needed for local display
+                    AccessGroupPublicKeyBase58Check: "", // Not needed for local display
+                    AccessGroupKeyName: "", // Not needed for local display
+                },
+                ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
+            };
+
+            console.log('✅ [useConversationMessages] Appending new message locally:', newMessage.MessageInfo?.TimestampNanosString);
+
+            setMessages((prev) => {
+                const updated = mergeMessages(prev, [newMessage]);
+                // Cache updated messages
+                StorageService.saveChatHistory(conversationId, updated);
+                return updated;
+            });
+        });
+
+        channel.subscribe((status) => {
+            console.log('[useConversationMessages] Broadcast subscription status:', status);
+        });
+
+        return () => {
+            console.log('[useConversationMessages] Unsubscribing from broadcast channel');
+            channel.unsubscribe();
+        };
+    }, [conversationId, loadMessages]);
 
     // Create a lookup map for fast message retrieval by ID
     const messageIdMap = useMemo(() => {
