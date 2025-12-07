@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useCallback, useEffect, useState, useRef } from "react";
+import React, { useContext, useMemo, useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Text,
@@ -9,8 +9,6 @@ import {
   RefreshControl,
   DeviceEventEmitter,
   Modal,
-  Dimensions,
-  Pressable,
   Platform,
   TextInput,
   ScrollView,
@@ -39,11 +37,9 @@ import {
 import { searchProfiles, ProfileSearchResult } from "../../services/desoGraphql";
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { OUTGOING_MESSAGE_EVENT } from "../../constants/events";
+import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/events";
 import { useColorScheme } from "nativewind";
 import { LiquidGlassView } from "../../utils/liquidGlass";
-import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
-import { BlurView } from "expo-blur";
 import type { ConversationMap } from "../../services/conversations";
 
 // Navigation types
@@ -116,7 +112,6 @@ export default function HomeScreen() {
     }, [reload])
   );
 
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
@@ -129,7 +124,6 @@ export default function HomeScreen() {
   const [newChatResults, setNewChatResults] = useState<ProfileSearchResult[]>([]);
   const [isSearchingNewChat, setIsSearchingNewChat] = useState(false);
   const [hasSearchedNewChat, setHasSearchedNewChat] = useState(false);
-  const drawerRef = useRef<View | null>(null);
   const [activeMailbox, setActiveMailbox] = useState<"inbox" | "spam">("inbox");
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
@@ -139,7 +133,12 @@ export default function HomeScreen() {
         timestampNanos: number;
       }
     >
-  >({});
+  >({}); 
+
+  // Helper to open drawer (controlled by HomeTabs)
+  const openDrawer = useCallback(() => {
+    DeviceEventEmitter.emit(DRAWER_STATE_EVENT, { requestOpen: true });
+  }, []);
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -165,26 +164,6 @@ export default function HomeScreen() {
       subscription.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== "web" || !isDrawerOpen) {
-      return;
-    }
-
-    const handleClick = (event: MouseEvent) => {
-      const node = drawerRef.current as unknown as HTMLElement | null;
-
-      if (node && event.target instanceof Node && !node.contains(event.target)) {
-        setIsDrawerOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClick);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [isDrawerOpen]);
 
   // Debounced search for new chat modal
   useEffect(() => {
@@ -213,6 +192,8 @@ export default function HomeScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [newChatSearchQuery, currentUser?.PublicKeyBase58Check]);
+
+
 
   // Handle selecting a profile for new DM
   const handleSelectNewChatProfile = useCallback((profile: ProfileSearchResult) => {
@@ -406,13 +387,15 @@ export default function HomeScreen() {
     navigation.navigate("Composer");
   }, [navigation]);
 
+
+
   if (isLoading && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
           <View className="flex-row items-center">
             <TouchableOpacity
-              onPress={() => setIsDrawerOpen(true)}
+              onPress={openDrawer}
               activeOpacity={0.7}
               className="mr-3"
             >
@@ -463,14 +446,14 @@ export default function HomeScreen() {
     );
   }
 
-  return (
+  const mainContent = (
     <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
         <View className="flex-row items-center">
           {/* Hamburger Menu Button */}
           <TouchableOpacity
-            onPress={() => setIsDrawerOpen(true)}
+            onPress={openDrawer}
             activeOpacity={0.7}
             className="mr-3"
           >
@@ -594,90 +577,6 @@ export default function HomeScreen() {
           );
         })}
       </View>
-
-      {/* Drawer Modal */}
-      <Modal
-        visible={isDrawerOpen}
-        transparent
-        animationType="none"
-        onRequestClose={() => setIsDrawerOpen(false)}
-      >
-        <View className="flex-1 flex-row">
-          {/* Backdrop */}
-          <Animated.View
-            entering={FadeIn.duration(150)}
-            exiting={FadeOut.duration(100)}
-            className="absolute inset-0"
-          >
-            <Pressable
-              className="flex-1"
-              onPress={() => setIsDrawerOpen(false)}
-            >
-              <BlurView
-                intensity={40}
-                tint={isDark ? "dark" : "light"}
-                className="flex-1"
-                pointerEvents="none"
-              />
-            </Pressable>
-          </Animated.View>
-
-          {/* Drawer Content */}
-          <Animated.View
-            entering={SlideInLeft.duration(280)}
-            exiting={SlideOutLeft.duration(280)}
-            style={{ 
-              width: Dimensions.get('window').width * 0.65,
-              paddingTop: insets.top,
-              backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-            }}
-            ref={drawerRef as any}
-          >
-            {/* User Profile Header */}
-            <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
-              <View className="flex-row items-center">
-                <Image
-                  source={{ 
-                    uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic 
-                      ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
-                      : buildProfilePictureUrl(currentUser?.PublicKeyBase58Check || '', { fallbackImageUrl: FALLBACK_PROFILE_IMAGE })
-                  }}
-                  className="h-14 w-14 rounded-full bg-slate-200 dark:bg-slate-700"
-                />
-                <View className="ml-3 flex-1">
-                  <Text className="text-lg font-bold text-slate-900 dark:text-white" numberOfLines={1}>
-                    @{currentUser?.ProfileEntryResponse?.Username || 'User'}
-                  </Text>
-                  <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
-                    {currentUser?.PublicKeyBase58Check?.slice(0, 12)}...
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Menu Items */}
-            <View className="flex-1 py-4">
-              <TouchableOpacity
-                className="flex-row items-center px-5 py-4"
-                activeOpacity={0.7}
-                onPress={() => {
-                  setIsDrawerOpen(false);
-                  rootNavigation.navigate("Settings");
-                }}
-              >
-                <View className="w-11 h-11 rounded-xl items-center justify-center bg-slate-100 dark:bg-slate-800">
-                  <Feather name="settings" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
-                </View>
-                <Text className="ml-4 text-base font-medium text-slate-900 dark:text-white">
-                  Settings
-                </Text>
-                <View className="flex-1" />
-                <Feather name="chevron-right" size={20} color={isDark ? "#64748b" : "#94a3b8"} />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
 
       <View className="flex-1">
         <FlatList
@@ -1045,6 +944,8 @@ export default function HomeScreen() {
           )}
         </SafeAreaView>
       </Modal>
+
     </SafeAreaView>
   );
+  return mainContent;
 }
