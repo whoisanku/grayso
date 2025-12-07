@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { getSupabaseClient, isSupabaseConfigured } from '../../../lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured, getPresenceChannel, getBroadcastChannel, MessageBroadcastPayload } from '../../../lib/supabaseClient';
 
 export type PresenceState = {
     [key: string]: {
@@ -21,6 +21,7 @@ export type UsePresenceReturn = {
     isOnline: (publicKey: string) => boolean;
     connectionState: 'connecting' | 'connected' | 'disconnected';
     error: Error | null;
+    typingUsers: Record<string, boolean>;
 };
 
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
@@ -77,6 +78,56 @@ export function usePresence({
             return hasChanged ? newOnlineUsers : prev;
         });
     }, []);
+
+    const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
+    const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+    // Listen for typing events
+    useEffect(() => {
+        if (!userPublicKey || !conversationId) return;
+
+        const channel = getBroadcastChannel(conversationId);
+
+        const handleBroadcast = (payload: any) => {
+            const messagePayload = payload.payload as MessageBroadcastPayload;
+
+            // Handle typing events
+            if (messagePayload.senderPublicKey && messagePayload.is_typing !== undefined) {
+                const senderKey = messagePayload.senderPublicKey;
+                const isTyping = messagePayload.is_typing;
+
+                // Don't show typing indicator for self
+                if (senderKey === userPublicKey) return;
+
+                setTypingUsers(prev => ({
+                    ...prev,
+                    [senderKey]: isTyping
+                }));
+
+                // Clear existing timeout for this user
+                if (typingTimeoutsRef.current[senderKey]) {
+                    clearTimeout(typingTimeoutsRef.current[senderKey]);
+                }
+
+                // If typing started, set a timeout to auto-clear it (fallback)
+                if (isTyping) {
+                    typingTimeoutsRef.current[senderKey] = setTimeout(() => {
+                        setTypingUsers(prev => ({
+                            ...prev,
+                            [senderKey]: false
+                        }));
+                    }, 5000); // Auto-clear after 5 seconds of no updates
+                }
+            }
+        };
+
+        channel.on('broadcast', { event: 'message' }, handleBroadcast);
+
+        // Cleanup timeouts on unmount
+        return () => {
+            Object.values(typingTimeoutsRef.current).forEach(timeout => clearTimeout(timeout));
+        };
+    }, [conversationId, userPublicKey]);
 
     // Broadcast presence
     const broadcastPresence = useCallback(async () => {
@@ -201,5 +252,6 @@ export function usePresence({
         isOnline,
         connectionState,
         error,
+        typingUsers,
     };
 }

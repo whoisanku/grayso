@@ -168,13 +168,33 @@ export default function ConversationScreen({ navigation, route }: Props) {
   });
 
   // Presence tracking
-  const { onlineUsers, isOnline, connectionState: presenceConnectionState } = usePresence({
+  const { onlineUsers, isOnline, connectionState: presenceConnectionState, typingUsers } = usePresence({
     conversationId,
     userPublicKey,
-    enabled: !isGroupChat, // Only for DMs
+    enabled: true, // Enable for both DMs and Groups to support typing indicators
   });
 
   const recipientOnline = !isGroupChat && isOnline(counterPartyPublicKey);
+
+  // Calculate typing status and label
+  const typingMemberPk = useMemo(() => {
+    // Find the first person typing who isn't us
+    return Object.keys(typingUsers).find(pk => typingUsers[pk] && pk !== userPublicKey);
+  }, [typingUsers, userPublicKey]);
+
+  const isTyping = !!typingMemberPk;
+
+  const typingLabel = useMemo(() => {
+    if (!isTyping || !typingMemberPk) return undefined;
+
+    if (isGroupChat) {
+      const profile = profiles[typingMemberPk];
+      const name = profile?.Username || "Someone";
+      return `${name} is typing...`;
+    }
+
+    return "Typing...";
+  }, [isTyping, typingMemberPk, isGroupChat, profiles]);
 
   // Debug logging
   useEffect(() => {
@@ -186,8 +206,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
       onlineUsers,
       recipientOnline,
       presenceConnectionState,
+      typingUsers,
     });
-  }, [isGroupChat, conversationId, userPublicKey, counterPartyPublicKey, onlineUsers, recipientOnline, presenceConnectionState]);
+  }, [isGroupChat, conversationId, userPublicKey, counterPartyPublicKey, onlineUsers, recipientOnline, presenceConnectionState, typingUsers]);
 
   // Ephemeral messaging
   const {
@@ -335,7 +356,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
               <Feather name="arrow-left" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
             )}
           </TouchableOpacity>
-
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
               <Text
@@ -345,12 +365,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
               >
                 {headerDisplayName || "Conversation"}
               </Text>
-              {!isGroupChat && (
-                <PresenceIndicator isOnline={recipientOnline} size="small" />
+              {(!isGroupChat || isTyping) && (
+                <PresenceIndicator
+                  isOnline={recipientOnline}
+                  size="small"
+                  isTyping={isTyping}
+                  typingLabel={typingLabel}
+                  showLabel={isTyping}
+                />
               )}
             </View>
           </View>
-        </View>
+        </View >
 
         <TouchableOpacity
           onPress={() => {
@@ -402,14 +428,15 @@ export default function ConversationScreen({ navigation, route }: Props) {
       </View >
 
       {/* Main content - limited width on web for better readability */}
-      <View style={[
-        { flex: 1 },
-        Platform.OS === 'web' && {
-          maxWidth: 600,
-          width: '100%',
-          alignSelf: 'center',
-        }
-      ]}>
+      < View style={
+        [
+          { flex: 1 },
+          Platform.OS === 'web' && {
+            maxWidth: 600,
+            width: '100%',
+            alignSelf: 'center',
+          }
+        ]} >
         <View style={{ flex: 1 }}>
           {isLoading && messages.length === 0 ? (
             <View className="flex-1 items-center justify-center">
@@ -540,7 +567,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
             </Animated.View>
           )}
         </View>
-      </View>
+      </View >
 
 
 
@@ -700,6 +727,6 @@ export default function ConversationScreen({ navigation, route }: Props) {
           />
         </SafeAreaView>
       </Modal>
-    </ScreenWrapper>
+    </ScreenWrapper >
   );
 }

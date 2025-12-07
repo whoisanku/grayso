@@ -24,7 +24,9 @@ export function PresenceIndicator({
     isOnline,
     showLabel = false,
     size = 'medium',
-}: PresenceIndicatorProps) {
+    isTyping = false,
+    typingLabel,
+}: PresenceIndicatorProps & { isTyping?: boolean; typingLabel?: string }) {
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === 'dark';
     const dotSize = SIZE_MAP[size];
@@ -64,11 +66,11 @@ export function PresenceIndicator({
                     style={[
                         styles.label,
                         {
-                            color: isDark ? '#9ca3af' : '#6b7280',
+                            color: isTyping ? '#10b981' : (isDark ? '#9ca3af' : '#6b7280'),
                         },
                     ]}
                 >
-                    {isOnline ? 'Online' : 'Offline'}
+                    {isTyping ? (typingLabel || 'Typing...') : (isOnline ? 'Online' : 'Offline')}
                 </Text>
             )}
         </View>

@@ -141,6 +141,80 @@ export const Composer = React.memo(function Composer({
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
 
+    // Typing indicator throttling
+    const lastTypingSentRef = useRef<number>(0);
+    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleTextChange = useCallback((newText: string) => {
+        if (editingMessage) {
+            onEditDraftChange?.(newText);
+            return;
+        }
+
+        setText(newText);
+
+        // Don't send typing events if empty (handled by stop typing logic) or if sending
+        if (sending) return;
+
+        const now = Date.now();
+        const THROTTLE_MS = 3000; // Send at most every 3 seconds
+
+        // If user is typing (text not empty)
+        if (newText.length > 0) {
+            // Send "is_typing: true" if enough time has passed
+            if (now - lastTypingSentRef.current > THROTTLE_MS) {
+                lastTypingSentRef.current = now;
+                broadcastMessageUpdate(
+                    {
+                        conversationId,
+                        timestampNanos: Date.now() * 1e6,
+                        senderPublicKey: userPublicKey,
+                        is_typing: true
+                    },
+                    `messages-${conversationId}`,
+                    undefined,
+                    { keepAlive: true }
+                ).catch(err => console.warn('[Composer] Failed to broadcast typing:', err));
+            }
+
+            // Clear existing stop timeout
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+
+            // Set new stop timeout (debounce)
+            typingTimeoutRef.current = setTimeout(() => {
+                broadcastMessageUpdate(
+                    {
+                        conversationId,
+                        timestampNanos: Date.now() * 1e6,
+                        senderPublicKey: userPublicKey,
+                        is_typing: false
+                    },
+                    `messages-${conversationId}`,
+                    undefined,
+                    { keepAlive: true }
+                ).catch(err => console.warn('[Composer] Failed to broadcast stop typing:', err));
+            }, 2000); // Consider stopped after 2 seconds of inactivity
+        } else {
+            // If text became empty, send stop immediately
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+            broadcastMessageUpdate(
+                {
+                    conversationId,
+                    timestampNanos: Date.now() * 1e6,
+                    senderPublicKey: userPublicKey,
+                    is_typing: false
+                },
+                `messages-${conversationId}`,
+                undefined,
+                { keepAlive: true }
+            ).catch(err => console.warn('[Composer] Failed to broadcast stop typing:', err));
+        }
+    }, [conversationId, userPublicKey, sending, editingMessage, onEditDraftChange]);
+
     // Keyboard avoidance is now handled by ScreenWrapper's KeyboardAvoidingView
     // This ensures the entire content (including FlatList) moves up with keyboard
 
@@ -508,13 +582,7 @@ export const Composer = React.memo(function Composer({
     const currentText = isEditMode ? editDraft : text;
     const currentHasText = currentText.trim().length > 0;
 
-    const handleTextChange = (newText: string) => {
-        if (isEditMode) {
-            onEditDraftChange?.(newText);
-        } else {
-            setText(newText);
-        }
-    };
+
 
     const handleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
         setSelection(event.nativeEvent.selection);

@@ -76,6 +76,7 @@ export type MessageBroadcastPayload = {
   SenderAccessGroupKeyName?: string;
   RecipientAccessGroupPublicKeyBase58Check?: string;
   RecipientAccessGroupKeyName?: string;
+  is_typing?: boolean;
 };
 
 export type PresencePayload = {
@@ -163,3 +164,17 @@ export async function broadcastMessageUpdate(
     }
   }
 }
+
+export const getPresenceChannel = (conversationId: string) => {
+  const supabase = getSupabaseClient();
+  const channelName = `presence-${conversationId}`;
+  let channel = supabase.channel(channelName);
+  return channel;
+};
+
+export const getBroadcastChannel = (conversationId: string) => {
+  const supabase = getSupabaseClient();
+  const channelName = `messages-${conversationId}`;
+  let channel = supabase.channel(channelName);
+  return channel;
+};
