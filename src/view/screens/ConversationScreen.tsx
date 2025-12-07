@@ -50,7 +50,7 @@ import { useMessageActions } from "../hooks/useMessageActions";
 import { useGroupMembers } from "../hooks/useGroupMembers";
 import { usePresence } from "../../features/messaging/hooks/usePresence";
 import { useEphemeralMessages } from "../../features/messaging/hooks/useEphemeralMessages";
-import { PresenceIndicator } from "../components/PresenceIndicator";
+import { TypingIndicator } from "../components/TypingIndicator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -357,24 +357,13 @@ export default function ConversationScreen({ navigation, route }: Props) {
             )}
           </TouchableOpacity>
           <View className="flex-1">
-            <View className="flex-row items-center gap-2">
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
-              >
-                {headerDisplayName || "Conversation"}
-              </Text>
-              {(!isGroupChat || isTyping) && (
-                <PresenceIndicator
-                  isOnline={recipientOnline}
-                  size="small"
-                  isTyping={isTyping}
-                  typingLabel={typingLabel}
-                  showLabel={isTyping}
-                />
-              )}
-            </View>
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
+            >
+              {headerDisplayName || "Conversation"}
+            </Text>
           </View>
         </View >
 
@@ -570,6 +559,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
       </View >
 
 
+
+      {/* Typing indicator - shown above composer when someone is typing */}
+      {isTyping && (
+        <TypingIndicator label={typingLabel} isDark={isDark} />
+      )}
 
       <Composer
         isGroupChat={isGroupChat}
