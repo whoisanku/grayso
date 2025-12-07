@@ -74,16 +74,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const counterPartyPublicKey = partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
   const recipientOwnerKey = (recipientInfo as { OwnerPublicKeyBase58Check?: string })?.OwnerPublicKeyBase58Check;
 
-  // For DMs, create a consistent conversationId by sorting public keys alphabetically
-  // This ensures both users join the same presence channel
+  // Create a unique conversationId that matches the format used in HomeScreen:
+  // For group chats: publicKey-accessGroupKeyName  
+  // For DMs: sorted public keys + DM suffix for consistent channel
   const conversationId = useMemo(() => {
     if (isGroupChat) {
-      return `${counterPartyPublicKey}-${chatType}`;
+      // Use accessGroupKeyName for group chats (matches HomeScreen ID format)
+      return `${counterPartyPublicKey}-${threadAccessGroupKeyName}`;
     }
     // Sort the two public keys alphabetically to get consistent ID
     const keys = [userPublicKey, counterPartyPublicKey].sort();
     return `${keys[0]}-${keys[1]}-DM`;
-  }, [counterPartyPublicKey, chatType, isGroupChat, userPublicKey]);
+  }, [counterPartyPublicKey, threadAccessGroupKeyName, isGroupChat, userPublicKey]);
 
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();

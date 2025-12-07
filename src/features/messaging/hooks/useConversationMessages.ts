@@ -144,10 +144,12 @@ export const useConversationMessages = ({
                 }
             });
 
-            // Sort ascending first to handle edits correctly, then reverse to get descending (newest first)
-            // This is required because FlashList is inverted
-            const ascending = normalizeAndSortMessages(Array.from(map.values()));
-            return ascending.reverse();
+            // Sort descending (newest first) for inverted FlatList
+            // With inverted list: data[0] appears at visual bottom, data[last] at top
+            // So newest-first in array = newest at visual bottom (correct for chat)
+            const sorted = normalizeAndSortMessages(Array.from(map.values()));
+            // normalizeAndSortMessages returns ascending (oldest first), so reverse for descending
+            return sorted.reverse();
         },
         []
     );
@@ -295,8 +297,9 @@ export const useConversationMessages = ({
                 );
 
                 setMessages((prev) => {
+                    // Both initial and merge should return newest-first (descending) for inverted FlatList
                     const nextMessages = initial
-                        ? normalizeAndSortMessages([...decryptedMessages])
+                        ? normalizeAndSortMessages([...decryptedMessages]).reverse()
                         : mergeMessages(prev, decryptedMessages);
 
                     // Filter out edit messages when calculating oldest timestamp
