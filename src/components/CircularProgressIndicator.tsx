@@ -7,6 +7,7 @@ import Animated, {
   useDerivedValue,
   interpolateColor,
 } from "react-native-reanimated";
+import { useAccentColor } from "../state/theme/useAccentColor";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -23,6 +24,7 @@ export default function CircularProgressIndicator({
   size = 32,
   strokeWidth = 3,
 }: CircularProgressProps) {
+  const { accentColor } = useAccentColor();
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const progress = Math.min(current / max, 1);
@@ -33,7 +35,7 @@ export default function CircularProgressIndicator({
     if (progress >= 1) return "#ef4444"; // Red when at/over limit
     if (progress >= 0.9) return "#f97316"; // Orange when 90%+
     if (progress >= 0.8) return "#eab308"; // Yellow when 80%+
-    return "#0085ff"; // Blue otherwise
+    return accentColor; // Use chosen accent otherwise
   };
 
   const strokeDashoffset = circumference - progress * circumference;

@@ -21,6 +21,7 @@ import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import Animated, { SlideInLeft, SlideOutLeft } from "react-native-reanimated";
+import { useAccentColor } from "../state/theme/useAccentColor";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
@@ -28,6 +29,7 @@ const DummyComponent = () => <View />;
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { accentColor, accentStrong } = useAccentColor();
 
   const tabButtons = state.routes.map((route, index) => {
     const { options } = descriptors[route.key];
@@ -56,9 +58,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           key={route.key}
           onPress={() => navigation.navigate("Composer")}
           activeOpacity={0.8}
-          className="mx-4 h-14 w-14 items-center justify-center rounded-full bg-[#0085ff]"
+          className="mx-4 h-14 w-14 items-center justify-center rounded-full"
           style={{
-            shadowColor: "#0085ff",
+            backgroundColor: accentColor,
+            shadowColor: accentStrong,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,

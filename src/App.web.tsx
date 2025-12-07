@@ -13,6 +13,7 @@ import RootNavigator from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./state/queryClient";
+import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 
 // Web specific config if needed
 configure({
@@ -40,20 +41,22 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <DeSoIdentityProvider>
-        <CryptoPolyfill />
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <NavigationContainer
-                theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                documentTitle={{ formatter: () => "Grayso" }}
-              >
-                <RootNavigator />
-              </NavigationContainer>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
-      </DeSoIdentityProvider>
+      <AppThemeProvider>
+        <DeSoIdentityProvider>
+          <CryptoPolyfill />
+          <SafeAreaProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                <NavigationContainer
+                  theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                  documentTitle={{ formatter: () => "Grayso" }}
+                >
+                  <RootNavigator />
+                </NavigationContainer>
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </DeSoIdentityProvider>
+      </AppThemeProvider>
     </QueryClientProvider>
   );
 }

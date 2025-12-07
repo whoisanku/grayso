@@ -27,6 +27,7 @@ import {
 import { FileAndMessageBubble } from "./FileAndMessageBubble";
 import { VideoMessageBubble } from "./VideoMessageBubble";
 import { ImageGalleryModal } from "./ImageGalleryModal";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 export type MessageBubbleProps = {
     item: DecryptedMessageEntryResponse;
@@ -63,6 +64,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
+    const { accentColor, accentStrong, accentSoft, onAccent } = useAccentColor();
 
     // Image gallery state
     const [galleryVisible, setGalleryVisible] = useState(false);
@@ -140,9 +142,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                 style={{
                     backgroundColor: isMine 
                         ? "rgba(255, 255, 255, 0.15)" 
-                        : (isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"),
+                        : accentSoft,
                     borderLeftWidth: 3,
-                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : accentColor,
                     borderRadius: 6,
                     paddingHorizontal: 10,
                     paddingVertical: 8,
@@ -153,7 +155,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                     style={{
                         fontSize: 12,
                         fontWeight: "600",
-                        color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+                        color: isMine ? "rgba(255, 255, 255, 0.9)" : accentColor,
                         marginBottom: 2,
                     }}
                     numberOfLines={1}
@@ -428,7 +430,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         maxWidth: Platform.OS === 'web' ? 320 : '80%',
                                         overflow: 'hidden',
                                         backgroundColor: isMine 
-                                            ? '#3b82f6' 
+                                            ? accentColor 
                                             : (isDark ? '#1e2738' : '#f8fafc'),
                                     },
                                 ]}
@@ -457,24 +459,21 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 {/* Message text with WhatsApp-style inline timestamp */}
                                 <View style={{ paddingRight: 52 }}>
                                     <Text
-                                        className={`text-base leading-[22px] ${
-                                            isMine 
-                                                ? 'text-white' 
-                                                : 'text-slate-900 dark:text-slate-100'
-                                        }`}
-                                        style={{ flexShrink: 1 }}
+                                        className="text-base leading-[22px]"
+                                        style={{ flexShrink: 1, color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a") }}
                                     >
                                         {messageText}
                                     </Text>
                                     {/* Actual timestamp positioned at bottom-right */}
                                     <Text
-                                        className={`absolute bottom-0 right-0 text-[10px] ${
-                                            hasError 
-                                                ? 'text-red-500' 
-                                                : isMine 
-                                                    ? 'text-blue-200' 
-                                                    : 'text-slate-400 dark:text-slate-500'
-                                        }`}
+                                        className="absolute bottom-0 right-0 text-[10px]"
+                                        style={{
+                                            color: hasError
+                                                ? "#ef4444"
+                                                : isMine
+                                                    ? onAccent
+                                                    : (isDark ? "#94a3b8" : "#94a3b8"),
+                                        }}
                                     >
                                         {hasError ? "Failed" : (
                                             <>

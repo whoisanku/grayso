@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
-import { useColorScheme } from "nativewind";
 import { buildProfilePictureUrl } from "deso-protocol";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
@@ -27,6 +26,7 @@ import {
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey } from "../../utils/deso";
 import { RootStackParamList } from "../../navigation/types";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../../constants/messaging";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 type NewChatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -76,8 +76,7 @@ function ProfileItem({
 }
 
 export default function NewChatScreen() {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor } = useAccentColor();
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<NewChatScreenNavigationProp>();
@@ -190,7 +189,7 @@ export default function NewChatScreen() {
       {/* Results */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0085ff" />
+          <ActivityIndicator color={accentColor} />
         </View>
       ) : hasSearched && results.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">

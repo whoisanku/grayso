@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
-import { useColorScheme } from "nativewind";
 import { buildProfilePictureUrl } from "deso-protocol";
 import Animated, {
   FadeIn,
@@ -36,6 +35,7 @@ import {
 } from "../../services/desoGraphql";
 import { FALLBACK_PROFILE_IMAGE } from "../../utils/deso";
 import { LiquidGlassView } from "../../utils/liquidGlass";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 type NewChatModalProps = {
   visible: boolean;
@@ -92,15 +92,19 @@ function EmptyState({
   isLoading,
   hasSearched,
   isDark,
+  accentColor,
+  accentSoft,
 }: {
   isLoading: boolean;
   hasSearched: boolean;
   isDark: boolean;
+  accentColor: string;
+  accentSoft: string;
 }) {
   if (isLoading) {
     return (
       <View className="items-center py-12">
-        <ActivityIndicator color="#0085ff" size="large" />
+        <ActivityIndicator color={accentColor} size="large" />
         <Text className="mt-3 text-sm text-slate-500 dark:text-slate-400">
           Searching...
         </Text>
@@ -111,11 +115,14 @@ function EmptyState({
   if (!hasSearched) {
     return (
       <View className="items-center py-12 px-6">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30">
+        <View
+          className="h-16 w-16 items-center justify-center rounded-full"
+          style={{ backgroundColor: accentSoft }}
+        >
           <Feather
             name="search"
             size={28}
-            color={isDark ? "#60a5fa" : "#3b82f6"}
+            color={accentColor}
           />
         </View>
         <Text className="mt-4 text-center text-base font-medium text-slate-700 dark:text-slate-300">
@@ -152,8 +159,7 @@ export default function NewChatModal({
   onClose,
   onSelectProfile,
 }: NewChatModalProps) {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentSoft } = useAccentColor();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -421,6 +427,8 @@ export default function NewChatModal({
                 isLoading={isLoading}
                 hasSearched={hasSearched}
                 isDark={isDark}
+                accentColor={accentColor}
+                accentSoft={accentSoft}
               />
             }
             keyboardShouldPersistTaps="handled"

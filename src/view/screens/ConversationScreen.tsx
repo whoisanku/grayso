@@ -22,7 +22,6 @@ import {
 import Reanimated from "react-native-reanimated";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
-import { useColorScheme } from "nativewind";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -51,6 +50,7 @@ import { useGroupMembers } from "../hooks/useGroupMembers";
 import { usePresence } from "../../features/messaging/hooks/usePresence";
 import { useEphemeralMessages } from "../../features/messaging/hooks/useEphemeralMessages";
 import { TypingIndicator } from "../components/TypingIndicator";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -88,8 +88,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [counterPartyPublicKey, threadAccessGroupKeyName, isGroupChat, userPublicKey]);
 
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor } = useAccentColor();
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   // --- Custom Hooks ---
@@ -429,7 +428,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         <View style={{ flex: 1 }}>
           {isLoading && messages.length === 0 ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#3b82f6" />
+              <ActivityIndicator size="large" color={accentColor} />
             </View>
           ) : (
             <FlatList<DecryptedMessageEntryResponse>
@@ -478,7 +477,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}>
                   {isLoading ? (
                     <View className="items-center">
-                      <ActivityIndicator size="large" color="#3b82f6" />
+                      <ActivityIndicator size="large" color={accentColor} />
                       <Text className="mt-4 text-sm font-medium text-gray-500">Loading messages...</Text>
                     </View>
                   ) : (
@@ -714,7 +713,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 </View>
               ) : (
                 <View className="flex-1 items-center justify-center py-14">
-                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <ActivityIndicator size="large" color={accentColor} />
                 </View>
               )
             }
