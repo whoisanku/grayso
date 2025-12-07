@@ -373,6 +373,143 @@ export const getConversationsFromFocusGraphql = async (
   };
 };
 
+export const getSpamConversationsFromFocusGraphql = async (
+  userPublicKeyBase58Check: string,
+  allAccessGroups: AccessGroupEntryResponse[]
+): Promise<{
+  conversations: ConversationMap;
+  publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+  updatedAllAccessGroups: AccessGroupEntryResponse[];
+}> => {
+  const { nodes: threadNodes } = await fetchInboxMessageThreads({
+    userPublicKey: userPublicKeyBase58Check,
+    isSpam: true,
+  });
+
+  const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
+    {};
+
+  const rawMessages: NewMessageEntryResponse[] = threadNodes
+    .map((thread) => {
+      const message = thread.thread?.messages?.nodes?.[0];
+      if (!message?.encryptedText) {
+        return null;
+      }
+
+      const senderAccount = message.sender;
+      const receiverAccount = message.receiver;
+      const senderPublicKey =
+        senderAccount?.publicKey || thread.initiatorPublicKey || "";
+      const receiverPublicKey = receiverAccount?.publicKey || "";
+
+      const { nanos, nanosString } = normalizeTimestampToNanos(
+        message.timestamp ?? 0
+      );
+
+      if (senderAccount?.publicKey) {
+        publicKeyToProfileEntryResponseMap[senderAccount.publicKey] =
+          buildDefaultProfileEntry(
+            senderAccount.publicKey,
+            senderAccount.username ?? undefined,
+            pickProfilePicFromExtraData(senderAccount.extraData)
+          );
+      }
+
+      if (receiverAccount?.publicKey) {
+        publicKeyToProfileEntryResponseMap[receiverAccount.publicKey] =
+          buildDefaultProfileEntry(
+            receiverAccount.publicKey,
+            receiverAccount.username ?? undefined,
+            pickProfilePicFromExtraData(receiverAccount.extraData)
+          );
+      }
+
+      if (!senderPublicKey || (!receiverPublicKey && !thread.thread?.isGroupChatMessage)) {
+        return null;
+      }
+
+      const isGroupChat = Boolean(
+        thread.thread?.isGroupChatMessage || message.isGroupChatMessage
+      );
+      const chatType = isGroupChat ? ChatType.GROUPCHAT : ChatType.DM;
+
+      const senderGroup = pickDefaultAccessGroup(senderAccount || undefined, senderPublicKey);
+      const senderAccessGroupPublicKey =
+        findAccessGroupPublicKey(
+          allAccessGroups,
+          senderGroup.owner,
+          senderGroup.keyName
+        ) || senderGroup.publicKey || "";
+
+      const recipientGroup = isGroupChat
+        ? {
+            keyName:
+              thread.thread?.accessGroupKeyName ||
+              DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            owner:
+              thread.thread?.accessGroupOwnerPublicKey ||
+              receiverPublicKey ||
+              senderPublicKey,
+            publicKey: null as string | null,
+          }
+        : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
+
+      const recipientAccessGroupPublicKey =
+        findAccessGroupPublicKey(
+          allAccessGroups,
+          recipientGroup.owner,
+          recipientGroup.keyName
+        ) || recipientGroup.publicKey || "";
+
+      return {
+        ChatType: chatType,
+        SenderInfo: {
+          OwnerPublicKeyBase58Check: senderPublicKey,
+          AccessGroupPublicKeyBase58Check: senderAccessGroupPublicKey,
+          AccessGroupKeyName: senderGroup.keyName,
+        },
+        RecipientInfo: {
+          OwnerPublicKeyBase58Check: recipientGroup.owner,
+          AccessGroupPublicKeyBase58Check: recipientAccessGroupPublicKey,
+          AccessGroupKeyName: recipientGroup.keyName,
+        },
+        MessageInfo: {
+          EncryptedText: message.encryptedText,
+          TimestampNanos: nanos,
+          TimestampNanosString: nanosString,
+          ExtraData: message.extraData || {},
+        },
+      } as NewMessageEntryResponse;
+    })
+    .filter(
+      (message): message is NewMessageEntryResponse =>
+        Boolean(message?.MessageInfo?.EncryptedText)
+    );
+
+  if (rawMessages.length === 0) {
+    return {
+      conversations: {},
+      publicKeyToProfileEntryResponseMap,
+      updatedAllAccessGroups: allAccessGroups,
+    };
+  }
+
+  const { decrypted, updatedAllAccessGroups } =
+    await decryptAccessGroupMessagesWithRetry(
+      userPublicKeyBase58Check,
+      rawMessages,
+      allAccessGroups
+    );
+
+  const conversations = buildConversationMapFromMessages(decrypted);
+
+  return {
+    conversations,
+    publicKeyToProfileEntryResponseMap,
+    updatedAllAccessGroups,
+  };
+};
+
 export const decryptAccessGroupMessagesWithRetry = async (
   publicKeyBase58Check: string,
   messages: NewMessageEntryResponse[],

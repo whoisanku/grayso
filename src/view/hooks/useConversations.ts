@@ -88,6 +88,7 @@ export const useConversations = () => {
 
   return {
     conversations: data?.conversations ?? {},
+    spamConversations: data?.spamConversations ?? {},
     profiles: data?.profiles ?? {},
     groupMembers: data?.groupMembers ?? {},
     isLoading,

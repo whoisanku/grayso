@@ -170,10 +170,8 @@ export async function fetchInboxMessageThreads({
   first = 20,
   offset = 0,
   orderBy = ["LATEST_MESSAGE_TIMESTAMP_DESC"],
-  filter = {
-    isSpam: { equalTo: false },
-    initiator: { isBlacklisted: { equalTo: false } },
-  },
+  isSpam = false,
+  filter,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
     DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
@@ -181,18 +179,27 @@ export async function fetchInboxMessageThreads({
   first?: number;
   offset?: number;
   orderBy?: string[];
+  isSpam?: boolean;
   filter?: Record<string, unknown>;
   graphqlEndpoint?: string;
 }): Promise<{
   nodes: FocusThreadNode[];
   pageInfo: FocusPageInfo;
 }> {
+  const mergedFilter = {
+    initiator: { isBlacklisted: { equalTo: false } },
+    isSpam: { equalTo: isSpam },
+    ...filter,
+    // Explicit isSpam param takes precedence over caller-provided filter
+    ...(filter?.isSpam ? { isSpam: filter.isSpam } : { isSpam: { equalTo: isSpam } }),
+  } as Record<string, unknown>;
+
   const variables: Record<string, unknown> = {
     userPublicKey,
     first,
     offset,
     orderBy,
-    filter,
+    filter: mergedFilter,
   };
 
   const body = {

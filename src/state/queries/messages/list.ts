@@ -7,6 +7,7 @@ import {
   ConversationMap,
   getConversationsNewMap,
   getConversationsFromFocusGraphql,
+  getSpamConversationsFromFocusGraphql,
 } from "../../../services/conversations";
 import { fetchAccessGroupMembers, GroupMember } from "../../../services/desoGraphql";
 
@@ -27,7 +28,10 @@ export const fetchConversations = async (userPublicKey: string) => {
   );
 
   let conversations: ConversationMap = {};
+  let spamConversations: ConversationMap = {};
   let publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap = {};
+  let spamPublicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
+    {};
 
   try {
     const focusResult = await getConversationsFromFocusGraphql(
@@ -39,6 +43,19 @@ export const fetchConversations = async (userPublicKey: string) => {
     publicKeyToProfileEntryResponseMap =
       focusResult.publicKeyToProfileEntryResponseMap;
     allAccessGroups = focusResult.updatedAllAccessGroups;
+
+    try {
+      const spamResult = await getSpamConversationsFromFocusGraphql(
+        userPublicKey,
+        allAccessGroups
+      );
+      spamConversations = spamResult.conversations;
+      spamPublicKeyToProfileEntryResponseMap =
+        spamResult.publicKeyToProfileEntryResponseMap;
+      allAccessGroups = spamResult.updatedAllAccessGroups;
+    } catch (err) {
+      console.warn("Focus GraphQL spam inbox fetch failed", err);
+    }
   } catch (err) {
     console.warn("Focus GraphQL inbox fetch failed, falling back", err);
   }
@@ -51,10 +68,14 @@ export const fetchConversations = async (userPublicKey: string) => {
     allAccessGroups = fallback.updatedAllAccessGroups;
   }
 
-  // Fetch group members for avatars
-  const groupChats = Object.values(conversations).filter(
+  // Fetch group members for avatars (include both inbox and spam group chats)
+  const inboxGroupChats = Object.values(conversations).filter(
     (c) => c.ChatType === ChatType.GROUPCHAT
   );
+  const spamGroupChats = Object.values(spamConversations).filter(
+    (c) => c.ChatType === ChatType.GROUPCHAT
+  );
+  const groupChats = [...inboxGroupChats, ...spamGroupChats];
 
   const membersMap: Record<string, GroupMember[]> = {};
 
@@ -89,7 +110,11 @@ export const fetchConversations = async (userPublicKey: string) => {
 
   return {
     conversations,
-    profiles: publicKeyToProfileEntryResponseMap,
+    spamConversations,
+    profiles: {
+      ...publicKeyToProfileEntryResponseMap,
+      ...spamPublicKeyToProfileEntryResponseMap,
+    },
     groupMembers: membersMap,
   };
 };

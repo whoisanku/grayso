@@ -44,6 +44,7 @@ import { useColorScheme } from "nativewind";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
+import type { ConversationMap } from "../../services/conversations";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -105,7 +106,7 @@ export default function HomeScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { conversations, profiles, groupMembers, isLoading, error, reload } =
+  const { conversations, spamConversations, profiles, groupMembers, isLoading, error, reload } =
     useConversations();
   
   // Reload conversations when screen gains focus (e.g., returning from a conversation)
@@ -129,6 +130,7 @@ export default function HomeScreen() {
   const [isSearchingNewChat, setIsSearchingNewChat] = useState(false);
   const [hasSearchedNewChat, setHasSearchedNewChat] = useState(false);
   const drawerRef = useRef<View | null>(null);
+  const [activeMailbox, setActiveMailbox] = useState<"inbox" | "spam">("inbox");
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
       string,
@@ -234,96 +236,109 @@ export default function HomeScreen() {
     });
   }, [currentUser?.PublicKeyBase58Check, rootNavigation]);
 
-  const items = useMemo<MockConversation[]>(() => {
-    const userPk = currentUser?.PublicKeyBase58Check;
-    if (!userPk) return [];
+  const buildItemsFromConversations = useCallback(
+    (source: ConversationMap) => {
+      const userPk = currentUser?.PublicKeyBase58Check;
+      if (!userPk) return [];
 
-    return Object.values(conversations).map((c) => {
-      // Messages are sorted newest-first (descending) from getConversationsNewMap
-      // Find the first non-edited message (which is the newest real message)
-      const last = c.messages.find(msg => {
-        const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
-        return extraData?.edited !== 'true';
-      }) || c.messages[0]; // Fallback to first (newest) message if all are edited
+      return Object.values(source).map((c) => {
+        const last =
+          c.messages.find((msg) => {
+            const extraData = msg.MessageInfo?.ExtraData as
+              | Record<string, any>
+              | undefined;
+            return extraData?.edited !== "true";
+          }) || c.messages[0];
 
-      const info = last?.MessageInfo || {};
-      const time = formatTimestamp(
-        info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
-      );
-      const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
-      const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
-      const senderName =
-        senderPk === userPk
-          ? "You"
-          : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
-      const isGroup = c.ChatType === ChatType.GROUPCHAT;
-      const otherPk = isGroup
-        ? recipientPk
-        : senderPk === userPk
+        const info = last?.MessageInfo || {};
+        const time = formatTimestamp(
+          info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
+        );
+        const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
+        const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
+        const senderName =
+          senderPk === userPk
+            ? "You"
+            : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
+        const isGroup = c.ChatType === ChatType.GROUPCHAT;
+        const otherPk = isGroup
           ? recipientPk
-          : senderPk;
-      const name = isGroup
-        ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
-        : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
-      const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
-      const avatarUri = isGroup
-        ? FALLBACK_GROUP_IMAGE
-        : buildProfilePictureUrl(otherPk, {
-          fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-        });
+          : senderPk === userPk
+            ? recipientPk
+            : senderPk;
+        const name = isGroup
+          ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
+          : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
+        const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
+        const avatarUri = isGroup
+          ? FALLBACK_GROUP_IMAGE
+          : buildProfilePictureUrl(otherPk, {
+            fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+          });
 
-      let stackedAvatarUris: string[] = [];
-      let isLoadingMembers = false;
-      if (isGroup) {
-        const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
-        const members = groupMembers[groupKey] || [];
+        let stackedAvatarUris: string[] = [];
+        let isLoadingMembers = false;
+        if (isGroup) {
+          const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
+          const members = groupMembers[groupKey] || [];
 
-        if (members.length === 0) {
-          isLoadingMembers = true;
+          if (members.length === 0) {
+            isLoadingMembers = true;
+          }
+
+          stackedAvatarUris = members
+            .slice(0, 3)
+            .map((m) =>
+              m.profilePic
+                ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
+                : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
+            );
         }
 
-        stackedAvatarUris = members
-          .slice(0, 3)
-          .map((m) =>
-            m.profilePic
-              ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
-              : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
-          );
-      }
+        let uniqueId: string;
+        if (isGroup) {
+          uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
+        } else {
+          const sortedKeys = [userPk, otherPk].sort();
+          uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
+        }
 
-      // Create a unique ID that matches ConversationScreen's conversationId:
-      // For group chats: publicKey-accessGroupKeyName  
-      // For DMs: sorted public keys with -DM suffix for consistency
-      let uniqueId: string;
-      if (isGroup) {
-        uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
-      } else {
-        // Sort public keys alphabetically for consistent DM ID (matches ConversationScreen)
-        const sortedKeys = [userPk, otherPk].sort();
-        uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
-      }
-      
-      return {
-        id: uniqueId,
-        name,
-        preview,
-        time,
-        avatarUri,
-        stackedAvatarUris,
-        isGroup,
-        chatType: c.ChatType,
-        threadPublicKey: otherPk,
-        lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
-        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
-        threadAccessGroupKeyName: isGroup
-          ? last?.RecipientInfo?.AccessGroupKeyName
-          : DEFAULT_KEY_MESSAGING_GROUP_NAME,
-        partyGroupOwnerPublicKeyBase58Check: otherPk,
-        recipientInfo: last?.RecipientInfo,
-        isLoadingMembers,
-      };
-    });
-  }, [conversations, profiles, groupMembers, currentUser?.PublicKeyBase58Check]);
+        return {
+          id: uniqueId,
+          name,
+          preview,
+          time,
+          avatarUri,
+          stackedAvatarUris,
+          isGroup,
+          chatType: c.ChatType,
+          threadPublicKey: otherPk,
+          lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
+          userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          threadAccessGroupKeyName: isGroup
+            ? last?.RecipientInfo?.AccessGroupKeyName
+            : DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          partyGroupOwnerPublicKeyBase58Check: otherPk,
+          recipientInfo: last?.RecipientInfo,
+          isLoadingMembers,
+        };
+      });
+    },
+    [currentUser?.PublicKeyBase58Check, profiles, groupMembers]
+  );
+
+  const inboxItems = useMemo(
+    () => buildItemsFromConversations(conversations),
+    [buildItemsFromConversations, conversations]
+  );
+  const spamItems = useMemo(
+    () => buildItemsFromConversations(spamConversations),
+    [buildItemsFromConversations, spamConversations]
+  );
+  const items = useMemo(
+    () => (activeMailbox === "spam" ? spamItems : inboxItems),
+    [activeMailbox, inboxItems, spamItems]
+  );
 
   const enhancedItems = useMemo(() => {
     const mapped = items.map((item) => {
@@ -356,7 +371,7 @@ export default function HomeScreen() {
       const bTime = b.lastTimestampNanos ?? 0;
       return bTime - aTime;
     });
-  }, [items, optimisticPreviews]);
+  }, [activeMailbox, items, optimisticPreviews]);
 
 
   const handlePress = useCallback(
@@ -536,6 +551,48 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* WhatsApp-style filter chips */}
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
+        {([
+          { key: "inbox", label: "Inbox" },
+          { key: "spam", label: "Spam" },
+        ] as const).map((filter) => {
+          const isActive = activeMailbox === filter.key;
+          
+          return (
+            <TouchableOpacity
+              key={filter.key}
+              onPress={() => setActiveMailbox(filter.key)}
+              activeOpacity={0.8}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+                backgroundColor: isActive 
+                  ? '#0085ff'
+                  : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                borderWidth: 1,
+                borderColor: isActive 
+                  ? '#0085ff' 
+                  : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: isActive 
+                    ? '#ffffff' 
+                    : (isDark ? '#94a3b8' : '#64748b'),
+                }}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Drawer Modal */}
@@ -728,20 +785,34 @@ export default function HomeScreen() {
             <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
               <Feather name="inbox" size={40} color={colorScheme === "dark" ? "#64748b" : "#9ca3af"} />
               <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                Your inbox is quiet
+                {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
               </Text>
               <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
-                Start a new conversation and it will show up here right away.
+                {activeMailbox === "spam"
+                  ? "Messages marked as spam will land here. Move them back to Inbox if they’re safe."
+                  : "Start a new conversation and it will show up here right away."}
               </Text>
-              <TouchableOpacity
-                className="mt-6 rounded-full bg-[#0085ff] px-6 py-3 shadow-lg shadow-blue-200 dark:shadow-none"
-                activeOpacity={0.85}
-                onPress={handleCompose}
-              >
-                <Text className="text-sm font-bold text-white">
-                  Start a message
-                </Text>
-              </TouchableOpacity>
+              {activeMailbox === "spam" ? (
+                <TouchableOpacity
+                  className="mt-6 rounded-full bg-slate-200 px-6 py-3 dark:bg-slate-800"
+                  activeOpacity={0.85}
+                  onPress={() => setActiveMailbox("inbox")}
+                >
+                  <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Go to Inbox
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  className="mt-6 rounded-full bg-[#0085ff] px-6 py-3 shadow-lg shadow-blue-200 dark:shadow-none"
+                  activeOpacity={0.85}
+                  onPress={handleCompose}
+                >
+                  <Text className="text-sm font-bold text-white">
+                    Start a message
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         />
