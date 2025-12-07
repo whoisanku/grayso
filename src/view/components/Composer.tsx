@@ -8,6 +8,7 @@ import {
     Keyboard,
     NativeSyntheticEvent,
     TextInputContentSizeChangeEventData,
+    TextInputSelectionChangeEventData,
     DeviceEventEmitter,
     Image,
     ScrollView,
@@ -131,6 +132,7 @@ export const Composer = React.memo(function Composer({
     const [sending, setSending] = useState(false);
     const [inputHeight, setInputHeight] = useState(32);
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+    const [selection, setSelection] = useState({ start: 0, end: 0 });
     const textInputRef = useRef<TextInput>(null);
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
@@ -472,6 +474,12 @@ export const Composer = React.memo(function Composer({
         }
     };
 
+    const handleSelectionChange = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+        setSelection(event.nativeEvent.selection);
+    }, []);
+
+
+
     const handleSendOrSave = async () => {
         if (isEditMode) {
             onSaveEdit?.();
@@ -607,6 +615,29 @@ export const Composer = React.memo(function Composer({
             }
         }
     };
+
+    const handleKeyPress = useCallback((e: any) => {
+        if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
+            // Cmd+Enter or Ctrl+Enter -> Insert Newline
+            if (e.nativeEvent.metaKey || e.nativeEvent.ctrlKey) {
+                e.preventDefault();
+                const start = selection.start;
+                const end = selection.end;
+                const newText = currentText.substring(0, start) + '\n' + currentText.substring(end);
+                handleTextChange(newText);
+                
+                // Move cursor forward
+                setSelection({ start: start + 1, end: start + 1 });
+                return;
+            }
+
+            // Plain Enter (no Shift) -> Send
+            if (!e.nativeEvent.shiftKey) {
+                e.preventDefault();
+                handleSendOrSave();
+            }
+        }
+    }, [selection, currentText, handleTextChange, handleSendOrSave]);
 
     const hasContent = currentText.trim().length > 0 || selectedImages.length > 0;
     const isDisabled = isEditMode
@@ -758,6 +789,9 @@ export const Composer = React.memo(function Composer({
                         placeholderTextColor={isDark ? "#94a3b8" : "#64748b"}
                         value={currentText}
                         onChangeText={handleTextChange}
+                        onSelectionChange={handleSelectionChange}
+                        selection={selection}
+                        onKeyPress={handleKeyPress}
                         multiline
                         keyboardAppearance={isDark ? "dark" : "light"}
                         autoCorrect
