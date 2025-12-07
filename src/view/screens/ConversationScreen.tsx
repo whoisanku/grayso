@@ -166,7 +166,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   });
 
   // Presence tracking
-  const { onlineUsers, isOnline, connectionState: presenceConnectionState } = usePresence({
+  const { onlineUsers, isOnline, connectionState: presenceConnectionState, typingUsers } = usePresence({
     conversationId,
     userPublicKey,
     enabled: !isGroupChat, // Only for DMs
@@ -184,8 +184,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
       onlineUsers,
       recipientOnline,
       presenceConnectionState,
+      typingUsers,
     });
-  }, [isGroupChat, conversationId, userPublicKey, counterPartyPublicKey, onlineUsers, recipientOnline, presenceConnectionState]);
+  }, [isGroupChat, conversationId, userPublicKey, counterPartyPublicKey, onlineUsers, recipientOnline, presenceConnectionState, typingUsers]);
 
   // Ephemeral messaging
   const {
@@ -344,7 +345,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 {headerDisplayName || "Conversation"}
               </Text>
               {!isGroupChat && (
-                <PresenceIndicator isOnline={recipientOnline} size="small" />
+                <PresenceIndicator
+                  isOnline={recipientOnline}
+                  size="small"
+                  isTyping={typingUsers[counterPartyPublicKey]}
+                  showLabel={!!typingUsers[counterPartyPublicKey]}
+                />
               )}
             </View>
           </View>

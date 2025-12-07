@@ -500,6 +500,11 @@ export const useConversationMessages = ({
                 return;
             }
 
+            // Ignore typing events - they are handled by usePresence
+            if (messagePayload.is_typing !== undefined) {
+                return;
+            }
+
             // Construct a NewMessageEntryResponse from the broadcast payload
             const encryptedMessage: NewMessageEntryResponse = {
                 ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
