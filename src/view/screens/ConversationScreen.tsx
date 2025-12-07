@@ -45,9 +45,12 @@ import { MessageBubble } from "../components/MessageBubble";
 import { ActionSheetCard, SelectedBubblePreview, computeModalPositions } from "../components/ActionSheet";
 
 // Hooks
-import { useConversationMessages } from "../hooks/useConversationMessages";
+import { useConversationMessages } from "../../features/messaging/hooks/useConversationMessages";
 import { useMessageActions } from "../hooks/useMessageActions";
 import { useGroupMembers } from "../hooks/useGroupMembers";
+import { usePresence } from "../../features/messaging/hooks/usePresence";
+import { useEphemeralMessages } from "../../features/messaging/hooks/useEphemeralMessages";
+import { PresenceIndicator } from "../components/PresenceIndicator";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -70,10 +73,17 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const isGroupChat = chatType === ChatType.GROUPCHAT;
   const counterPartyPublicKey = partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
   const recipientOwnerKey = (recipientInfo as { OwnerPublicKeyBase58Check?: string })?.OwnerPublicKeyBase58Check;
-  const conversationId = useMemo(
-    () => `${counterPartyPublicKey}-${chatType}`,
-    [counterPartyPublicKey, chatType]
-  );
+
+  // For DMs, create a consistent conversationId by sorting public keys alphabetically
+  // This ensures both users join the same presence channel
+  const conversationId = useMemo(() => {
+    if (isGroupChat) {
+      return `${counterPartyPublicKey}-${chatType}`;
+    }
+    // Sort the two public keys alphabetically to get consistent ID
+    const keys = [userPublicKey, counterPartyPublicKey].sort();
+    return `${keys[0]}-${keys[1]}-DM`;
+  }, [counterPartyPublicKey, chatType, isGroupChat, userPublicKey]);
 
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -155,6 +165,44 @@ export default function ConversationScreen({ navigation, route }: Props) {
     initialGroupMembers,
   });
 
+  // Presence tracking
+  const { onlineUsers, isOnline, connectionState: presenceConnectionState } = usePresence({
+    conversationId,
+    userPublicKey,
+    enabled: !isGroupChat, // Only for DMs
+  });
+
+  const recipientOnline = !isGroupChat && isOnline(counterPartyPublicKey);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[ConversationScreen] Presence Debug:', {
+      isGroupChat,
+      conversationId,
+      userPublicKey,
+      counterPartyPublicKey,
+      onlineUsers,
+      recipientOnline,
+      presenceConnectionState,
+    });
+  }, [isGroupChat, conversationId, userPublicKey, counterPartyPublicKey, onlineUsers, recipientOnline, presenceConnectionState]);
+
+  // Ephemeral messaging
+  const {
+    messages: ephemeralMessages,
+    sendMessage: sendEphemeralMessage,
+    connectionState: ephemeralConnectionState,
+    isSending: isSendingEphemeral,
+  } = useEphemeralMessages({
+    conversationId,
+    userPublicKey,
+    recipientPublicKey: counterPartyPublicKey,
+    enabled: !isGroupChat, // Only for DMs
+    onMessageReceived: (message) => {
+      console.log('[ConversationScreen] Ephemeral message received:', message.id);
+    },
+  });
+
   // --- UI State & Refs ---
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -188,7 +236,8 @@ export default function ConversationScreen({ navigation, route }: Props) {
     return getProfileImageUrl(counterPartyPublicKey) || FALLBACK_PROFILE_IMAGE;
   }, [counterPartyPublicKey, isGroupChat, recipientOwnerKey]);
 
-  // GraphQL returns messages newest-first (TIMESTAMP_DESC)
+  // Use regular messages directly - ephemeral feature not needed
+  // Supabase is only used for broadcast notifications, not message storage
   const displayMessages = messages;
 
   const renderItem = useCallback(
@@ -219,7 +268,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
   );
 
   const keyExtractor = useCallback((item: DecryptedMessageEntryResponse, index: number) => {
-    return item.MessageInfo?.TimestampNanosString ?? `${item.MessageInfo?.TimestampNanos ?? "unknown"} -${index} `;
+    // Use timestamp + index to ensure uniqueness, even for messages with same timestamp
+    const timestamp = item.MessageInfo?.TimestampNanosString ?? item.MessageInfo?.TimestampNanos?.toString() ?? '';
+    return timestamp ? `${timestamp}-${index}` : `message-${index}-${Date.now()}`;
   }, []);
 
 
@@ -232,7 +283,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const topListHeader = useMemo(() => {
     // Only show spinner when there are more messages to load
     if (!hasMore) return null;
-    
+
     return (
       <View style={{ paddingVertical: 16, alignItems: 'center' }}>
         <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#64748b"} />
@@ -284,13 +335,18 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </TouchableOpacity>
 
           <View className="flex-1">
-            <Text
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
-            >
-              {headerDisplayName || "Conversation"}
-            </Text>
+            <View className="flex-row items-center gap-2">
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
+              >
+                {headerDisplayName || "Conversation"}
+              </Text>
+              {!isGroupChat && (
+                <PresenceIndicator isOnline={recipientOnline} size="small" />
+              )}
+            </View>
           </View>
         </View>
 
@@ -340,147 +396,147 @@ export default function ConversationScreen({ navigation, route }: Props) {
               className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
             />
           )}
-      </TouchableOpacity >
+        </TouchableOpacity >
       </View >
 
       {/* Main content - limited width on web for better readability */}
       <View style={[
         { flex: 1 },
-        Platform.OS === 'web' && { 
-          maxWidth: 600, 
-          width: '100%', 
+        Platform.OS === 'web' && {
+          maxWidth: 600,
+          width: '100%',
           alignSelf: 'center',
         }
       ]}>
         <View style={{ flex: 1 }}>
-        {isLoading && messages.length === 0 ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#3b82f6" />
-          </View>
-        ) : (
-          <FlatList<DecryptedMessageEntryResponse>
-            ref={flatListRef}
-            data={displayMessages}
-            keyExtractor={keyExtractor}
-            renderItem={renderItem}
-            inverted={true}
-            // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
-            ListFooterComponent={topListHeader}
-            ListHeaderComponent={footer}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: 16,
-              paddingTop: 12,
-            }}
-            // Load older messages when scrolling toward the "end" (visually = top)
-            onEndReached={() => {
-              if (!isLoading && hasMore) {
-                loadMessages(false);
-              }
-            }}
-            onEndReachedThreshold={0.3}
-            onScroll={(e) => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              const rawOffsetY = contentOffset.y;
-              
-              // Track current scroll offset
-              scrollOffsetRef.current = rawOffsetY;
-
-              // With inverted list: offset 0 = bottom (newest), higher offset = top (older)
-              // Show scroll-to-bottom button when user scrolls up (away from newest)
-              if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
-                if (!showScrollToBottom) {
-                  scrollToBottomAnim.setValue(1);
-                  setShowScrollToBottom(true);
-                }
-              } else {
-                if (showScrollToBottom) setShowScrollToBottom(false);
-              }
-            }}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            ListEmptyComponent={() => (
-              <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}>
-                {isLoading ? (
-                  <View className="items-center">
-                    <ActivityIndicator size="large" color="#3b82f6" />
-                    <Text className="mt-4 text-sm font-medium text-gray-500">Loading messages...</Text>
-                  </View>
-                ) : (
-                  <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                    <Feather name="message-circle" size={38} color={isDark ? "#64748b" : "#9ca3af"} />
-                    <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">No messages yet</Text>
-                    <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">Start the conversation and it will appear here instantly.</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          />
-        )}
-
-        {showScrollToBottom && (
-          <Animated.View
-            style={{
-              position: 'absolute',
-              bottom: 16,
-              right: 16,
-              zIndex: 10,
-              opacity: scrollToBottomAnim,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => {
-                console.log("[ConversationScreen] Scroll-to-latest pressed", {
-                  scrollOffset: scrollOffsetRef.current,
-                  messageCount: messages.length,
-                });
-                Animated.timing(scrollToBottomAnim, {
-                  toValue: 0,
-                  duration: 200,
-                  useNativeDriver: true,
-                }).start(() => setShowScrollToBottom(false));
-                try {
-                  // With inverted list, offset 0 = visual bottom (newest messages)
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-                } catch (err) {
-                  console.warn("[ConversationScreen] scrollToOffset failed", err);
+          {isLoading && messages.length === 0 ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+          ) : (
+            <FlatList<DecryptedMessageEntryResponse>
+              ref={flatListRef}
+              data={displayMessages}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              inverted={true}
+              // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
+              ListFooterComponent={topListHeader}
+              ListHeaderComponent={footer}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingHorizontal: 16,
+                paddingTop: 12,
+              }}
+              // Load older messages when scrolling toward the "end" (visually = top)
+              onEndReached={() => {
+                if (!isLoading && hasMore) {
+                  loadMessages(false);
                 }
               }}
-              activeOpacity={0.8}
-            >
-              {LiquidGlassView ? (
-                <LiquidGlassView
-                  effect="regular"
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#1f2937"} />
-                </LiquidGlassView>
-              ) : (
-                <BlurView
-                  intensity={80}
-                  tint={isDark ? "dark" : "light"}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
-                </BlurView>
+              onEndReachedThreshold={0.3}
+              onScroll={(e) => {
+                const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                const rawOffsetY = contentOffset.y;
+
+                // Track current scroll offset
+                scrollOffsetRef.current = rawOffsetY;
+
+                // With inverted list: offset 0 = bottom (newest), higher offset = top (older)
+                // Show scroll-to-bottom button when user scrolls up (away from newest)
+                if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
+                  if (!showScrollToBottom) {
+                    scrollToBottomAnim.setValue(1);
+                    setShowScrollToBottom(true);
+                  }
+                } else {
+                  if (showScrollToBottom) setShowScrollToBottom(false);
+                }
+              }}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              ListEmptyComponent={() => (
+                <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}>
+                  {isLoading ? (
+                    <View className="items-center">
+                      <ActivityIndicator size="large" color="#3b82f6" />
+                      <Text className="mt-4 text-sm font-medium text-gray-500">Loading messages...</Text>
+                    </View>
+                  ) : (
+                    <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                      <Feather name="message-circle" size={38} color={isDark ? "#64748b" : "#9ca3af"} />
+                      <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">No messages yet</Text>
+                      <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">Start the conversation and it will appear here instantly.</Text>
+                    </View>
+                  )}
+                </View>
               )}
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+            />
+          )}
+
+          {showScrollToBottom && (
+            <Animated.View
+              style={{
+                position: 'absolute',
+                bottom: 16,
+                right: 16,
+                zIndex: 10,
+                opacity: scrollToBottomAnim,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  console.log("[ConversationScreen] Scroll-to-latest pressed", {
+                    scrollOffset: scrollOffsetRef.current,
+                    messageCount: messages.length,
+                  });
+                  Animated.timing(scrollToBottomAnim, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                  }).start(() => setShowScrollToBottom(false));
+                  try {
+                    // With inverted list, offset 0 = visual bottom (newest messages)
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  } catch (err) {
+                    console.warn("[ConversationScreen] scrollToOffset failed", err);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                {LiquidGlassView ? (
+                  <LiquidGlassView
+                    effect="regular"
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#1f2937"} />
+                  </LiquidGlassView>
+                ) : (
+                  <BlurView
+                    intensity={80}
+                    tint={isDark ? "dark" : "light"}
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Feather name="chevron-down" size={24} color={isDark ? "#fff" : "#4b5563"} />
+                  </BlurView>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </View>
       </View>
 
@@ -507,6 +563,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
         onCancelEdit={handleCancelEdit}
         onSaveEdit={handleSaveEdit}
         isSavingEdit={isSavingEdit}
+        recipientOnline={recipientOnline}
+        onSendEphemeral={sendEphemeralMessage}
+        isSendingEphemeral={isSendingEphemeral}
       />
 
       <Modal

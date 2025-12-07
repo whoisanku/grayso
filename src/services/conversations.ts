@@ -126,7 +126,7 @@ export const getConversations = async (
     } = await getConversationsNewMap(userPublicKeyBase58Check, allAccessGroups);
 
     if (Object.keys(conversations).length === 0) {
-      const txnHashHex = await encryptAndSendNewMessage(
+      const { TxnHashHex: txnHashHex } = await encryptAndSendNewMessage(
         "Hi. This is my first test message!",
         userPublicKeyBase58Check,
         USER_TO_SEND_MESSAGE_TO
@@ -352,7 +352,15 @@ export const encryptAndSendNewMessage = async (
   extraData?: { [k: string]: string },
   imageURLs?: string[],
   videoURLs?: string[]
-): Promise<string> => {
+): Promise<{
+  TxnHashHex: string;
+  EncryptedMessageText: string;
+  ExtraData: { [k: string]: string };
+  SenderAccessGroupPublicKeyBase58Check: string;
+  SenderAccessGroupKeyName: string;
+  RecipientAccessGroupPublicKeyBase58Check: string;
+  RecipientAccessGroupKeyName: string;
+}> => {
   if (SenderMessagingKeyName !== DEFAULT_KEY_MESSAGING_GROUP_NAME) {
     return Promise.reject("sender must use default key for now");
   }
@@ -464,7 +472,15 @@ export const encryptAndSendNewMessage = async (
     throw new Error("Failed to submit transaction for sending message.");
   }
 
-  return submittedTransactionResponse.TxnHashHex;
+  return {
+    TxnHashHex: submittedTransactionResponse.TxnHashHex,
+    EncryptedMessageText: message,
+    ExtraData,
+    SenderAccessGroupPublicKeyBase58Check: requestBody.SenderAccessGroupPublicKeyBase58Check || "",
+    SenderAccessGroupKeyName: requestBody.SenderAccessGroupKeyName || "",
+    RecipientAccessGroupPublicKeyBase58Check: requestBody.RecipientAccessGroupPublicKeyBase58Check || "",
+    RecipientAccessGroupKeyName: requestBody.RecipientAccessGroupKeyName || "",
+  };
 };
 
 export async function fetchPaginatedDmThreadMessages(

@@ -1,8 +1,15 @@
-import { useContext, useCallback } from "react";
+import { useContext, useCallback, useEffect } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQuery } from "@tanstack/react-query";
 import { fetchConversations, getConversationsQueryKey } from "../../state/queries/messages/list";
 import { identity } from "deso-protocol";
+import {
+  getSupabaseClient,
+  isSupabaseConfigured,
+  SUPABASE_MESSAGES_FILTER_COLUMN,
+  SUPABASE_MESSAGES_TABLE,
+  SUPABASE_REALTIME_SCHEMA,
+} from "../../lib/supabaseClient";
 
 export const useConversations = () => {
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -37,6 +44,47 @@ export const useConversations = () => {
     enabled: !!currentUser?.PublicKeyBase58Check,
     staleTime: 1000 * 30, // 30 seconds
   });
+
+  useEffect(() => {
+    const userPublicKey = currentUser?.PublicKeyBase58Check;
+    const supabaseEnabled = isSupabaseConfigured();
+    const schema = SUPABASE_REALTIME_SCHEMA?.trim();
+    const table = SUPABASE_MESSAGES_TABLE?.trim();
+
+    if (!supabaseEnabled || !userPublicKey || !schema || !table) {
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    const channelIdentifier = `messages:${userPublicKey}`;
+    const filterColumn = SUPABASE_MESSAGES_FILTER_COLUMN?.trim();
+
+    const channel = supabase
+      .channel(channelIdentifier)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema,
+          table,
+          filter: filterColumn ? `${filterColumn}=eq.${userPublicKey}` : undefined,
+        },
+        () => {
+          void refetch();
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.warn("Supabase realtime subscription error", err);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn("Supabase realtime subscription status", status);
+        }
+      });
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [currentUser?.PublicKeyBase58Check, refetch]);
 
   return {
     conversations: data?.conversations ?? {},

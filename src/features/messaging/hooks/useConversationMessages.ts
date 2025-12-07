@@ -4,11 +4,13 @@ import {
     DecryptedMessageEntryResponse,
     PublicKeyToProfileEntryResponseMap,
     AccessGroupEntryResponse,
+    NewMessageEntryResponse,
 } from "deso-protocol";
 import {
     encryptAndSendNewMessage,
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
+    decryptAccessGroupMessages,
 } from "../../../services/conversations";
 import {
     AUTO_LOAD_DELAY_MS,
@@ -20,6 +22,7 @@ import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from 
 import { DeviceEventEmitter } from "react-native";
 import { OUTGOING_MESSAGE_EVENT } from "../../../constants/events";
 import { StorageService } from "../../../services/storage";
+import { getSupabaseClient, isSupabaseConfigured, type MessageBroadcastPayload } from "../../../lib/supabaseClient";
 
 type UseConversationMessagesProps = {
     threadPublicKey: string;
@@ -141,7 +144,10 @@ export const useConversationMessages = ({
                 }
             });
 
-            return normalizeAndSortMessages(Array.from(map.values()));
+            // Sort ascending first to handle edits correctly, then reverse to get descending (newest first)
+            // This is required because FlashList is inverted
+            const ascending = normalizeAndSortMessages(Array.from(map.values()));
+            return ascending.reverse();
         },
         []
     );
@@ -466,6 +472,90 @@ export const useConversationMessages = ({
         threadAccessGroupKeyName,
         conversationId,
     ]);
+
+    // Subscribe to Supabase broadcasts for instant message delivery
+    useEffect(() => {
+        if (!isSupabaseConfigured()) {
+            return;
+        }
+
+        const supabase = getSupabaseClient();
+        const channelName = `messages-${conversationId}`;
+
+        console.log('[useConversationMessages] Subscribing to broadcast channel:', channelName);
+
+        const channel = supabase.channel(channelName, {
+            config: {
+                broadcast: { self: false }, // Don't receive own messages
+            },
+        });
+
+        channel.on('broadcast', { event: 'message' }, async ({ payload }) => {
+            const messagePayload = payload as MessageBroadcastPayload;
+            console.log('🔥 [useConversationMessages] INCOMING BROADCAST RECEIVED:', JSON.stringify(messagePayload, null, 2));
+
+            // Only process messages for this conversation
+            if (messagePayload.conversationId !== conversationId) {
+                console.log('⚠️ [useConversationMessages] Ignoring broadcast for different conversation:', messagePayload.conversationId);
+                return;
+            }
+
+            // Construct a NewMessageEntryResponse from the broadcast payload
+            const encryptedMessage: NewMessageEntryResponse = {
+                ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
+                SenderInfo: {
+                    OwnerPublicKeyBase58Check: messagePayload.senderPublicKey || "",
+                    AccessGroupPublicKeyBase58Check: messagePayload.SenderAccessGroupPublicKeyBase58Check || "",
+                    AccessGroupKeyName: messagePayload.SenderAccessGroupKeyName || "",
+                },
+                RecipientInfo: {
+                    OwnerPublicKeyBase58Check: (messagePayload.recipients && messagePayload.recipients[0]) || "",
+                    AccessGroupPublicKeyBase58Check: messagePayload.RecipientAccessGroupPublicKeyBase58Check || "",
+                    AccessGroupKeyName: messagePayload.RecipientAccessGroupKeyName || "",
+                },
+                MessageInfo: {
+                    EncryptedText: messagePayload.EncryptedMessageText || "",
+                    TimestampNanos: messagePayload.timestampNanos,
+                    TimestampNanosString: String(messagePayload.timestampNanos),
+                    ExtraData: messagePayload.ExtraData || {},
+                },
+            };
+
+            console.log('🔐 [useConversationMessages] Decrypting incoming broadcast...');
+
+            try {
+                // Decrypt the message using the existing access groups
+                const [decryptedMessage] = await decryptAccessGroupMessages(
+                    [encryptedMessage],
+                    accessGroupsRef.current
+                );
+
+                if (decryptedMessage) {
+                    console.log('✅ [useConversationMessages] Decryption successful, appending message:', decryptedMessage.MessageInfo?.TimestampNanosString);
+
+                    setMessages((prev) => {
+                        const updated = mergeMessages(prev, [decryptedMessage]);
+                        // Cache updated messages
+                        StorageService.saveChatHistory(conversationId, updated);
+                        return updated;
+                    });
+                } else {
+                    console.warn('⚠️ [useConversationMessages] Decryption returned null');
+                }
+            } catch (err) {
+                console.error('❌ [useConversationMessages] Failed to decrypt broadcast message:', err);
+            }
+        });
+
+        channel.subscribe((status) => {
+            console.log('[useConversationMessages] Broadcast subscription status:', status);
+        });
+
+        return () => {
+            console.log('[useConversationMessages] Unsubscribing from broadcast channel');
+            channel.unsubscribe();
+        };
+    }, [conversationId, loadMessages]);
 
     // Create a lookup map for fast message retrieval by ID
     const messageIdMap = useMemo(() => {
