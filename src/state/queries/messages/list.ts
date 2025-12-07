@@ -6,6 +6,7 @@ import {
 import {
   ConversationMap,
   getConversationsNewMap,
+  getConversationsFromFocusGraphql,
 } from "../../../services/conversations";
 import { fetchAccessGroupMembers, GroupMember } from "../../../services/desoGraphql";
 
@@ -21,12 +22,34 @@ export const fetchConversations = async (userPublicKey: string) => {
     PublicKeyBase58Check: userPublicKey,
   });
 
-  const allAccessGroups = (AccessGroupsOwned || []).concat(
+  let allAccessGroups = (AccessGroupsOwned || []).concat(
     AccessGroupsMember || []
   );
 
-  const { conversations, publicKeyToProfileEntryResponseMap } =
-    await getConversationsNewMap(userPublicKey, allAccessGroups);
+  let conversations: ConversationMap = {};
+  let publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap = {};
+
+  try {
+    const focusResult = await getConversationsFromFocusGraphql(
+      userPublicKey,
+      allAccessGroups
+    );
+
+    conversations = focusResult.conversations;
+    publicKeyToProfileEntryResponseMap =
+      focusResult.publicKeyToProfileEntryResponseMap;
+    allAccessGroups = focusResult.updatedAllAccessGroups;
+  } catch (err) {
+    console.warn("Focus GraphQL inbox fetch failed, falling back", err);
+  }
+
+  if (Object.keys(conversations).length === 0) {
+    const fallback = await getConversationsNewMap(userPublicKey, allAccessGroups);
+    conversations = fallback.conversations;
+    publicKeyToProfileEntryResponseMap =
+      fallback.publicKeyToProfileEntryResponseMap;
+    allAccessGroups = fallback.updatedAllAccessGroups;
+  }
 
   // Fetch group members for avatars
   const groupChats = Object.values(conversations).filter(
