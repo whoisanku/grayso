@@ -91,7 +91,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [counterPartyPublicKey, threadAccessGroupKeyName, isGroupChat, userPublicKey]);
 
   const insets = useSafeAreaInsets();
-  const { isDark, accentColor } = useAccentColor();
+  const { isDark, accentColor, accentSoft, accentStrong } = useAccentColor();
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   // --- Custom Hooks ---
@@ -180,6 +180,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   // Search Debounce
   useEffect(() => {
@@ -191,6 +192,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           // Filter out existing members
           const existingMemberKeys = new Set(groupMembers.map(m => m.publicKey));
           setSearchResults(results.filter(r => !existingMemberKeys.has(r.publicKey)));
+          setHasSearched(true);
         } catch (e) {
           console.error("Search failed", e);
         } finally {
@@ -198,6 +200,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
         }
       } else {
         setSearchResults([]);
+        setHasSearched(false);
       }
     }, 500);
 
@@ -316,8 +319,11 @@ export default function ConversationScreen({ navigation, route }: Props) {
   const headerDisplayName = useMemo(() => {
     if (title?.trim()) return title.trim();
     if (isGroupChat) return recipientInfo?.AccessGroupKeyName || headerProfile?.Username || "Group";
+    // Check recipientInfo.username first for new conversations (when headerProfile doesn't exist yet)
+    const recipientUsername = (recipientInfo as { username?: string })?.username;
+    if (recipientUsername) return recipientUsername;
     return getProfileDisplayName(headerProfile, counterPartyPublicKey);
-  }, [counterPartyPublicKey, headerProfile, isGroupChat, recipientInfo?.AccessGroupKeyName, title]);
+  }, [counterPartyPublicKey, headerProfile, isGroupChat, recipientInfo, title]);
 
   const headerAvatarUri = useMemo(() => {
     if (isGroupChat) {
@@ -541,6 +547,12 @@ export default function ConversationScreen({ navigation, route }: Props) {
               scrollEventThrottle={16}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
+              // Performance optimizations - especially important for web
+              windowSize={Platform.OS === 'web' ? 21 : 11}
+              maxToRenderPerBatch={Platform.OS === 'web' ? 5 : 10}
+              initialNumToRender={Platform.OS === 'web' ? 15 : 20}
+              removeClippedSubviews={Platform.OS !== 'web'}
+              updateCellsBatchingPeriod={Platform.OS === 'web' ? 100 : 50}
               ListEmptyComponent={() => (
                 <View className="items-center justify-center px-6 py-10" style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}>
                   {isLoading ? (
@@ -739,163 +751,279 @@ export default function ConversationScreen({ navigation, route }: Props) {
         visible={showMembersModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowMembersModal(false)}
+        onRequestClose={() => {
+          if (showAddMemberModal) {
+            setShowAddMemberModal(false);
+          } else {
+            setShowMembersModal(false);
+          }
+        }}
       >
         <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-            <Text className="text-xl font-bold text-[#111] dark:text-white">Group Members</Text>
-            <View className="flex-row items-center">
-              {isOwner && (
-                <TouchableOpacity
-                  onPress={() => setShowAddMemberModal(true)}
-                  className="mr-4 p-1"
-                >
-                  <Feather name="user-plus" size={24} color={accentColor} />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={() => setShowMembersModal(false)} className="p-1">
-                <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
+          {/* Conditional header based on which view is active */}
+          {showAddMemberModal ? (
+            // Add Member Header
+            <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+              <TouchableOpacity 
+                onPress={() => setShowAddMemberModal(false)}
+                style={{ padding: 4 }}
+              >
+                <Feather name="arrow-left" size={24} color={isDark ? "#fff" : "#111"} />
               </TouchableOpacity>
+              <Text className="text-xl font-bold text-[#111] dark:text-white">Add Member</Text>
+              <View style={{ width: 32 }} />
             </View>
-          </View>
-          <FlatList
-            data={groupMembers}
-            keyExtractor={(item) => item.publicKey}
-            renderItem={({ item: member }) => {
-              const memberImageUrl = member.profilePic
-                ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
-                : getProfileImageUrl(member.publicKey);
-              const isMe = member.publicKey === userPublicKey;
-
-              return (
-                <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
-                  <Image
-                    source={{ uri: memberImageUrl }}
-                    className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
-                    resizeMode="cover"
-                  />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-base font-semibold text-[#111] dark:text-white mb-0.5">
-                      {member.username || "Anonymous"} {isMe && "(You)"}
-                    </Text>
-                    <Text className="text-xs text-gray-500 dark:text-gray-400" numberOfLines={1}>
-                      {member.publicKey}
-                    </Text>
-                  </View>
-                  {isOwner && !isMe && (
-                    <TouchableOpacity
-                      onPress={() => handleRemoveMember(member.publicKey, member.username || "")}
-                      className="p-2 bg-red-50 dark:bg-red-900/20 rounded-full"
-                      disabled={isRemovingMember}
-                    >
-                      <Feather name="trash-2" size={18} color="#ef4444" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            }}
-            ListEmptyComponent={
-              !loadingMembers ? (
-                <View className="flex-1 items-center justify-center py-14">
-                  <Feather name="users" size={48} color="#9ca3af" />
-                  <Text className="mt-4 text-base text-gray-500">No members found</Text>
-                </View>
-              ) : (
-                <View className="flex-1 items-center justify-center py-14">
-                  <ActivityIndicator size="large" color={accentColor} />
-                </View>
-              )
-            }
-          />
-        </SafeAreaView>
-      </Modal>
-
-      {/* Add Member Modal */}
-      <Modal
-        visible={showAddMemberModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAddMemberModal(false)}
-      >
-        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-            <Text className="text-xl font-bold text-[#111] dark:text-white">Add Member</Text>
-            <TouchableOpacity onPress={() => setShowAddMemberModal(false)} className="p-1">
-              <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
-            </TouchableOpacity>
-          </View>
-
-          <View className="px-5 py-3">
-            <View className="flex-row items-center bg-gray-100 dark:bg-slate-800 rounded-xl px-3 py-2">
-              <Feather name="search" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search by username..."
-                placeholderTextColor={isDark ? "#94a3b8" : "#64748b"}
-                className="flex-1 ml-2 text-base text-[#111] dark:text-white h-10"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          </View>
-
-          <FlatList
-            data={searchResults}
-            extraData={addingMemberKey}
-            keyExtractor={(item) => item.publicKey}
-            renderItem={({ item: user }) => {
-              const userImageUrl = getProfileImageUrl(user.publicKey || "");
-              const isAddingThisUser = addingMemberKey === user.publicKey;
-
-              return (
-                <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
-                  <Image
-                    source={{ uri: userImageUrl }}
-                    className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
-                    resizeMode="cover"
-                  />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-base font-semibold text-[#111] dark:text-white mb-0.5">
-                      {user.username || "Anonymous"}
-                    </Text>
-                    <Text className="text-xs text-gray-500 dark:text-gray-400" numberOfLines={1}>
-                      {user.publicKey}
-                    </Text>
-                  </View>
+          ) : (
+            // Group Members Header
+            <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+              <Text className="text-xl font-bold text-[#111] dark:text-white">Group Members</Text>
+              <View className="flex-row items-center">
+                {isOwner && (
                   <TouchableOpacity
-                    onPress={() => handleAddMember(user)}
-                    disabled={!!addingMemberKey}
-                    className="bg-blue-500 px-4 py-2 rounded-full"
+                    onPress={() => setShowAddMemberModal(true)}
+                    style={{ marginRight: 16, padding: 8 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    activeOpacity={0.7}
                   >
-                    {isAddingThisUser ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Text className="text-white font-semibold">Add</Text>
-                    )}
+                    <Feather name="user-plus" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
                   </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowMembersModal(false)} className="p-1">
+                  <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Conditional content based on which view is active */}
+          {showAddMemberModal ? (
+            // Add Member Content
+            <>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
+                  height: 50,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
+                }}>
+                  <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search by username..."
+                    placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                    style={{
+                      flex: 1,
+                      marginLeft: 12,
+                      fontSize: 16,
+                      color: isDark ? '#ffffff' : '#0f172a',
+                      ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
                 </View>
-              );
-            }}
-            ListEmptyComponent={
-              isSearching ? (
-                <View className="flex-1 items-center justify-center py-14">
-                  <ActivityIndicator size="large" color={accentColor} />
-                </View>
-              ) : searchQuery.length > 2 ? (
-                <View className="flex-1 items-center justify-center py-14">
-                  <Text className="text-base text-gray-500">No users found</Text>
-                </View>
-              ) : (
-                <View className="flex-1 items-center justify-center py-14">
-                  <Feather name="search" size={48} color="#9ca3af" />
-                  <Text className="mt-4 text-base text-gray-500">Search for users to add</Text>
-                </View>
-              )
-            }
-          />
+              </View>
+
+              <FlatList
+                data={searchResults}
+                extraData={addingMemberKey}
+                keyExtractor={(item) => item.publicKey}
+                renderItem={({ item: user }) => {
+                  const userImageUrl = getProfileImageUrl(user.publicKey || "");
+                  const isAddingThisUser = addingMemberKey === user.publicKey;
+
+                  return (
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 20,
+                      paddingVertical: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                    }}>
+                      <Image
+                        source={{ uri: userImageUrl }}
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 24,
+                          backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                        }}
+                        resizeMode="cover"
+                      />
+                      <View style={{ marginLeft: 14, flex: 1 }}>
+                        <Text style={{
+                          fontSize: 16,
+                          fontWeight: '600',
+                          color: isDark ? '#ffffff' : '#0f172a',
+                        }}>
+                          {user.username || "Anonymous"}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleAddMember(user)}
+                        disabled={!!addingMemberKey}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: accentColor,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {isAddingThisUser ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Feather name="plus" size={20} color="#ffffff" />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={
+                  isSearching ? (
+                    <View style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 60,
+                    }}>
+                      <ActivityIndicator size="large" color={accentColor} />
+                    </View>
+                  ) : hasSearched && searchResults.length === 0 ? (
+                    <View style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 40,
+                    }}>
+                      <View style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 32,
+                        backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 16,
+                      }}>
+                        <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+                      </View>
+                      <Text style={{
+                        fontSize: 16,
+                        fontWeight: '600',
+                        color: isDark ? '#94a3b8' : '#64748b',
+                      }}>No users found</Text>
+                    </View>
+                  ) : (
+                    <View style={{
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      paddingVertical: 40,
+                    }}>
+                      <View style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 32,
+                        backgroundColor: accentSoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 16,
+                      }}>
+                        <Feather name="search" size={28} color={accentStrong} />
+                      </View>
+                      <Text style={{
+                        fontSize: 16,
+                        fontWeight: '600',
+                        color: isDark ? '#e2e8f0' : '#334155',
+                      }}>Search for users to add</Text>
+                    </View>
+                  )
+                }
+              />
+            </>
+          ) : (
+            // Group Members Content
+            <FlatList
+              data={[...groupMembers].sort((a, b) => {
+                // Put admin (owner) at the top
+                if (a.publicKey === recipientOwnerKey) return -1;
+                if (b.publicKey === recipientOwnerKey) return 1;
+                return 0;
+              })}
+              keyExtractor={(item) => item.publicKey}
+              renderItem={({ item: member }) => {
+                const memberImageUrl = member.profilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                  : getProfileImageUrl(member.publicKey);
+                const isMe = member.publicKey === userPublicKey;
+                const isMemberOwner = member.publicKey === recipientOwnerKey;
+
+                return (
+                  <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
+                    <Image
+                      source={{ uri: memberImageUrl }}
+                      className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
+                      resizeMode="cover"
+                    />
+                    <View className="ml-3 flex-1">
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text className="text-base font-semibold text-[#111] dark:text-white">
+                          {member.username || "Anonymous"} {isMe && "(You)"}
+                        </Text>
+                        {isMemberOwner && (
+                          <View style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            backgroundColor: accentColor,
+                            borderRadius: 6,
+                          }}>
+                            <Text style={{
+                              fontSize: 10,
+                              fontWeight: '700',
+                              color: '#ffffff',
+                              textTransform: 'uppercase',
+                              letterSpacing: 0.5,
+                            }}>
+                              Admin
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {isOwner && !isMe && (
+                      <TouchableOpacity
+                        onPress={() => handleRemoveMember(member.publicKey, member.username || "")}
+                        className="p-2 rounded-full"
+                        style={{ backgroundColor: accentSoft }}
+                        disabled={isRemovingMember}
+                      >
+                        <Feather name="trash-2" size={18} color={accentStrong} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                !loadingMembers ? (
+                  <View className="flex-1 items-center justify-center py-14">
+                    <Feather name="users" size={48} color="#9ca3af" />
+                    <Text className="mt-4 text-base text-gray-500">No members found</Text>
+                  </View>
+                ) : (
+                  <View className="flex-1 items-center justify-center py-14">
+                    <ActivityIndicator size="large" color={accentColor} />
+                  </View>
+                )
+              }
+            />
+          )}
         </SafeAreaView>
       </Modal>
+
 
       {/* Remove Member Confirmation Modal */}
       <Modal

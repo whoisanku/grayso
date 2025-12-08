@@ -4,7 +4,7 @@ import HomeScreen from "../view/screens/HomeScreen";
 import ProfileScreen from "../view/screens/profile/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
-import EditIcon from "../assets/navIcons/edit.svg";
+
 import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, TouchableWithoutFeedback } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -68,7 +68,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             elevation: 5,
           }}
         >
-          <EditIcon width={24} height={24} stroke="white" strokeWidth={2.5} />
+          <Feather name="edit-2" size={24} color="white" />
         </TouchableOpacity>
       );
     }

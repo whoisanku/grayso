@@ -34,14 +34,14 @@ import {
   FALLBACK_PROFILE_IMAGE,
   getProfileImageUrl,
 } from "../../utils/deso";
-import { searchProfiles, ProfileSearchResult } from "../../services/desoGraphql";
+
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/events";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import type { ConversationMap } from "../../services/conversations";
 import { NewGroupChatModal } from "../components/NewGroupChatModal";
-import { UserSearchResult } from "../../services/userSearch";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Navigation types
@@ -117,7 +117,7 @@ export default function HomeScreen() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   // New chat modal state
   const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
-  const [newChatResults, setNewChatResults] = useState<ProfileSearchResult[]>([]);
+  const [newChatResults, setNewChatResults] = useState<UserSearchResult[]>([]);
   const [isSearchingNewChat, setIsSearchingNewChat] = useState(false);
   const [hasSearchedNewChat, setHasSearchedNewChat] = useState(false);
   const [activeMailbox, setActiveMailbox] = useState<"inbox" | "spam">("inbox");
@@ -171,13 +171,13 @@ export default function HomeScreen() {
 
     const timeoutId = setTimeout(async () => {
       setIsSearchingNewChat(true);
-      setHasSearchedNewChat(true);
       try {
-        const profiles = await searchProfiles({ query: newChatSearchQuery, limit: 10 });
-        const filtered = profiles.filter(
+        const results = await searchUsers(newChatSearchQuery);
+        const filtered = results.filter(
           (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
         );
         setNewChatResults(filtered);
+        setHasSearchedNewChat(true);
       } catch (error) {
         console.error("[HomeScreen] new chat search error:", error);
         setNewChatResults([]);
@@ -192,7 +192,7 @@ export default function HomeScreen() {
 
 
   // Handle selecting a profile for new DM
-  const handleSelectNewChatProfile = useCallback((profile: ProfileSearchResult) => {
+  const handleSelectNewChatProfile = useCallback((profile: UserSearchResult) => {
     const userPublicKey = currentUser?.PublicKeyBase58Check;
     if (!userPublicKey) return;
 
@@ -749,15 +749,17 @@ export default function HomeScreen() {
                 <View className="flex-row items-center">
                   {item.isGroup ? (
                     <View
-                      className="mr-2 rounded-full px-2 py-0.5"
-                      style={{ backgroundColor: accentSoft }}
+                      style={{ 
+                        width: 22, 
+                        height: 22, 
+                        borderRadius: 11, 
+                        backgroundColor: accentSoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 8,
+                      }}
                     >
-                      <Text
-                        className="text-[10px] font-bold uppercase"
-                        style={{ color: accentStrong }}
-                      >
-                        Group
-                      </Text>
+                      <Feather name="users" size={12} color={accentStrong} />
                     </View>
                   ) : null}
                   <Text
@@ -856,11 +858,26 @@ export default function HomeScreen() {
           </View>
 
           {/* Search Input */}
-          <View className="px-4 py-3">
-            <View className="h-12 flex-row items-center rounded-xl bg-slate-100 px-4 dark:bg-slate-800">
+          <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+              borderRadius: 14,
+              paddingHorizontal: 16,
+              height: 50,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
+            }}>
               <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
               <TextInput
-                className="ml-3 flex-1 text-base text-slate-900 dark:text-white"
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  fontSize: 16,
+                  color: isDark ? '#ffffff' : '#0f172a',
+                  ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                }}
                 placeholder="Search username..."
                 placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                 value={newChatSearchQuery}
@@ -875,7 +892,7 @@ export default function HomeScreen() {
           {/* Search Results */}
           {isSearchingNewChat ? (
             <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color={accentColor} />
+              <ActivityIndicator size="large" color={accentColor} />
             </View>
           ) : hasSearchedNewChat && newChatResults.length === 0 ? (
             <View className="flex-1 items-center justify-center px-8">
@@ -886,8 +903,15 @@ export default function HomeScreen() {
             </View>
           ) : !hasSearchedNewChat ? (
             <View className="flex-1 items-center justify-center px-8">
-              <View className="h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="search" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+              <View style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: accentSoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Feather name="search" size={28} color={accentStrong} />
               </View>
               <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
                 Find someone to chat with
@@ -904,25 +928,34 @@ export default function HomeScreen() {
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  className="flex-row items-center px-4 py-3"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 20,
+                    paddingVertical: 12,
+                  }}
                   onPress={() => handleSelectNewChatProfile(item)}
                   activeOpacity={0.7}
                 >
                   <Image
                     source={{
-                      uri: buildProfilePictureUrl(item.publicKey, { fallbackImageUrl: FALLBACK_PROFILE_IMAGE })
+                      uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE
                     }}
-                    className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    }}
                   />
-                  <View className="ml-3 flex-1">
-                    <Text className="text-base font-semibold text-slate-900 dark:text-white" numberOfLines={1}>
-                      {item.username || formatPublicKey(item.publicKey)}
+                  <View style={{ marginLeft: 14, flex: 1 }}>
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: '600',
+                      color: isDark ? '#ffffff' : '#0f172a',
+                    }} numberOfLines={1}>
+                      {item.username || "Anonymous"}
                     </Text>
-                    {item.username && (
-                      <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
-                        {formatPublicKey(item.publicKey)}
-                      </Text>
-                    )}
                   </View>
                 </TouchableOpacity>
               )}

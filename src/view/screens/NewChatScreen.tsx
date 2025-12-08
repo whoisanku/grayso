@@ -19,10 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ChatType } from "deso-protocol";
 import { LiquidGlassView } from "../../utils/liquidGlass";
-import {
-  searchProfiles,
-  ProfileSearchResult,
-} from "../../services/desoGraphql";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey } from "../../utils/deso";
 import { RootStackParamList } from "../../navigation/types";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../../constants/messaging";
@@ -35,8 +32,8 @@ function ProfileItem({
   onSelect,
   isDark,
 }: {
-  item: ProfileSearchResult;
-  onSelect: (profile: ProfileSearchResult) => void;
+  item: UserSearchResult;
+  onSelect: (profile: UserSearchResult) => void;
   isDark: boolean;
 }) {
   const avatarUrl = item.publicKey
@@ -82,7 +79,7 @@ export default function NewChatScreen() {
   const navigation = useNavigation<NewChatScreenNavigationProp>();
   
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<ProfileSearchResult[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -106,7 +103,7 @@ export default function NewChatScreen() {
       setIsLoading(true);
       setHasSearched(true);
       try {
-        const profiles = await searchProfiles({ query: searchQuery, limit: 6 });
+        const profiles = await searchUsers(searchQuery);
         const filtered = profiles.filter(
           (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
         );
@@ -123,7 +120,7 @@ export default function NewChatScreen() {
   }, [searchQuery, currentUser?.PublicKeyBase58Check]);
 
   const handleSelectProfile = useCallback(
-    (profile: ProfileSearchResult) => {
+    (profile: UserSearchResult) => {
       Keyboard.dismiss();
       
       const userPublicKey = currentUser?.PublicKeyBase58Check;

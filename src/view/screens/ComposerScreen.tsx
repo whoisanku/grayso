@@ -254,8 +254,12 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      className="rounded-full p-2.5"
       style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor: disabled
           ? isDark
             ? "rgba(51, 65, 85, 0.6)"
@@ -403,7 +407,10 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                   maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
                   autoFocus
                   textAlignVertical="top"
-                  style={{ paddingTop: 0 }}
+                  style={{ 
+                    paddingTop: 0,
+                    ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                  }}
                 />
               </View>
             </View>

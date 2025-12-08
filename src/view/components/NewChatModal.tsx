@@ -29,10 +29,7 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import {
-  searchProfiles,
-  ProfileSearchResult,
-} from "../../services/desoGraphql";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { FALLBACK_PROFILE_IMAGE } from "../../utils/deso";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import { useAccentColor } from "../../state/theme/useAccentColor";
@@ -40,7 +37,7 @@ import { useAccentColor } from "../../state/theme/useAccentColor";
 type NewChatModalProps = {
   visible: boolean;
   onClose: () => void;
-  onSelectProfile: (profile: ProfileSearchResult) => void;
+  onSelectProfile: (profile: UserSearchResult) => void;
 };
 
 function ProfileItem({
@@ -48,12 +45,13 @@ function ProfileItem({
   onSelect,
   isDark,
 }: {
-  item: ProfileSearchResult;
-  onSelect: (profile: ProfileSearchResult) => void;
+  item: UserSearchResult;
+  onSelect: (profile: UserSearchResult) => void;
   isDark: boolean;
 }) {
-  const avatarUrl = item.profilePic
-    ? `https://node.deso.org/api/v0/get-single-profile-picture/${item.publicKey}?fallback=${encodeURIComponent(item.profilePic)}`
+  const profilePic = item.extraData?.LargeProfilePicURL;
+  const avatarUrl = profilePic
+    ? `https://node.deso.org/api/v0/get-single-profile-picture/${item.publicKey}?fallback=${encodeURIComponent(profilePic)}`
     : buildProfilePictureUrl(item.publicKey, {
         fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
       });
@@ -167,7 +165,7 @@ export default function NewChatModal({
   const sheetTranslateY = useSharedValue(0);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<ProfileSearchResult[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -183,7 +181,7 @@ export default function NewChatModal({
       setIsLoading(true);
       setHasSearched(true);
       try {
-        const profiles = await searchProfiles({ query: searchQuery, limit: 6 });
+        const profiles = await searchUsers(searchQuery);
         // Filter out current user from results
         const filtered = profiles.filter(
           (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
@@ -216,7 +214,7 @@ export default function NewChatModal({
   }, [visible]);
 
   const handleSelectProfile = useCallback(
-    (profile: ProfileSearchResult) => {
+    (profile: UserSearchResult) => {
       Keyboard.dismiss();
       onSelectProfile(profile);
       onClose();

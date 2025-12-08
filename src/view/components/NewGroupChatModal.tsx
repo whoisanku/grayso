@@ -11,15 +11,19 @@ import {
     SafeAreaView,
     ScrollView,
     Alert,
+    Platform,
+    Keyboard,
+    KeyboardAvoidingView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useColorScheme } from 'nativewind';
 import { DeSoIdentityContext } from 'react-deso-protocol';
 import { searchUsers, UserSearchResult } from '../../services/userSearch';
 import { createGroupChat } from '../../services/groupChat';
 import { FALLBACK_PROFILE_IMAGE, getProfileImageUrl } from '../../utils/deso';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '../../services/media';
+import { useAccentColor } from '../../state/theme/useAccentColor';
+import { LiquidGlassView } from '../../utils/liquidGlass';
 
 interface NewGroupChatModalProps {
     visible: boolean;
@@ -29,8 +33,7 @@ interface NewGroupChatModalProps {
 }
 
 export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigateToGroup }: NewGroupChatModalProps) {
-    const { colorScheme } = useColorScheme();
-    const isDark = colorScheme === 'dark';
+    const { isDark, accentColor, accentStrong, accentSoft, accentSurface, onAccent } = useAccentColor();
     const { currentUser } = useContext(DeSoIdentityContext);
 
     const [groupName, setGroupName] = useState('');
@@ -42,6 +45,36 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
     const [groupImageUri, setGroupImageUri] = useState<string | null>(null);
     const [groupImageUrl, setGroupImageUrl] = useState<string | null>(null);
     const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+    // Track keyboard visibility for conditional rendering
+    useEffect(() => {
+        const showSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            () => setIsKeyboardVisible(true)
+        );
+        const hideSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => setIsKeyboardVisible(false)
+        );
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
+
+    // Reset state when modal closes
+    useEffect(() => {
+        if (!visible) {
+            setGroupName('');
+            setSearchQuery('');
+            setSearchResults([]);
+            setSelectedMembers([]);
+            setGroupImageUri(null);
+            setGroupImageUrl(null);
+            setIsKeyboardVisible(false);
+        }
+    }, [visible]);
 
     // Debounced search
     useEffect(() => {
@@ -72,7 +105,7 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
     const handleSelectMember = (user: UserSearchResult) => {
         setSelectedMembers(prev => [...prev, user]);
         setSearchResults(prev => prev.filter(u => u.publicKey !== user.publicKey));
-        setSearchQuery(''); // Optional: clear search after selection
+        setSearchQuery('');
     };
 
     const handleRemoveMember = (publicKey: string) => {
@@ -140,6 +173,8 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
         }
     };
 
+    const isFormValid = groupName.trim() && selectedMembers.length > 0 && !isCreating;
+
     return (
         <Modal
             visible={visible}
@@ -147,46 +182,178 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
             presentationStyle="pageSheet"
             onRequestClose={onClose}
         >
-            <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+            <KeyboardAvoidingView 
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+            <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
                 {/* Header */}
-                <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-                    <Text className="text-xl font-bold text-[#111] dark:text-white">New Group Chat</Text>
-                    <TouchableOpacity onPress={onClose} className="p-1" disabled={isCreating}>
-                        <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
+                <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 20,
+                    paddingVertical: 16,
+                    borderBottomWidth: 1,
+                    borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
+                }}>
+                    <Text style={{
+                        fontSize: 22,
+                        fontWeight: '800',
+                        color: isDark ? '#ffffff' : '#0f172a',
+                        letterSpacing: -0.5,
+                    }}>
+                        New Group Chat
+                    </Text>
+                    <TouchableOpacity
+                        onPress={onClose}
+                        disabled={isCreating}
+                        activeOpacity={0.7}
+                        style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
                     </TouchableOpacity>
                 </View>
 
-
-                {/* Group Details */}
-                <View className="px-5 py-4 flex-row items-center border-b border-gray-100 dark:border-slate-800">
+                {/* Group Image & Name Section - Hidden when keyboard is visible */}
+                {!isKeyboardVisible && (
+                <View style={{
+                    paddingHorizontal: 20,
+                    paddingVertical: 24,
+                    alignItems: 'center',
+                    borderBottomWidth: 1,
+                    borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                }}>
+                    {/* Group Image Picker with Glow Effect */}
                     <TouchableOpacity
                         onPress={handlePickImage}
-                        activeOpacity={0.7}
-                        className="mr-4 relative"
+                        activeOpacity={0.8}
                         disabled={isCreating || isUploadingImage}
+                        style={{
+                            marginBottom: 20,
+                        }}
                     >
-                        {groupImageUri ? (
-                            <>
+                        <View style={{
+                            position: 'relative',
+                        }}>
+                            {/* Glow effect when image is selected */}
+                            {groupImageUri && (
+                                <View style={{
+                                    position: 'absolute',
+                                    top: -4,
+                                    left: -4,
+                                    right: -4,
+                                    bottom: -4,
+                                    borderRadius: 52,
+                                    backgroundColor: accentColor,
+                                    opacity: 0.3,
+                                    ...(Platform.OS === 'ios' && {
+                                        shadowColor: accentColor,
+                                        shadowOffset: { width: 0, height: 0 },
+                                        shadowOpacity: 0.5,
+                                        shadowRadius: 20,
+                                    }),
+                                }} />
+                            )}
+                            {groupImageUri ? (
                                 <Image
                                     source={{ uri: groupImageUri }}
-                                    className="h-16 w-16 rounded-full bg-slate-200 dark:bg-slate-700"
+                                    style={{
+                                        width: 96,
+                                        height: 96,
+                                        borderRadius: 48,
+                                        borderWidth: 3,
+                                        borderColor: accentColor,
+                                    }}
                                 />
-                                {isUploadingImage && (
-                                    <View className="absolute inset-0 h-16 w-16 rounded-full bg-black/50 items-center justify-center">
-                                        <ActivityIndicator color="white" size="small" />
-                                    </View>
-                                )}
-                            </>
-                        ) : (
-                            <View className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-800 items-center justify-center">
-                                <Feather name="camera" size={24} color={isDark ? "#64748b" : "#94a3b8"} />
-                            </View>
-                        )}
+                            ) : (
+                                <View style={{
+                                    width: 96,
+                                    height: 96,
+                                    borderRadius: 48,
+                                    backgroundColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderWidth: 2,
+                                    borderColor: isDark ? 'rgba(71, 85, 105, 0.5)' : 'rgba(203, 213, 225, 0.8)',
+                                    borderStyle: 'dashed',
+                                }}>
+                                    <Feather name="camera" size={32} color={isDark ? "#64748b" : "#94a3b8"} />
+                                    <Text style={{
+                                        marginTop: 4,
+                                        fontSize: 11,
+                                        fontWeight: '600',
+                                        color: isDark ? '#64748b' : '#94a3b8',
+                                    }}>
+                                        Add Photo
+                                    </Text>
+                                </View>
+                            )}
+                            {isUploadingImage && (
+                                <View style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    width: 96,
+                                    height: 96,
+                                    borderRadius: 48,
+                                    backgroundColor: 'rgba(0,0,0,0.6)',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}>
+                                    <ActivityIndicator color="white" size="small" />
+                                </View>
+                            )}
+                            {/* Edit badge */}
+                            {groupImageUri && !isUploadingImage && (
+                                <View style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    right: 0,
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: 14,
+                                    backgroundColor: accentColor,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderWidth: 2,
+                                    borderColor: isDark ? '#0a0f1a' : '#ffffff',
+                                }}>
+                                    <Feather name="edit-2" size={12} color="#ffffff" />
+                                </View>
+                            )}
+                        </View>
                     </TouchableOpacity>
-                    <View className="flex-1">
+
+                    {/* Group Name Input */}
+                    <View style={{
+                        width: '100%',
+                        maxWidth: 300,
+                    }}>
                         <TextInput
-                            className="text-lg font-semibold text-slate-900 dark:text-white"
-                            placeholder="Group name"
+                            style={{
+                                fontSize: 20,
+                                fontWeight: '700',
+                                color: isDark ? '#ffffff' : '#0f172a',
+                                textAlign: 'center',
+                                paddingVertical: 12,
+                                paddingHorizontal: 16,
+                                backgroundColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                                borderRadius: 16,
+                                borderWidth: 1,
+                                borderColor: isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)',
+                                ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                            }}
+                            placeholder="Enter group name"
                             placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                             value={groupName}
                             onChangeText={setGroupName}
@@ -195,13 +362,29 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                         />
                     </View>
                 </View>
+                )}
 
-                {/* Search Input */}
-                <View className="px-4 py-3">
-                    <View className="h-12 flex-row items-center rounded-xl bg-slate-100 px-4 dark:bg-slate-800">
+                {/* Search Section */}
+                <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 }}>
+                    <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                        borderRadius: 14,
+                        paddingHorizontal: 16,
+                        height: 50,
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
+                    }}>
                         <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
                         <TextInput
-                            className="ml-3 flex-1 text-base text-slate-900 dark:text-white"
+                            style={{
+                                flex: 1,
+                                marginLeft: 12,
+                                fontSize: 16,
+                                color: isDark ? '#ffffff' : '#0f172a',
+                                ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                            }}
                             placeholder="Search username..."
                             placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                             value={searchQuery}
@@ -210,43 +393,101 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                             autoCorrect={false}
                             editable={!isCreating}
                         />
-                        {isSearching && <ActivityIndicator size="small" color="#0085ff" />}
+                        {isSearching && <ActivityIndicator size="small" color={accentColor} />}
                     </View>
                 </View>
 
-                {/* Selected Members */}
+                {/* Selected Members - Wrapping Chips */}
                 {selectedMembers.length > 0 && (
-                    <View className="px-5 pb-3">
-                        <Text className="mb-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                            Selected Members ({selectedMembers.length})
-                        </Text>
-                        <View className="gap-2">
+                    <View style={{ 
+                        maxHeight: 140, 
+                        borderBottomWidth: 1,
+                        borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                    }}>
+                        <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingHorizontal: 16,
+                            paddingTop: 12,
+                            paddingBottom: 8,
+                        }}>
+                            <View style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 4,
+                                backgroundColor: accentSoft,
+                                borderRadius: 10,
+                            }}>
+                                <Text style={{
+                                    fontSize: 12,
+                                    fontWeight: '700',
+                                    color: accentStrong,
+                                }}>
+                                    {selectedMembers.length} {selectedMembers.length === 1 ? 'member' : 'members'}
+                                </Text>
+                            </View>
+                        </View>
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ 
+                                paddingHorizontal: 16, 
+                                paddingBottom: 12,
+                                flexDirection: 'row',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                            }}
+                        >
                             {selectedMembers.map((member) => (
                                 <View
                                     key={member.publicKey}
-                                    className="flex-row items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-900"
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)',
+                                        borderRadius: 20,
+                                        paddingLeft: 4,
+                                        paddingRight: 10,
+                                        paddingVertical: 4,
+                                        borderWidth: 1,
+                                        borderColor: isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)',
+                                    }}
                                 >
-                                    <View className="flex-row items-center flex-1">
-                                        <Image
-                                            source={{ uri: getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE }}
-                                            className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 mr-3"
-                                        />
-                                        <View className="flex-1">
-                                            <Text className="text-base font-semibold text-slate-900 dark:text-white">
-                                                {member.username}
-                                            </Text>
-                                        </View>
-                                    </View>
+                                    <Image
+                                        source={{ uri: getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE }}
+                                        style={{
+                                            width: 28,
+                                            height: 28,
+                                            borderRadius: 14,
+                                            marginRight: 6,
+                                        }}
+                                    />
+                                    <Text style={{
+                                        fontSize: 13,
+                                        fontWeight: '600',
+                                        color: isDark ? '#ffffff' : '#0f172a',
+                                        marginRight: 6,
+                                        maxWidth: 100,
+                                    }} numberOfLines={1}>
+                                        {member.username}
+                                    </Text>
                                     <TouchableOpacity
                                         onPress={() => handleRemoveMember(member.publicKey)}
-                                        className="h-8 w-8 items-center justify-center rounded-full bg-blue-500"
                                         disabled={isCreating}
+                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                     >
-                                        <Feather name="check" size={16} color="white" />
+                                        <View style={{
+                                            width: 18,
+                                            height: 18,
+                                            borderRadius: 9,
+                                            backgroundColor: isDark ? 'rgba(71, 85, 105, 0.8)' : 'rgba(203, 213, 225, 0.8)',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}>
+                                            <Feather name="x" size={10} color={isDark ? "#94a3b8" : "#64748b"} />
+                                        </View>
                                     </TouchableOpacity>
                                 </View>
                             ))}
-                        </View>
+                        </ScrollView>
                     </View>
                 )}
 
@@ -255,55 +496,184 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                     data={searchResults}
                     keyExtractor={(item) => item.publicKey}
                     keyboardShouldPersistTaps="handled"
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                    ListEmptyComponent={
+                        searchQuery.trim().length > 0 && !isSearching ? (
+                            <View style={{
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingVertical: 40,
+                                paddingHorizontal: 24,
+                            }}>
+                                <View style={{
+                                    width: 64,
+                                    height: 64,
+                                    borderRadius: 32,
+                                    backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginBottom: 16,
+                                }}>
+                                    <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+                                </View>
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '600',
+                                    color: isDark ? '#94a3b8' : '#64748b',
+                                    textAlign: 'center',
+                                }}>
+                                    No users found
+                                </Text>
+                                <Text style={{
+                                    fontSize: 14,
+                                    color: isDark ? '#64748b' : '#94a3b8',
+                                    textAlign: 'center',
+                                    marginTop: 4,
+                                }}>
+                                    Try a different username
+                                </Text>
+                            </View>
+                        ) : searchQuery.trim().length === 0 && selectedMembers.length === 0 ? (
+                            <View style={{
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingVertical: 40,
+                                paddingHorizontal: 24,
+                            }}>
+                                <View style={{
+                                    width: 64,
+                                    height: 64,
+                                    borderRadius: 32,
+                                    backgroundColor: accentSoft,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginBottom: 16,
+                                }}>
+                                    <Feather name="user-plus" size={28} color={accentStrong} />
+                                </View>
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '600',
+                                    color: isDark ? '#e2e8f0' : '#334155',
+                                    textAlign: 'center',
+                                }}>
+                                    Add members to your group
+                                </Text>
+                                <Text style={{
+                                    fontSize: 14,
+                                    color: isDark ? '#64748b' : '#94a3b8',
+                                    textAlign: 'center',
+                                    marginTop: 4,
+                                }}>
+                                    Search for users by their username
+                                </Text>
+                            </View>
+                        ) : null
+                    }
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             onPress={() => handleSelectMember(item)}
-                            className="flex-row items-center px-5 py-3 active:bg-slate-50 dark:active:bg-slate-900"
+                            activeOpacity={0.7}
                             disabled={isCreating}
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingHorizontal: 20,
+                                paddingVertical: 12,
+                            }}
                         >
                             <Image
                                 source={{ uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE }}
-                                className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700 mr-3"
+                                style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 24,
+                                    marginRight: 14,
+                                    backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                                }}
                             />
-                            <View>
-                                <Text className="text-base font-semibold text-slate-900 dark:text-white">
+                            <View style={{ flex: 1 }}>
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '600',
+                                    color: isDark ? '#ffffff' : '#0f172a',
+                                }}>
                                     {item.username}
                                 </Text>
                                 {item.extraData?.DisplayName && (
-                                    <Text className="text-sm text-slate-500 dark:text-slate-400">
+                                    <Text style={{
+                                        fontSize: 14,
+                                        color: isDark ? '#64748b' : '#94a3b8',
+                                        marginTop: 2,
+                                    }}>
                                         {item.extraData.DisplayName}
                                     </Text>
                                 )}
+                            </View>
+                            <View style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 16,
+                                backgroundColor: accentSoft,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}>
+                                <Feather name="plus" size={16} color={accentStrong} />
                             </View>
                         </TouchableOpacity>
                     )}
                 />
 
                 {/* Create Button */}
-                <View className="p-4 border-t border-gray-100 dark:border-slate-800">
+                <View style={{
+                    padding: 16,
+                    borderTopWidth: 1,
+                    borderTopColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 0.8)',
+                    backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+                }}>
                     <TouchableOpacity
                         onPress={handleCreate}
-                        disabled={!groupName.trim() || selectedMembers.length === 0 || isCreating}
-                        className={`w-full rounded-xl py-4 items-center ${!groupName.trim() || selectedMembers.length === 0 || isCreating
-                            ? 'bg-slate-100 dark:bg-slate-800'
-                            : 'bg-[#0085ff]'
-                            }`}
+                        disabled={!isFormValid}
+                        activeOpacity={0.8}
+                        style={{
+                            width: '100%',
+                            borderRadius: 16,
+                            paddingVertical: 16,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: isFormValid ? accentColor : (isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)'),
+                            ...(isFormValid && Platform.OS === 'ios' && {
+                                shadowColor: accentColor,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 8,
+                            }),
+                        }}
                     >
                         {isCreating ? (
-                            <ActivityIndicator color={!groupName.trim() || selectedMembers.length === 0 ? "#94a3b8" : "white"} />
+                            <ActivityIndicator color={isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8")} />
                         ) : (
-                            <Text
-                                className={`text-base font-bold ${!groupName.trim() || selectedMembers.length === 0
-                                    ? 'text-slate-400 dark:text-slate-500'
-                                    : 'text-white'
-                                    }`}
-                            >
-                                Create Group
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Feather
+                                    name="users"
+                                    size={18}
+                                    color={isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8")}
+                                    style={{ marginRight: 8 }}
+                                />
+                                <Text style={{
+                                    fontSize: 16,
+                                    fontWeight: '700',
+                                    color: isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8"),
+                                }}>
+                                    Create Group
+                                </Text>
+                            </View>
                         )}
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
-        </Modal >
+            </KeyboardAvoidingView>
+        </Modal>
     );
 }
