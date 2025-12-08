@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
-import { useColorScheme } from "nativewind";
 import { buildProfilePictureUrl } from "deso-protocol";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
@@ -20,13 +19,11 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ChatType } from "deso-protocol";
 import { LiquidGlassView } from "../../utils/liquidGlass";
-import {
-  searchProfiles,
-  ProfileSearchResult,
-} from "../../services/desoGraphql";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey } from "../../utils/deso";
 import { RootStackParamList } from "../../navigation/types";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../../constants/messaging";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 type NewChatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -35,8 +32,8 @@ function ProfileItem({
   onSelect,
   isDark,
 }: {
-  item: ProfileSearchResult;
-  onSelect: (profile: ProfileSearchResult) => void;
+  item: UserSearchResult;
+  onSelect: (profile: UserSearchResult) => void;
   isDark: boolean;
 }) {
   const avatarUrl = item.publicKey
@@ -76,14 +73,13 @@ function ProfileItem({
 }
 
 export default function NewChatScreen() {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor } = useAccentColor();
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<NewChatScreenNavigationProp>();
   
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<ProfileSearchResult[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -107,7 +103,7 @@ export default function NewChatScreen() {
       setIsLoading(true);
       setHasSearched(true);
       try {
-        const profiles = await searchProfiles({ query: searchQuery, limit: 6 });
+        const profiles = await searchUsers(searchQuery);
         const filtered = profiles.filter(
           (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
         );
@@ -124,7 +120,7 @@ export default function NewChatScreen() {
   }, [searchQuery, currentUser?.PublicKeyBase58Check]);
 
   const handleSelectProfile = useCallback(
-    (profile: ProfileSearchResult) => {
+    (profile: UserSearchResult) => {
       Keyboard.dismiss();
       
       const userPublicKey = currentUser?.PublicKeyBase58Check;
@@ -155,62 +151,18 @@ export default function NewChatScreen() {
       className="flex-1 bg-white dark:bg-[#0a0f1a]"
       style={{ paddingTop: Platform.OS === "android" ? insets.top : 0 }}
     >
-      {/* Header with pill handle */}
-      <View className="items-center pt-3 pb-2">
-        <View className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600" />
-      </View>
-
-      {/* Title and Close Button */}
-      <View className="flex-row items-center justify-between px-4 pb-4">
-        <Text className="text-lg font-semibold text-slate-900 dark:text-white">
+      {/* Header - matching group composer style */}
+      <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+        <Text className="text-xl font-bold text-[#111] dark:text-white">
           New Message
         </Text>
-        <TouchableOpacity
-          onPress={handleClose}
-          activeOpacity={0.7}
-        >
-          {LiquidGlassView ? (
-            <LiquidGlassView
-              effect="regular"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Feather
-                name="x"
-                size={16}
-                color={isDark ? "#fff" : "#000"}
-              />
-            </LiquidGlassView>
-          ) : (
-            <BlurView
-              intensity={Platform.OS === "ios" ? 60 : 100}
-              tint={isDark ? "dark" : "light"}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-              }}
-            >
-              <Feather
-                name="x"
-                size={16}
-                color={isDark ? "#94a3b8" : "#64748b"}
-              />
-            </BlurView>
-          )}
+        <TouchableOpacity onPress={handleClose} className="p-1">
+          <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
         </TouchableOpacity>
       </View>
 
       {/* Search Input */}
-      <View className="px-4 pb-4">
+      <View className="px-4 py-3">
         <View className="h-12 flex-row items-center rounded-xl bg-slate-100 px-4 dark:bg-slate-800">
           <Feather
             name="search"
@@ -219,7 +171,7 @@ export default function NewChatScreen() {
           />
           <TextInput
             ref={inputRef}
-            className="ml-3 flex-1 text-base leading-5 text-slate-900 dark:text-white"
+            className="ml-3 flex-1 text-base text-slate-900 dark:text-white"
             placeholder="Search username..."
             placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
             value={searchQuery}
@@ -227,14 +179,6 @@ export default function NewChatScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
-            style={{
-              paddingVertical: 0,
-              paddingTop: 0,
-              paddingBottom: 0,
-              includeFontPadding: false,
-              textAlignVertical: "center",
-              height: 40,
-            }}
           />
         </View>
       </View>
@@ -242,7 +186,7 @@ export default function NewChatScreen() {
       {/* Results */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0085ff" />
+          <ActivityIndicator color={accentColor} />
         </View>
       ) : hasSearched && results.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8">

@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
-import { useColorScheme } from "nativewind";
 import { buildProfilePictureUrl } from "deso-protocol";
 import Animated, {
   FadeIn,
@@ -30,17 +29,15 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import {
-  searchProfiles,
-  ProfileSearchResult,
-} from "../../services/desoGraphql";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { FALLBACK_PROFILE_IMAGE } from "../../utils/deso";
 import { LiquidGlassView } from "../../utils/liquidGlass";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 type NewChatModalProps = {
   visible: boolean;
   onClose: () => void;
-  onSelectProfile: (profile: ProfileSearchResult) => void;
+  onSelectProfile: (profile: UserSearchResult) => void;
 };
 
 function ProfileItem({
@@ -48,12 +45,13 @@ function ProfileItem({
   onSelect,
   isDark,
 }: {
-  item: ProfileSearchResult;
-  onSelect: (profile: ProfileSearchResult) => void;
+  item: UserSearchResult;
+  onSelect: (profile: UserSearchResult) => void;
   isDark: boolean;
 }) {
-  const avatarUrl = item.profilePic
-    ? `https://node.deso.org/api/v0/get-single-profile-picture/${item.publicKey}?fallback=${encodeURIComponent(item.profilePic)}`
+  const profilePic = item.extraData?.LargeProfilePicURL;
+  const avatarUrl = profilePic
+    ? `https://node.deso.org/api/v0/get-single-profile-picture/${item.publicKey}?fallback=${encodeURIComponent(profilePic)}`
     : buildProfilePictureUrl(item.publicKey, {
         fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
       });
@@ -92,15 +90,19 @@ function EmptyState({
   isLoading,
   hasSearched,
   isDark,
+  accentColor,
+  accentSoft,
 }: {
   isLoading: boolean;
   hasSearched: boolean;
   isDark: boolean;
+  accentColor: string;
+  accentSoft: string;
 }) {
   if (isLoading) {
     return (
       <View className="items-center py-12">
-        <ActivityIndicator color="#0085ff" size="large" />
+        <ActivityIndicator color={accentColor} size="large" />
         <Text className="mt-3 text-sm text-slate-500 dark:text-slate-400">
           Searching...
         </Text>
@@ -111,11 +113,14 @@ function EmptyState({
   if (!hasSearched) {
     return (
       <View className="items-center py-12 px-6">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/30">
+        <View
+          className="h-16 w-16 items-center justify-center rounded-full"
+          style={{ backgroundColor: accentSoft }}
+        >
           <Feather
             name="search"
             size={28}
-            color={isDark ? "#60a5fa" : "#3b82f6"}
+            color={accentColor}
           />
         </View>
         <Text className="mt-4 text-center text-base font-medium text-slate-700 dark:text-slate-300">
@@ -152,8 +157,7 @@ export default function NewChatModal({
   onClose,
   onSelectProfile,
 }: NewChatModalProps) {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentSoft } = useAccentColor();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -161,7 +165,7 @@ export default function NewChatModal({
   const sheetTranslateY = useSharedValue(0);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<ProfileSearchResult[]>([]);
+  const [results, setResults] = useState<UserSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -177,7 +181,7 @@ export default function NewChatModal({
       setIsLoading(true);
       setHasSearched(true);
       try {
-        const profiles = await searchProfiles({ query: searchQuery, limit: 6 });
+        const profiles = await searchUsers(searchQuery);
         // Filter out current user from results
         const filtered = profiles.filter(
           (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
@@ -210,7 +214,7 @@ export default function NewChatModal({
   }, [visible]);
 
   const handleSelectProfile = useCallback(
-    (profile: ProfileSearchResult) => {
+    (profile: UserSearchResult) => {
       Keyboard.dismiss();
       onSelectProfile(profile);
       onClose();
@@ -421,6 +425,8 @@ export default function NewChatModal({
                 isLoading={isLoading}
                 hasSearched={hasSearched}
                 isDark={isDark}
+                accentColor={accentColor}
+                accentSoft={accentSoft}
               />
             }
             keyboardShouldPersistTaps="handled"

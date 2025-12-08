@@ -1,1 +1,1 @@
-deso chat app - expo react native
+deso chat app named grayso - expo react native

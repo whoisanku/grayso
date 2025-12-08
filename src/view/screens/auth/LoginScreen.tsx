@@ -1,14 +1,12 @@
-import React, { useContext } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
-import { DeSoIdentityContext } from "react-deso-protocol";
+import React from "react";
+import { View, Text, TouchableOpacity } from "react-native";
 import { identity } from "deso-protocol";
-import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import AppLogo from "../../../assets/app-logo.svg";
+import { useAccentColor } from "../../../state/theme/useAccentColor";
 
 export default function LoginScreen() {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useAccentColor();
 
   return (
     <ScreenWrapper
@@ -29,7 +27,15 @@ export default function LoginScreen() {
 
         <TouchableOpacity
           onPress={() => identity.login()}
-          className="w-full rounded-full bg-[#0085ff] py-4 active:bg-[#006bd1]"
+          className="w-full rounded-full py-4"
+          style={{
+            backgroundColor: "#2563eb",
+            shadowColor: "#1d4ed8",
+            shadowOpacity: isDark ? 0.15 : 0.25,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 4,
+          }}
           activeOpacity={0.9}
         >
           <Text className="text-center text-lg font-bold text-white">

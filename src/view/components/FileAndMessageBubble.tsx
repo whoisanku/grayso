@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Image, ActivityIndicator, Text, TouchableOpacity, Dimensions, DimensionValue, Platform } from 'react-native';
+import { View, Image, ActivityIndicator, Text, Dimensions, DimensionValue, Platform } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
 import { cx } from '../../lib/styles';
 
@@ -185,7 +186,7 @@ export const FileAndMessageBubble = React.memo(({
 
         const imageCount = imageUrls.length;
         const GRID_GAP = 3;
-        const CORNER_RADIUS = 12;
+        const CORNER_RADIUS = 0;
 
         // Single image - constrained width and height
         if (imageCount === 1) {
@@ -193,7 +194,7 @@ export const FileAndMessageBubble = React.memo(({
             const imageWidth = MAX_BUBBLE_WIDTH;
             const imageHeight = Math.min(imageWidth / aspectRatio, 250);
             return (
-                <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
                     <ImageItem
                         url={imageUrls[0]}
                         aspectRatio={aspectRatio}
@@ -216,7 +217,7 @@ export const FileAndMessageBubble = React.memo(({
         if (imageCount === 2) {
             const itemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
             return (
-                <View className="mb-2 flex-row overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View className="mb-2 flex-row overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
                     <ImageItem
                         url={imageUrls[0]}
                         aspectRatio={1}
@@ -244,7 +245,7 @@ export const FileAndMessageBubble = React.memo(({
         if (imageCount === 3) {
             const bottomItemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
             return (
-                <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
                     <ImageItem
                         url={imageUrls[0]}
                         aspectRatio={16/9}
@@ -285,7 +286,7 @@ export const FileAndMessageBubble = React.memo(({
         const extraCount = imageCount - 4;
 
         return (
-            <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+            <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
                 {/* Top row */}
                 <View className="flex-row">
                     <ImageItem

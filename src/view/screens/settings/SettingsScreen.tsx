@@ -1,12 +1,40 @@
 import React from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Platform } from "react-native";
 import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import { Feather } from "@expo/vector-icons";
+import { useAccentColor } from "../../../state/theme/useAccentColor";
+import { ACCENT_OPTIONS } from "../../../state/theme/AppThemeProvider";
 
 export default function SettingsScreen({ navigation }: any) {
-  const { colorScheme, toggleColorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme, toggleColorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+  const {
+    accentId,
+    setAccentId,
+    accentColor,
+    accentStrong,
+    accentSurface,
+    accentSoft,
+  } = useAccentColor();
+
+  const handleToggle = () => {
+    const newScheme = isDark ? "light" : "dark";
+    
+    // For web, we need to update the DOM class as well
+    if (Platform.OS === "web") {
+      setColorScheme(newScheme);
+      // Update the root element class for web
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.remove("dark", "light");
+        document.documentElement.classList.add(newScheme);
+        // Persist to localStorage
+        localStorage.setItem("colorScheme", newScheme);
+      }
+    } else {
+      toggleColorScheme();
+    }
+  };
 
   return (
     <ScreenWrapper
@@ -24,17 +52,67 @@ export default function SettingsScreen({ navigation }: any) {
         <View className="mb-6">
            <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Appearance</Text>
            <TouchableOpacity
-             onPress={toggleColorScheme}
+             onPress={handleToggle}
              className="flex-row items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-800/50 p-4"
+             style={{ borderWidth: 1, borderColor: isDark ? "#1f2937" : "#e2e8f0" }}
            >
               <View className="flex-row items-center">
                  <Feather name={isDark ? "moon" : "sun"} size={20} color={isDark ? "white" : "black"} />
                  <Text className="ml-3 text-base font-medium text-slate-900 dark:text-white">Dark Mode</Text>
               </View>
-              <View className={`h-6 w-11 rounded-full ${isDark ? 'bg-blue-500' : 'bg-slate-300'} justify-center px-1`}>
-                 <View className={`h-4 w-4 rounded-full bg-white shadow-sm ${isDark ? 'self-end' : 'self-start'}`} />
+              <View
+                className="h-6 w-11 rounded-full justify-center px-1"
+                style={{ backgroundColor: isDark ? accentStrong : "#cbd5e1" }}
+              >
+                 <View
+                   className="h-4 w-4 rounded-full bg-white shadow-sm"
+                   style={{ alignSelf: isDark ? "flex-end" : "flex-start", backgroundColor: isDark ? "#fff" : "#fff" }}
+                 />
               </View>
            </TouchableOpacity>
+        </View>
+
+        <View className="mb-8">
+          <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">
+            Theme Color
+          </Text>
+          <View 
+            className="rounded-2xl p-4"
+            style={{ 
+              backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(241, 245, 249, 0.8)',
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
+            }}
+          >
+            {/* Color Circles Row */}
+            <View className="flex-row items-center justify-around">
+              {ACCENT_OPTIONS.map((option) => {
+                const selected = option.id === accentId;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    onPress={() => setAccentId(option.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: option.primary,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {selected && (
+                        <Feather name="check" size={16} color={option.onPrimary} />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         <View>

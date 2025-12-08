@@ -13,6 +13,7 @@ import RootNavigator from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./state/queryClient";
+import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 
 // Web specific config if needed
 configure({
@@ -22,28 +23,40 @@ configure({
 });
 
 export default function App() {
-  const { colorScheme } = useColorScheme();
+  const { colorScheme, setColorScheme } = useColorScheme();
 
+  // Restore saved color scheme from localStorage on mount
   useEffect(() => {
     document.title = "Grayso";
-  }, []);
+    
+    // Check localStorage for saved theme
+    const savedScheme = localStorage.getItem("colorScheme") as "light" | "dark" | null;
+    if (savedScheme) {
+      setColorScheme(savedScheme);
+      // Update DOM class
+      document.documentElement.classList.remove("dark", "light");
+      document.documentElement.classList.add(savedScheme);
+    }
+  }, [setColorScheme]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <DeSoIdentityProvider>
-        <CryptoPolyfill />
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <NavigationContainer
-                theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                documentTitle={{ formatter: () => "Grayso" }}
-              >
-                <RootNavigator />
-              </NavigationContainer>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
-      </DeSoIdentityProvider>
+      <AppThemeProvider>
+        <DeSoIdentityProvider>
+          <CryptoPolyfill />
+          <SafeAreaProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                <NavigationContainer
+                  theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                  documentTitle={{ formatter: () => "Grayso" }}
+                >
+                  <RootNavigator />
+                </NavigationContainer>
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </DeSoIdentityProvider>
+      </AppThemeProvider>
     </QueryClientProvider>
   );
 }

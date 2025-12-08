@@ -27,6 +27,7 @@ import {
 import { FileAndMessageBubble } from "./FileAndMessageBubble";
 import { VideoMessageBubble } from "./VideoMessageBubble";
 import { ImageGalleryModal } from "./ImageGalleryModal";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 export type MessageBubbleProps = {
     item: DecryptedMessageEntryResponse;
@@ -63,6 +64,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
+    const { accentColor, accentStrong, accentSoft, onAccent } = useAccentColor();
 
     // Image gallery state
     const [galleryVisible, setGalleryVisible] = useState(false);
@@ -140,9 +142,9 @@ export const MessageBubble = React.memo(function MessageBubble({
                 style={{
                     backgroundColor: isMine 
                         ? "rgba(255, 255, 255, 0.15)" 
-                        : (isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"),
+                        : accentSoft,
                     borderLeftWidth: 3,
-                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : "#3b82f6",
+                    borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : accentColor,
                     borderRadius: 6,
                     paddingHorizontal: 10,
                     paddingVertical: 8,
@@ -153,7 +155,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                     style={{
                         fontSize: 12,
                         fontWeight: "600",
-                        color: isMine ? "rgba(255, 255, 255, 0.9)" : "#3b82f6",
+                        color: isMine ? "rgba(255, 255, 255, 0.9)" : accentColor,
                         marginBottom: 2,
                     }}
                     numberOfLines={1}
@@ -193,7 +195,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
     
     const panGesture = useMemo(() => Gesture.Pan()
-        .enabled(!hasMedia)
+        //.enabled(!hasMedia) // Enabled for all messages now
         .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px horizontal movement
         .failOffsetY([-10, 10]) // Fail (allow scroll) if vertical movement exceeds 10px
         .onUpdate((event) => {
@@ -277,12 +279,16 @@ export const MessageBubble = React.memo(function MessageBubble({
             }
         }), [handleLongPress]);
 
+    const dismissKeyboard = useCallback(() => {
+        Keyboard.dismiss();
+    }, []);
+
     const tapGesture = useMemo(() => Gesture.Tap()
         .enabled(!hasMedia)
         .onEnd(() => {
             'worklet';
-            runOnJS(Keyboard.dismiss)();
-        }), [hasMedia]);
+            runOnJS(dismissKeyboard)();
+        }), [hasMedia, dismissKeyboard]);
 
     const contentGesture = useMemo(() => Gesture.Exclusive(longPressGesture, tapGesture), [longPressGesture, tapGesture]);
 
@@ -365,44 +371,46 @@ export const MessageBubble = React.memo(function MessageBubble({
                 </View>
             ) : null}
 
-            {/* Reply Icon - positioned behind the bubble */}
-            <Reanimated.View
-                style={[
-                    {
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        width: 50,
-                    },
-                    isMine ? { right: -50 } : { left: -50 },
-                    animatedIconStyle,
-                ]}
-                pointerEvents="none"
-            >
-                <View
-                    style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 18,
-                        backgroundColor: isDark ? '#334155' : '#e2e8f0',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                    }}
+            {/* Message row wrapper - positions reply icon relative to message only */}
+            <View style={{ position: 'relative' }}>
+                {/* Reply Icon - positioned behind the bubble */}
+                <Reanimated.View
+                    style={[
+                        {
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            width: 50,
+                        },
+                        isMine ? { right: -50 } : { left: -50 },
+                        animatedIconStyle,
+                    ]}
+                    pointerEvents="none"
                 >
-                    <Feather name="corner-up-left" size={18} color={isDark ? '#cbd5e1' : '#64748b'} />
-                </View>
-            </Reanimated.View>
+                    <View
+                        style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <Feather name="corner-up-left" size={18} color={isDark ? '#cbd5e1' : '#64748b'} />
+                    </View>
+                </Reanimated.View>
 
-            {/* Swipeable message row */}
-            <GestureDetector gesture={panGesture} touchAction="pan-y">
-                <Reanimated.View style={animatedRowStyle}>
-                    <GestureDetector gesture={contentGesture} touchAction="pan-y">
-                        <View
-                            className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-                                }`}
-                        >
+                {/* Swipeable message row */}
+                <GestureDetector gesture={panGesture} touchAction="pan-y">
+                    <Reanimated.View style={animatedRowStyle}>
+                        <GestureDetector gesture={contentGesture} touchAction="pan-y">
+                            <View
+                                className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
+                                    }`}
+                            >
                             {/* Only show profile pic for received messages in GROUP chats */}
                             {!isMine && isGroupChat ? (
                                 <View className="mr-2" style={{ width: 32 }}>
@@ -428,7 +436,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         maxWidth: Platform.OS === 'web' ? 320 : '80%',
                                         overflow: 'hidden',
                                         backgroundColor: isMine 
-                                            ? '#3b82f6' 
+                                            ? accentColor 
                                             : (isDark ? '#1e2738' : '#f8fafc'),
                                     },
                                 ]}
@@ -443,54 +451,63 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     </Text>
                                 )}
                                 {renderReplyPreview()}
-                                <FileAndMessageBubble
-                                    decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
-                                    extraData={extraData}
-                                    isDark={isDark}
-                                    onImagePress={handleImagePress}
-                                />
-                                <VideoMessageBubble
-                                    decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
-                                    extraData={extraData}
-                                    isDark={isDark}
-                                />
-                                {/* Message text with WhatsApp-style inline timestamp */}
-                                <View style={{ paddingRight: 52 }}>
-                                    <Text
-                                        className={`text-base leading-[22px] ${
-                                            isMine 
-                                                ? 'text-white' 
-                                                : 'text-slate-900 dark:text-slate-100'
-                                        }`}
-                                        style={{ flexShrink: 1 }}
-                                    >
-                                        {messageText}
-                                    </Text>
-                                    {/* Actual timestamp positioned at bottom-right */}
-                                    <Text
-                                        className={`absolute bottom-0 right-0 text-[10px] ${
-                                            hasError 
-                                                ? 'text-red-500' 
-                                                : isMine 
-                                                    ? 'text-blue-200' 
-                                                    : 'text-slate-400 dark:text-slate-500'
-                                        }`}
-                                    >
-                                        {hasError ? "Failed" : (
-                                            <>
-                                                {isEditedMessage ? (
-                                                    <Text style={{ fontStyle: "italic" }}>edited </Text>
-                                                ) : null}
-                                                {timestamp ? formatTimestamp(timestamp) : ""}
-                                            </>
-                                        )}
-                                    </Text>
+                                <View style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}>
+                                    <FileAndMessageBubble
+                                        decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
+                                        extraData={extraData}
+                                        isDark={isDark}
+                                        onImagePress={handleImagePress}
+                                    />
+                                    <VideoMessageBubble
+                                        decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
+                                        extraData={extraData}
+                                        isDark={isDark}
+                                    />
                                 </View>
+                                {/* WhatsApp-style: text + inline timestamp using nested Text */}
+                                <Text
+                                    className="text-base leading-[22px]"
+                                    style={{ 
+                                        flexShrink: 1, 
+                                        color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
+                                        marginTop: 4, // Spacing between full-bleed media and text
+                                    }}
+                                >
+                                    {messageText}
+                                    {/* Invisible spacer to ensure minimum gap before timestamp */}
+                                    <Text style={{ fontSize: 10, opacity: 0 }}>
+                                        {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                    </Text>
+                                </Text>
+                                {/* Actual timestamp overlaid at bottom-right */}
+                                <Text
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: 12,
+                                        right: 12,
+                                        fontSize: 10,
+                                        color: hasError
+                                            ? "#ef4444"
+                                            : isMine
+                                                ? onAccent
+                                                : (isDark ? "#94a3b8" : "#94a3b8"),
+                                    }}
+                                >
+                                    {hasError ? "Failed" : (
+                                        <>
+                                            {isEditedMessage ? (
+                                                <Text style={{ fontStyle: "italic" }}>edited </Text>
+                                            ) : null}
+                                            {timestamp ? formatTimestamp(timestamp) : ""}
+                                        </>
+                                    )}
+                                </Text>
                             </Reanimated.View>
                         </View>
                     </GestureDetector>
                 </Reanimated.View>
             </GestureDetector>
+            </View>
 
             {/* Fullscreen Image Gallery Modal */}
             <ImageGalleryModal

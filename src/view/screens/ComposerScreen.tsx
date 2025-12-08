@@ -16,7 +16,6 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type RootStackParamList } from "../../navigation/types";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColorScheme } from "nativewind";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../../utils/deso";
@@ -25,6 +24,7 @@ import CircularProgressIndicator from "../../components/CircularProgressIndicato
 import { BlurView } from "expo-blur";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -47,11 +47,16 @@ type ComposerScreenProps = {
 
 export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const [text, setText] = useState("");
-  const [images, setImages] = useState<string[]>([]);
+  // Track images with their upload status and URLs
+  const [imageItems, setImageItems] = useState<{
+    localUri: string;
+    uploadedUrl: string | null;
+    isUploading: boolean;
+    error: boolean;
+  }[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
 
   // Keyboard animation for toolbar positioning
@@ -74,52 +79,85 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
+  // Upload a single image to DeSo - handles both web and native
   const uploadImageToDeso = async (uri: string, userPublicKey: string, jwt: string): Promise<string> => {
-    const filename = uri.split('/').pop() || 'image.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-
     const formData = new FormData();
-    formData.append("file", { uri, name: filename, type } as any);
+    
+    if (Platform.OS === "web") {
+      // On web, fetch the file and create a proper Blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filename = uri.split('/').pop() || 'image.jpg';
+      formData.append("file", blob, filename);
+    } else {
+      // On native, use the URI-based approach
+      const filename = uri.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+      formData.append("file", { uri, name: filename, type } as any);
+    }
+    
     formData.append("UserPublicKeyBase58Check", userPublicKey);
     formData.append("JWT", jwt);
 
-    const response = await fetch("https://node.deso.org/api/v0/upload-image", {
+    // Don't set Content-Type - let the browser/fetch set it with the proper boundary
+    const uploadResponse = await fetch("https://node.deso.org/api/v0/upload-image", {
       method: "POST",
       body: formData,
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
     });
 
-    if (!response.ok) {
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.text();
+      console.error("Upload failed:", errorData);
       throw new Error("Failed to upload image");
     }
 
-    const data = await response.json();
+    const data = await uploadResponse.json();
     return data.ImageURL;
   };
 
+  // Upload image immediately when selected
+  const uploadImageImmediately = async (localUri: string, index: number) => {
+    if (!currentUser?.PublicKeyBase58Check) return;
+
+    try {
+      const jwt = await identity.jwt();
+      const uploadedUrl = await uploadImageToDeso(localUri, currentUser.PublicKeyBase58Check, jwt);
+      
+      setImageItems(prev => prev.map((item, i) => 
+        i === index ? { ...item, uploadedUrl, isUploading: false, error: false } : item
+      ));
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      setImageItems(prev => prev.map((item, i) => 
+        i === index ? { ...item, isUploading: false, error: true } : item
+      ));
+    }
+  };
+
   const onPost = useCallback(async () => {
-    if ((text.length === 0 && images.length === 0) || !currentUser?.PublicKeyBase58Check) return;
+    const allUploaded = imageItems.every(item => item.uploadedUrl || item.error);
+    if ((text.length === 0 && imageItems.length === 0) || !currentUser?.PublicKeyBase58Check) return;
+    
+    // Wait for any pending uploads
+    if (!allUploaded) {
+      alert("Please wait for images to finish uploading");
+      return;
+    }
+
+    // Filter out failed uploads
+    const successfulImageUrls = imageItems
+      .filter(item => item.uploadedUrl)
+      .map(item => item.uploadedUrl as string);
 
     setIsPosting(true);
 
     try {
-      const jwt = await identity.jwt();
-
-      let imageUrls: string[] = [];
-      if (images.length > 0) {
-        imageUrls = await Promise.all(
-          images.map(uri => uploadImageToDeso(uri, currentUser.PublicKeyBase58Check, jwt))
-        );
-      }
-
       await submitPost({
         UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
         BodyObj: {
           Body: text,
-          ImageURLs: imageUrls,
+          ImageURLs: successfulImageUrls,
           VideoURLs: [],
         },
       });
@@ -131,7 +169,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     } finally {
       setIsPosting(false);
     }
-  }, [text, images, navigation, currentUser]);
+  }, [text, imageItems, navigation, currentUser]);
 
   const onCancel = useCallback(() => {
     navigation.goBack();
@@ -147,17 +185,26 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      quality: 1,
+      quality: 0.8,
     });
 
     if (!result.canceled) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setImages((prevImages) => [
-        ...prevImages,
-        ...result.assets.map(
-          (asset: ImagePicker.ImagePickerAsset) => asset.uri
-        ),
-      ]);
+      
+      const startIndex = imageItems.length;
+      const newItems = result.assets.map((asset) => ({
+        localUri: asset.uri,
+        uploadedUrl: null,
+        isUploading: true,
+        error: false,
+      }));
+      
+      setImageItems(prev => [...prev, ...newItems]);
+      
+      // Start uploading each image immediately
+      result.assets.forEach((asset, i) => {
+        uploadImageImmediately(asset.uri, startIndex + i);
+      });
     }
   };
 
@@ -175,16 +222,24 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     if (!result.canceled) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setImages((prevImages) => [...prevImages, result.assets[0].uri]);
+      const startIndex = imageItems.length;
+      const newItem = {
+        localUri: result.assets[0].uri,
+        uploadedUrl: null,
+        isUploading: true,
+        error: false,
+      };
+      setImageItems(prev => [...prev, newItem]);
+      uploadImageImmediately(result.assets[0].uri, startIndex);
     }
   };
 
   const removeImage = (indexToRemove: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setImages(prev => prev.filter((_, index) => index !== indexToRemove));
+    setImageItems(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
-  const canPost = text.trim().length > 0 || images.length > 0;
+  const canPost = text.trim().length > 0 || imageItems.length > 0;
 
   // Toolbar action button component
   const ToolbarButton = ({ 
@@ -199,12 +254,24 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      className={`rounded-full p-2.5 ${disabled ? 'opacity-40' : 'active:opacity-70'} ${isDark ? 'bg-slate-800/80' : 'bg-indigo-500/10'}`}
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: disabled
+          ? isDark
+            ? "rgba(51, 65, 85, 0.6)"
+            : "#e2e8f0"
+          : accentSoft,
+        opacity: disabled ? 0.45 : 1,
+      }}
     >
       <Feather 
         name={icon} 
         size={20} 
-        color={disabled ? (isDark ? '#475569' : '#94a3b8') : '#0085ff'} 
+        color={disabled ? (isDark ? '#475569' : '#94a3b8') : accentColor} 
       />
     </TouchableOpacity>
   );
@@ -283,24 +350,32 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           <TouchableOpacity
             onPress={onPost}
             disabled={!canPost || isPosting}
-            className={`rounded-full px-6 py-2 ${canPost
-              ? "bg-[#0085ff]"
-              : "bg-slate-200 dark:bg-slate-800"
-              }`}
+            className="rounded-full px-6 py-2"
             activeOpacity={0.8}
-            style={canPost ? {
-              shadowColor: "#0085ff",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 5,
-            } : undefined}
+            style={
+              canPost
+                ? {
+                    backgroundColor: accentColor,
+                    shadowColor: accentStrong,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 8,
+                    elevation: 5,
+                  }
+                : {
+                    backgroundColor: isDark ? "rgba(30, 41, 59, 0.9)" : "#e2e8f0",
+                  }
+            }
           >
             {isPosting ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text className={`text-base font-bold ${canPost ? "text-white" : "text-slate-400 dark:text-slate-500"
-                }`}>
+              <Text
+                className="text-base font-bold"
+                style={{
+                  color: canPost ? "#ffffff" : isDark ? "#94a3b8" : "#94a3b8",
+                }}
+              >
                 Post
               </Text>
             )}
@@ -332,26 +407,49 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
                   maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
                   autoFocus
                   textAlignVertical="top"
-                  style={{ paddingTop: 0 }}
+                  style={{ 
+                    paddingTop: 0,
+                    ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                  }}
                 />
               </View>
             </View>
 
             {/* Image Previews */}
-            {images.length > 0 && (
+            {imageItems.length > 0 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 className="mt-4 pl-12"
                 contentContainerStyle={{ paddingRight: 16 }}
               >
-                {images.map((uri, index) => (
+                {imageItems.map((item, index) => (
                   <View key={index} className="relative mr-3">
                     <Image
-                      source={{ uri }}
+                      source={{ uri: item.localUri }}
                       className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
                       resizeMode="cover"
                     />
+                    {/* Upload progress indicator */}
+                    {item.isUploading && (
+                      <View className="absolute inset-0 items-center justify-center bg-black/40 rounded-2xl">
+                        <ActivityIndicator size="large" color="white" />
+                        <Text className="text-white text-xs mt-2">Uploading...</Text>
+                      </View>
+                    )}
+                    {/* Error indicator */}
+                    {item.error && (
+                      <View className="absolute inset-0 items-center justify-center bg-red-500/40 rounded-2xl">
+                        <Feather name="alert-circle" size={32} color="white" />
+                        <Text className="text-white text-xs mt-2">Upload failed</Text>
+                      </View>
+                    )}
+                    {/* Success indicator */}
+                    {item.uploadedUrl && !item.isUploading && (
+                      <View className="absolute bottom-2 left-2 bg-green-500 rounded-full p-1">
+                        <Feather name="check" size={14} color="white" />
+                      </View>
+                    )}
                     <TouchableOpacity
                       onPress={() => removeImage(index)}
                       className="absolute right-2 top-2 rounded-full p-2"
@@ -386,4 +484,3 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     </ScreenWrapper>
   );
 }
-

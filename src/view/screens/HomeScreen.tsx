@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useCallback, useEffect, useState, useRef } from "react";
+import React, { useContext, useMemo, useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Text,
@@ -9,9 +9,9 @@ import {
   RefreshControl,
   DeviceEventEmitter,
   Modal,
-  Dimensions,
-  Pressable,
   Platform,
+  TextInput,
+  ScrollView,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ChatType, buildProfilePictureUrl } from "deso-protocol";
@@ -34,13 +34,15 @@ import {
   FALLBACK_PROFILE_IMAGE,
   getProfileImageUrl,
 } from "../../utils/deso";
+
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { OUTGOING_MESSAGE_EVENT } from "../../constants/events";
-import { useColorScheme } from "nativewind";
+import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/events";
 import { LiquidGlassView } from "../../utils/liquidGlass";
-import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft } from "react-native-reanimated";
-import { BlurView } from "expo-blur";
+import type { ConversationMap } from "../../services/conversations";
+import { NewGroupChatModal } from "../components/NewGroupChatModal";
+import { searchUsers, UserSearchResult } from "../../services/userSearch";
+import { useAccentColor } from "../../state/theme/useAccentColor";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -96,15 +98,14 @@ const formatTimestamp = (timestampMs: number) => {
 };
 
 export default function HomeScreen() {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { conversations, profiles, groupMembers, isLoading, error, reload } =
+  const { conversations, spamConversations, profiles, groupMembers, groupExtraData, isLoading, error, reload } =
     useConversations();
-  
+
   // Reload conversations when screen gains focus (e.g., returning from a conversation)
   useFocusEffect(
     useCallback(() => {
@@ -112,8 +113,14 @@ export default function HomeScreen() {
     }, [reload])
   );
 
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const drawerRef = useRef<View | null>(null);
+  const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  // New chat modal state
+  const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
+  const [newChatResults, setNewChatResults] = useState<UserSearchResult[]>([]);
+  const [isSearchingNewChat, setIsSearchingNewChat] = useState(false);
+  const [hasSearchedNewChat, setHasSearchedNewChat] = useState(false);
+  const [activeMailbox, setActiveMailbox] = useState<"inbox" | "spam">("inbox");
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
       string,
@@ -123,6 +130,11 @@ export default function HomeScreen() {
       }
     >
   >({});
+
+  // Helper to open drawer (controlled by HomeTabs)
+  const openDrawer = useCallback(() => {
+    DeviceEventEmitter.emit(DRAWER_STATE_EVENT, { requestOpen: true });
+  }, []);
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -149,116 +161,179 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Debounced search for new chat modal
   useEffect(() => {
-    if (Platform.OS !== "web" || !isDrawerOpen) {
+    if (!newChatSearchQuery.trim()) {
+      setNewChatResults([]);
+      setHasSearchedNewChat(false);
       return;
     }
 
-    const handleClick = (event: MouseEvent) => {
-      const node = drawerRef.current as unknown as HTMLElement | null;
-
-      if (node && event.target instanceof Node && !node.contains(event.target)) {
-        setIsDrawerOpen(false);
+    const timeoutId = setTimeout(async () => {
+      setIsSearchingNewChat(true);
+      try {
+        const results = await searchUsers(newChatSearchQuery);
+        const filtered = results.filter(
+          (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
+        );
+        setNewChatResults(filtered);
+        setHasSearchedNewChat(true);
+      } catch (error) {
+        console.error("[HomeScreen] new chat search error:", error);
+        setNewChatResults([]);
+      } finally {
+        setIsSearchingNewChat(false);
       }
-    };
+    }, 300);
 
-    document.addEventListener("mousedown", handleClick);
+    return () => clearTimeout(timeoutId);
+  }, [newChatSearchQuery, currentUser?.PublicKeyBase58Check]);
 
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [isDrawerOpen]);
 
-  const items = useMemo<MockConversation[]>(() => {
-    const userPk = currentUser?.PublicKeyBase58Check;
-    if (!userPk) return [];
 
-    return Object.values(conversations).map((c) => {
-      // Messages are sorted newest-first (descending) from getConversationsNewMap
-      // Find the first non-edited message (which is the newest real message)
-      const last = c.messages.find(msg => {
-        const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
-        return extraData?.edited !== 'true';
-      }) || c.messages[0]; // Fallback to first (newest) message if all are edited
+  // Handle selecting a profile for new DM
+  const handleSelectNewChatProfile = useCallback((profile: UserSearchResult) => {
+    const userPublicKey = currentUser?.PublicKeyBase58Check;
+    if (!userPublicKey) return;
 
-      const info = last?.MessageInfo || {};
-      const time = formatTimestamp(
-        info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
-      );
-      const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
-      const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
-      const senderName =
-        senderPk === userPk
-          ? "You"
-          : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
-      const isGroup = c.ChatType === ChatType.GROUPCHAT;
-      const otherPk = isGroup
-        ? recipientPk
-        : senderPk === userPk
+    setShowNewChatModal(false);
+    setNewChatSearchQuery("");
+    setNewChatResults([]);
+    setHasSearchedNewChat(false);
+
+    rootNavigation.navigate("Conversation", {
+      threadPublicKey: profile.publicKey,
+      chatType: "DM" as ChatType,
+      userPublicKey,
+      userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+      recipientInfo: {
+        username: profile.username,
+        publicKey: profile.publicKey,
+      },
+    });
+  }, [currentUser?.PublicKeyBase58Check, rootNavigation]);
+
+  const buildItemsFromConversations = useCallback(
+    (source: ConversationMap) => {
+      const userPk = currentUser?.PublicKeyBase58Check;
+      if (!userPk) return [];
+
+      return Object.values(source).map((c) => {
+        const last =
+          c.messages.find((msg) => {
+            const extraData = msg.MessageInfo?.ExtraData as
+              | Record<string, any>
+              | undefined;
+            return extraData?.edited !== "true";
+          }) || c.messages[0];
+
+        const info = last?.MessageInfo || {};
+        const time = formatTimestamp(
+          info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
+        );
+        const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
+        const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
+        const senderName =
+          senderPk === userPk
+            ? "You"
+            : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
+        const isGroup = c.ChatType === ChatType.GROUPCHAT;
+        const otherPk = isGroup
           ? recipientPk
-          : senderPk;
-      const name = isGroup
-        ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
-        : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
-      const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
-      const avatarUri = isGroup
-        ? FALLBACK_GROUP_IMAGE
-        : buildProfilePictureUrl(otherPk, {
-          fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-        });
+          : senderPk === userPk
+            ? recipientPk
+            : senderPk;
+        const name = isGroup
+          ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
+          : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
+        const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
 
-      let stackedAvatarUris: string[] = [];
-      let isLoadingMembers = false;
-      if (isGroup) {
-        const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
-        const members = groupMembers[groupKey] || [];
-
-        if (members.length === 0) {
-          isLoadingMembers = true;
+        // For group chats, check if there's a custom group image in extraData
+        let avatarUri: string;
+        if (isGroup) {
+          const groupKey = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName}`;
+          const extraData = groupExtraData?.[groupKey];
+          avatarUri = extraData?.groupImage || FALLBACK_GROUP_IMAGE;
+        } else {
+          avatarUri = buildProfilePictureUrl(otherPk, {
+            fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+          });
         }
 
-        stackedAvatarUris = members
-          .slice(0, 3)
-          .map((m) =>
-            m.profilePic
-              ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
-              : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
-          );
-      }
+        let stackedAvatarUris: string[] = [];
+        let isLoadingMembers = false;
+        let hasGroupImage = false;
 
-      // Create a unique ID that matches ConversationScreen's conversationId:
-      // For group chats: publicKey-accessGroupKeyName  
-      // For DMs: sorted public keys with -DM suffix for consistency
-      let uniqueId: string;
-      if (isGroup) {
-        uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
-      } else {
-        // Sort public keys alphabetically for consistent DM ID (matches ConversationScreen)
-        const sortedKeys = [userPk, otherPk].sort();
-        uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
-      }
-      
-      return {
-        id: uniqueId,
-        name,
-        preview,
-        time,
-        avatarUri,
-        stackedAvatarUris,
-        isGroup,
-        chatType: c.ChatType,
-        threadPublicKey: otherPk,
-        lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
-        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
-        threadAccessGroupKeyName: isGroup
-          ? last?.RecipientInfo?.AccessGroupKeyName
-          : DEFAULT_KEY_MESSAGING_GROUP_NAME,
-        partyGroupOwnerPublicKeyBase58Check: otherPk,
-        recipientInfo: last?.RecipientInfo,
-        isLoadingMembers,
-      };
-    });
-  }, [conversations, profiles, groupMembers, currentUser?.PublicKeyBase58Check]);
+        if (isGroup) {
+          const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
+          const extraData = groupExtraData?.[groupKey];
+
+          // If there's a custom group image, use it instead of stacked avatars
+          if (extraData?.groupImage) {
+            hasGroupImage = true;
+          } else {
+            // Only fetch/show stacked avatars if there's no custom group image
+            const members = groupMembers[groupKey] || [];
+
+            if (members.length === 0) {
+              isLoadingMembers = true;
+            }
+
+            stackedAvatarUris = members
+              .slice(0, 3)
+              .map((m) =>
+                m.profilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
+                  : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
+              );
+          }
+        }
+
+        let uniqueId: string;
+        if (isGroup) {
+          uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
+        } else {
+          const sortedKeys = [userPk, otherPk].sort();
+          uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
+        }
+
+        return {
+          id: uniqueId,
+          name,
+          preview,
+          time,
+          avatarUri,
+          stackedAvatarUris,
+          isGroup,
+          chatType: c.ChatType,
+          threadPublicKey: otherPk,
+          lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
+          userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          threadAccessGroupKeyName: isGroup
+            ? last?.RecipientInfo?.AccessGroupKeyName
+            : DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          partyGroupOwnerPublicKeyBase58Check: otherPk,
+          recipientInfo: last?.RecipientInfo,
+          isLoadingMembers,
+          hasGroupImage,
+        };
+      });
+    },
+    [currentUser?.PublicKeyBase58Check, profiles, groupMembers, groupExtraData]
+  );
+
+  const inboxItems = useMemo(
+    () => buildItemsFromConversations(conversations),
+    [buildItemsFromConversations, conversations]
+  );
+  const spamItems = useMemo(
+    () => buildItemsFromConversations(spamConversations),
+    [buildItemsFromConversations, spamConversations]
+  );
+  const items = useMemo(
+    () => (activeMailbox === "spam" ? spamItems : inboxItems),
+    [activeMailbox, inboxItems, spamItems]
+  );
 
   const enhancedItems = useMemo(() => {
     const mapped = items.map((item) => {
@@ -284,14 +359,14 @@ export default function HomeScreen() {
 
       return item;
     });
-    
+
     // Sort by most recent message first
     return mapped.sort((a, b) => {
       const aTime = a.lastTimestampNanos ?? 0;
       const bTime = b.lastTimestampNanos ?? 0;
       return bTime - aTime;
     });
-  }, [items, optimisticPreviews]);
+  }, [activeMailbox, items, optimisticPreviews]);
 
 
   const handlePress = useCallback(
@@ -326,13 +401,15 @@ export default function HomeScreen() {
     navigation.navigate("Composer");
   }, [navigation]);
 
+
+
   if (isLoading && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
           <View className="flex-row items-center">
             <TouchableOpacity
-              onPress={() => setIsDrawerOpen(true)}
+              onPress={openDrawer}
               activeOpacity={0.7}
               className="mr-3"
             >
@@ -344,17 +421,76 @@ export default function HomeScreen() {
               Chats
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => rootNavigation.navigate("NewChat")}
-            activeOpacity={0.7}
-          >
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </View>
-          </TouchableOpacity>
+
+          {/* Header Right Icons */}
+          <View className="flex-row items-center">
+            {/* New Group Chat Button */}
+            <TouchableOpacity
+              onPress={() => setShowGroupComposerModal(true)}
+              activeOpacity={0.7}
+              className="mr-1"
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+
+            {/* New Chat Button */}
+            <TouchableOpacity
+              onPress={() => setShowNewChatModal(true)}
+              activeOpacity={0.7}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* WhatsApp-style filter chips */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
+          {([
+            { key: "inbox", label: "Inbox" },
+            { key: "spam", label: "Spam" },
+          ] as const).map((filter) => {
+            const isActive = activeMailbox === filter.key;
+
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                onPress={() => setActiveMailbox(filter.key)}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: isActive
+                    ? accentColor
+                    : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                  borderWidth: 1,
+                  borderColor: isActive
+                    ? accentStrong
+                    : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: isActive
+                      ? '#ffffff'
+                      : (isDark ? '#94a3b8' : '#64748b'),
+                  }}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#0085ff" />
+          <ActivityIndicator color={accentColor} />
         </View>
       </SafeAreaView>
     );
@@ -383,14 +519,14 @@ export default function HomeScreen() {
     );
   }
 
-  return (
+  const mainContent = (
     <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
         <View className="flex-row items-center">
           {/* Hamburger Menu Button */}
           <TouchableOpacity
-            onPress={() => setIsDrawerOpen(true)}
+            onPress={openDrawer}
             activeOpacity={0.7}
             className="mr-3"
           >
@@ -417,116 +553,103 @@ export default function HomeScreen() {
             Chats
           </Text>
         </View>
-        
-        {/* New Chat Button */}
-        <TouchableOpacity
-          onPress={() => rootNavigation.navigate("NewChat")}
-          activeOpacity={0.7}
-        >
-          {LiquidGlassView ? (
-            <LiquidGlassView
-              effect="regular"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </LiquidGlassView>
-          ) : (
-            <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-<Feather name="edit-2" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
 
-      {/* Drawer Modal */}
-      <Modal
-        visible={isDrawerOpen}
-        transparent
-        animationType="none"
-        onRequestClose={() => setIsDrawerOpen(false)}
-      >
-        <View className="flex-1 flex-row">
-          {/* Backdrop */}
-          <Animated.View
-            entering={FadeIn.duration(150)}
-            exiting={FadeOut.duration(100)}
-            className="absolute inset-0"
+        {/* Header Right Icons */}
+        <View className="flex-row items-center">
+          {/* New Group Chat Button */}
+          <TouchableOpacity
+            onPress={() => setShowGroupComposerModal(true)}
+            activeOpacity={0.7}
+            className="mr-1"
           >
-            <Pressable
-              className="flex-1"
-              onPress={() => setIsDrawerOpen(false)}
-            >
-              <BlurView
-                intensity={40}
-                tint={isDark ? "dark" : "light"}
-                className="flex-1"
-                pointerEvents="none"
-              />
-            </Pressable>
-          </Animated.View>
-
-          {/* Drawer Content */}
-          <Animated.View
-            entering={SlideInLeft.duration(280)}
-            exiting={SlideOutLeft.duration(280)}
-            style={{ 
-              width: Dimensions.get('window').width * 0.65,
-              paddingTop: insets.top,
-              backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-            }}
-            ref={drawerRef as any}
-          >
-            {/* User Profile Header */}
-            <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
-              <View className="flex-row items-center">
-                <Image
-                  source={{ 
-                    uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic 
-                      ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
-                      : buildProfilePictureUrl(currentUser?.PublicKeyBase58Check || '', { fallbackImageUrl: FALLBACK_PROFILE_IMAGE })
-                  }}
-                  className="h-14 w-14 rounded-full bg-slate-200 dark:bg-slate-700"
-                />
-                <View className="ml-3 flex-1">
-                  <Text className="text-lg font-bold text-slate-900 dark:text-white" numberOfLines={1}>
-                    @{currentUser?.ProfileEntryResponse?.Username || 'User'}
-                  </Text>
-                  <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
-                    {currentUser?.PublicKeyBase58Check?.slice(0, 12)}...
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Menu Items */}
-            <View className="flex-1 py-4">
-              <TouchableOpacity
-                className="flex-row items-center px-5 py-4"
-                activeOpacity={0.7}
-                onPress={() => {
-                  setIsDrawerOpen(false);
-                  rootNavigation.navigate("Settings");
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <View className="w-11 h-11 rounded-xl items-center justify-center bg-slate-100 dark:bg-slate-800">
-                  <Feather name="settings" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
-                </View>
-                <Text className="ml-4 text-base font-medium text-slate-900 dark:text-white">
-                  Settings
-                </Text>
-                <View className="flex-1" />
-                <Feather name="chevron-right" size={20} color={isDark ? "#64748b" : "#94a3b8"} />
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </LiquidGlassView>
+            ) : (
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* New Chat Button - opens new chat modal */}
+          <TouchableOpacity
+            onPress={() => setShowNewChatModal(true)}
+            activeOpacity={0.7}
+          >
+            {LiquidGlassView ? (
+              <LiquidGlassView
+                effect="regular"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </LiquidGlassView>
+            ) : (
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </View>
+
+      {/* WhatsApp-style filter chips */}
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
+        {([
+          { key: "inbox", label: "Inbox" },
+          { key: "spam", label: "Spam" },
+        ] as const).map((filter) => {
+          const isActive = activeMailbox === filter.key;
+
+          return (
+            <TouchableOpacity
+              key={filter.key}
+              onPress={() => setActiveMailbox(filter.key)}
+              activeOpacity={0.8}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+                backgroundColor: isActive
+                  ? accentColor
+                  : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                borderWidth: 1,
+                borderColor: isActive
+                  ? accentStrong
+                  : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: isActive
+                    ? '#ffffff'
+                    : (isDark ? '#94a3b8' : '#64748b'),
+                }}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <View className="flex-1">
         <FlatList
@@ -544,8 +667,8 @@ export default function HomeScreen() {
             <RefreshControl
               refreshing={isLoading}
               onRefresh={reload}
-              tintColor="#0085ff"
-              colors={["#0085ff"]}
+              tintColor={accentColor}
+              colors={[accentColor]}
             />
           }
           renderItem={({ item }) => (
@@ -555,7 +678,12 @@ export default function HomeScreen() {
               onPress={() => handlePress(item)}
             >
               <View className="mr-3">
-                {item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
+                {item.isGroup && item.hasGroupImage ? (
+                  <Image
+                    source={{ uri: item.avatarUri }}
+                    className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                  />
+                ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
                   <View className="h-14 w-14 relative">
                     {item.stackedAvatarUris.map((uri, index) => (
                       <Image
@@ -590,8 +718,14 @@ export default function HomeScreen() {
                     className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
                   />
                 ) : (
-                  <View className="h-14 w-14 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-                    <Text className="text-xl font-bold text-indigo-600 dark:text-indigo-300">
+                  <View
+                    className="h-14 w-14 items-center justify-center rounded-full"
+                    style={{ backgroundColor: accentSoft }}
+                  >
+                    <Text
+                      className="text-xl font-bold"
+                      style={{ color: accentStrong }}
+                    >
                       {item.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
@@ -614,10 +748,18 @@ export default function HomeScreen() {
                 </View>
                 <View className="flex-row items-center">
                   {item.isGroup ? (
-                    <View className="mr-2 rounded-full bg-blue-50 px-2 py-0.5 dark:bg-blue-900/30">
-                      <Text className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-300">
-                        Group
-                      </Text>
+                    <View
+                      style={{ 
+                        width: 22, 
+                        height: 22, 
+                        borderRadius: 11, 
+                        backgroundColor: accentSoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 8,
+                      }}
+                    >
+                      <Feather name="users" size={12} color={accentStrong} />
                     </View>
                   ) : null}
                   <Text
@@ -632,26 +774,197 @@ export default function HomeScreen() {
           )}
           ListEmptyComponent={() => (
             <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
-              <Feather name="inbox" size={40} color={colorScheme === "dark" ? "#64748b" : "#9ca3af"} />
+              <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />
               <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                Your inbox is quiet
+                {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
               </Text>
               <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
-                Start a new conversation and it will show up here right away.
+                {activeMailbox === "spam"
+                  ? "Messages marked as spam will land here. Move them back to Inbox if they’re safe."
+                  : "Start a new conversation and it will show up here right away."}
               </Text>
-              <TouchableOpacity
-                className="mt-6 rounded-full bg-[#0085ff] px-6 py-3 shadow-lg shadow-blue-200 dark:shadow-none"
-                activeOpacity={0.85}
-                onPress={handleCompose}
-              >
-                <Text className="text-sm font-bold text-white">
-                  Start a message
-                </Text>
-              </TouchableOpacity>
+              {activeMailbox === "spam" ? (
+                <TouchableOpacity
+                  className="mt-6 rounded-full bg-slate-200 px-6 py-3 dark:bg-slate-800"
+                  activeOpacity={0.85}
+                  onPress={() => setActiveMailbox("inbox")}
+                >
+                  <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Go to Inbox
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  className="mt-6 rounded-full px-6 py-3"
+                  activeOpacity={0.85}
+                  onPress={handleCompose}
+                  style={{
+                    backgroundColor: accentColor,
+                    shadowColor: accentColor,
+                    shadowOpacity: isDark ? 0.15 : 0.25,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: 4,
+                  }}
+                >
+                  <Text className="text-sm font-bold text-white">
+                    Start a message
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         />
       </View>
-    </SafeAreaView>
+
+      {/* Group Composer Modal */}
+      <NewGroupChatModal
+        visible={showGroupComposerModal}
+        onClose={() => setShowGroupComposerModal(false)}
+        onGroupCreated={() => {
+          setShowGroupComposerModal(false);
+          reload(); // Reload conversations to show the new group
+        }}
+        onNavigateToGroup={(groupName, ownerPublicKey, initialMessage) => {
+          setShowGroupComposerModal(false);
+          rootNavigation.navigate("Conversation", {
+            threadPublicKey: ownerPublicKey,
+            chatType: "GROUPCHAT" as any,
+            userPublicKey: currentUser?.PublicKeyBase58Check || '',
+            threadAccessGroupKeyName: groupName,
+            userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            partyGroupOwnerPublicKeyBase58Check: ownerPublicKey,
+            title: groupName,
+            initialMessage: initialMessage, // Pass the initial message
+          });
+        }}
+      />
+
+      {/* New Chat Modal */}
+      < Modal
+        visible={showNewChatModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowNewChatModal(false)
+        }
+      >
+        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+          {/* Header */}
+          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+            <Text className="text-xl font-bold text-[#111] dark:text-white">New Message</Text>
+            <TouchableOpacity onPress={() => setShowNewChatModal(false)} className="p-1">
+              <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Input */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+              borderRadius: 14,
+              paddingHorizontal: 16,
+              height: 50,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
+            }}>
+              <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
+              <TextInput
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  fontSize: 16,
+                  color: isDark ? '#ffffff' : '#0f172a',
+                  ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                }}
+                placeholder="Search username..."
+                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                value={newChatSearchQuery}
+                onChangeText={setNewChatSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={Platform.OS !== "web"}
+              />
+            </View>
+          </View>
+
+          {/* Search Results */}
+          {isSearchingNewChat ? (
+            <View className="flex-1 items-center justify-center">
+              <ActivityIndicator size="large" color={accentColor} />
+            </View>
+          ) : hasSearchedNewChat && newChatResults.length === 0 ? (
+            <View className="flex-1 items-center justify-center px-8">
+              <Feather name="user-x" size={48} color={isDark ? "#334155" : "#cbd5e1"} />
+              <Text className="mt-4 text-center text-base text-slate-500 dark:text-slate-400">
+                No users found
+              </Text>
+            </View>
+          ) : !hasSearchedNewChat ? (
+            <View className="flex-1 items-center justify-center px-8">
+              <View style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: accentSoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Feather name="search" size={28} color={accentStrong} />
+              </View>
+              <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
+                Find someone to chat with
+              </Text>
+              <Text className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
+                Search by username to start a conversation
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={newChatResults}
+              keyExtractor={(item) => item.publicKey}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 20,
+                    paddingVertical: 12,
+                  }}
+                  onPress={() => handleSelectNewChatProfile(item)}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={{
+                      uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE
+                    }}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                    }}
+                  />
+                  <View style={{ marginLeft: 14, flex: 1 }}>
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: '600',
+                      color: isDark ? '#ffffff' : '#0f172a',
+                    }} numberOfLines={1}>
+                      {item.username || "Anonymous"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </SafeAreaView>
+      </Modal >
+
+    </SafeAreaView >
   );
+  return mainContent;
 }

@@ -75,26 +75,12 @@ const ACCESS_GROUPS_QUERY = `
             endCursor
           }
         }
+        extraData
       }
       pageInfo {
         hasNextPage
         endCursor
       }
-    }
-  }
-`;
-
-const PROFILES_SEARCH_QUERY = `
-  query Profiles($filter: ProfileFilter, $orderBy: [ProfilesOrderBy!]) {
-    profiles(filter: $filter, orderBy: $orderBy) {
-      nodes {
-        account {
-          profilePic
-          username
-          publicKey
-        }
-      }
-      totalCount
     }
   }
 `;
@@ -148,6 +134,7 @@ type AccessGroupNode = {
       endCursor?: string | null;
     };
   };
+  extraData?: Record<string, string> | null;
 };
 
 export function normalizeTimestampToNanos(
@@ -273,7 +260,7 @@ export async function fetchDmMessagesViaGraphql({
   afterCursor,
   beforeCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: FetchDmMessagesInput): Promise<{
   nodes: GraphqlMessageNode[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -413,7 +400,7 @@ export async function fetchGroupMessagesViaGraphql({
   afterCursor,
   beforeCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: FetchGroupMessagesInput): Promise<{
   nodes: GraphqlMessageNode[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -484,7 +471,7 @@ export async function fetchGroupMessagesViaGraphql({
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
+      "GraphQL query failed"
     );
   }
 
@@ -514,7 +501,7 @@ export async function fetchAccessGroupMembers({
   limit = 50,
   afterCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
+  DEFAULT_GRAPHQL_URL,
 }: {
   accessGroupKeyName: string;
   accessGroupOwnerPublicKey: string;
@@ -524,6 +511,7 @@ export async function fetchAccessGroupMembers({
 }): Promise<{
   members: GroupMember[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  extraData?: Record<string, string> | null;
 }> {
   const filter: Record<string, unknown> = {
     accessGroupKeyName: { equalTo: accessGroupKeyName },
@@ -570,18 +558,19 @@ export async function fetchAccessGroupMembers({
         pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       } | null;
     } | null;
-    errors?: Array<{ message?: string }>;  };
+    errors?: Array<{ message?: string }>;
+  };
 
   if (json.errors?.length) {
     throw new Error(
       json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
+      "GraphQL query failed"
     );
   }
 
   const accessGroupsConnection = json.data?.accessGroups;
   const firstAccessGroup = accessGroupsConnection?.nodes?.[0];
-  
+
   if (!firstAccessGroup?.accessGroupMembers) {
     return {
       members: [],
@@ -612,6 +601,7 @@ export async function fetchAccessGroupMembers({
           ? membersConnection.pageInfo.endCursor
           : null,
     },
+    extraData: firstAccessGroup.extraData || null,
   };
 }
 
@@ -641,106 +631,3 @@ export function buildDefaultProfileEntry(
     ExtraData: profilePic ? { LargeProfilePicURL: profilePic } : {},
   };
 }
-
-export type ProfileSearchResult = {
-  username: string;
-  publicKey: string;
-  profilePic?: string | null;
-};
-
-type ProfilesSearchResponse = {
-  data?: {
-    profiles?: {
-      nodes?: Array<{
-        account?: {
-          username?: string | null;
-          publicKey?: string | null;
-          profilePic?: string | null;
-        } | null;
-      }> | null;
-      totalCount?: number | null;
-    } | null;
-  } | null;
-  errors?: Array<{ message?: string }>;
-};
-
-export async function searchProfiles({
-  query,
-  limit = 20,
-  graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-    DEFAULT_GRAPHQL_URL,
-}: {
-  query: string;
-  limit?: number;
-  graphqlEndpoint?: string;
-}): Promise<ProfileSearchResult[]> {
-  if (!query || query.trim().length === 0) {
-    return [];
-  }
-
-  const filter = {
-    username: {
-      startsWith: query.trim().toLowerCase(),
-    },
-  };
-
-  const variables: Record<string, unknown> = {
-    filter,
-    orderBy: ["COIN_PRICE_DESO_NANOS_DESC"],
-  };
-
-  const body = {
-    query: PROFILES_SEARCH_QUERY,
-    variables,
-  };
-
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-    console.log("[searchProfiles] request payload", {
-      query,
-      variables,
-    });
-  }
-
-  const response = await performGraphqlRequest(body, graphqlEndpoint);
-  const contentType = response.headers.get("content-type") ?? "";
-  
-  if (!contentType.includes("application/json")) {
-    const text = await response.text().catch(() => "");
-    throw new Error(
-      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
-        0,
-        120
-      )}`
-    );
-  }
-
-  const json = (await response.json()) as ProfilesSearchResponse;
-
-  if (json.errors?.length) {
-    throw new Error(
-      json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-        "GraphQL query failed"
-    );
-  }
-
-  const nodes = json.data?.profiles?.nodes ?? [];
-  
-  const results: ProfileSearchResult[] = nodes
-    .filter((node) => node?.account?.publicKey && node?.account?.username)
-    .slice(0, limit)
-    .map((node) => ({
-      username: node.account!.username!,
-      publicKey: node.account!.publicKey!,
-      profilePic: node.account?.profilePic ?? null,
-    }));
-
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-    console.log("[searchProfiles] results", {
-      query,
-      count: results.length,
-    });
-  }
-
-  return results;
-}
-
