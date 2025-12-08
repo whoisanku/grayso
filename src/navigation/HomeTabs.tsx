@@ -5,7 +5,7 @@ import ProfileScreen from "../view/screens/profile/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 
-import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, TouchableWithoutFeedback } from "react-native";
+import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
@@ -20,7 +20,14 @@ import { buildProfilePictureUrl } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
-import Animated, { SlideInLeft, SlideOutLeft } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useAccentColor } from "../state/theme/useAccentColor";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
@@ -165,7 +172,8 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
   const { width: windowWidth } = useWindowDimensions();
   
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-  const [showDrawerDelayedExit, setShowDrawerDelayedExit] = React.useState(false);
+  const [isDrawerVisible, setIsDrawerVisible] = React.useState(false);
+  const drawerProgress = useSharedValue(0);
   
   const drawerWidth = useMemo(() => Math.min(240, windowWidth * 0.6), [windowWidth]);
 
@@ -182,17 +190,38 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
     return () => subscription.remove();
   }, []);
 
-  // Handle delayed exit for web animation
-  React.useLayoutEffect(() => {
-    if (isDrawerOpen !== showDrawerDelayedExit) {
-      if (isDrawerOpen) {
-        setShowDrawerDelayedExit(true);
-      } else {
-        const timeout = setTimeout(() => setShowDrawerDelayedExit(false), 220);
-        return () => clearTimeout(timeout);
-      }
+  // Smooth drawer progress for web
+  React.useEffect(() => {
+    if (isDrawerOpen) {
+      setIsDrawerVisible(true);
+      drawerProgress.value = withTiming(1, {
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+      });
+      return;
     }
-  }, [isDrawerOpen, showDrawerDelayedExit]);
+
+    drawerProgress.value = withTiming(
+      0,
+      { duration: 200, easing: Easing.out(Easing.cubic) },
+      (finished) => {
+        if (finished) {
+          runOnJS(setIsDrawerVisible)(false);
+        }
+      }
+    );
+  }, [drawerProgress, isDrawerOpen]);
+
+  const overlayAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(drawerProgress.value, [0, 1], [0, isDark ? 0.55 : 0.35]),
+  }));
+
+  const drawerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(drawerProgress.value, [0, 1], [-drawerWidth, 0]) },
+    ],
+    shadowOpacity: interpolate(drawerProgress.value, [0, 1], [0.05, 0.2]),
+  }));
 
   const renderDrawerContent = useCallback(() => (
     <View
@@ -282,15 +311,22 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
     return (
       <View style={{ flex: 1 }}>
         {tabNavigator}
-        {showDrawerDelayedExit && (
+        {isDrawerVisible && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }} pointerEvents="box-none">
-            <TouchableWithoutFeedback onPress={() => setIsDrawerOpen(false)}>
-              <View className="absolute inset-0 bg-black/20 dark:bg-slate-950/50" />
-            </TouchableWithoutFeedback>
+            <Pressable
+              onPress={() => setIsDrawerOpen(false)}
+              style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+            >
+              <Animated.View
+                className="absolute inset-0 bg-black dark:bg-slate-950"
+                style={overlayAnimatedStyle}
+              />
+            </Pressable>
             <Animated.View
-              entering={SlideInLeft.duration(250)}
-              exiting={SlideOutLeft.duration(200)}
-              style={{ width: drawerWidth, height: '100%', position: 'absolute', top: 0, left: 0 }}
+              style={[
+                { width: drawerWidth, height: "100%", position: "absolute", top: 0, left: 0 },
+                drawerAnimatedStyle,
+              ]}
               className="bg-white dark:bg-[#0a0f1a] shadow-2xl"
             >
               {renderDrawerContent()}
