@@ -5,7 +5,7 @@ import ProfileScreen from "../view/screens/profile/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 
-import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
+import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable, ScrollView } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
@@ -29,6 +29,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useAccentColor } from "../state/theme/useAccentColor";
+import { DesktopLeftNav } from "../view/components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "../view/components/desktop/DesktopRightNav";
+import { CENTER_CONTENT_MAX_WIDTH } from "../alf/breakpoints";
+import { getBorderColor } from "../theme/borders";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
@@ -37,6 +41,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { accentColor, accentStrong } = useAccentColor();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const tabBarWidth = isDesktopWeb ? Math.min(520, windowWidth * 0.5) : "65%";
+  const tabBarBottomOffset = isDesktopWeb ? 12 : 32;
 
   const tabButtons = state.routes.map((route, index) => {
     const { options } = descriptors[route.key];
@@ -129,7 +137,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       return (
         <LiquidGlassView
           effect="regular"
-          style={[liquidGlassStyles.glassView, glassContainerStyle]}
+          style={[liquidGlassStyles.glassView, glassContainerStyle, { width: tabBarWidth }]}
         >
           <View style={liquidGlassStyles.tabButtonsContainer}>
             {tabButtons}
@@ -143,7 +151,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <BlurView
         intensity={Platform.OS === "ios" ? 50 : 80}
         tint={isDark ? "dark" : "light"}
-        style={[liquidGlassStyles.blurView, glassContainerStyle]}
+        style={[liquidGlassStyles.blurView, glassContainerStyle, { width: tabBarWidth }]}
       >
         <View style={liquidGlassStyles.tabButtonsContainer}>
           {tabButtons}
@@ -153,7 +161,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View className="absolute bottom-8 left-0 right-0 items-center justify-center">
+    <View
+      className="absolute left-0 right-0 items-center justify-center"
+      style={{ bottom: tabBarBottomOffset }}
+    >
       {renderGlassContainer()}
     </View>
   );
@@ -170,10 +181,12 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
   const { currentUser } = useContext(DeSoIdentityContext);
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { width: windowWidth } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = React.useState(false);
   const drawerProgress = useSharedValue(0);
+  const [activeTab, setActiveTab] = React.useState<keyof HomeTabParamList>("Messages");
   
   const drawerWidth = useMemo(() => Math.min(240, windowWidth * 0.6), [windowWidth]);
 
@@ -213,7 +226,7 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
   }, [drawerProgress, isDrawerOpen]);
 
   const overlayAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(drawerProgress.value, [0, 1], [0, isDark ? 0.55 : 0.35]),
+    opacity: interpolate(drawerProgress.value, [0, 1], [0, isDark ? 0.85 : 0.7]),
   }));
 
   const drawerAnimatedStyle = useAnimatedStyle(() => ({
@@ -231,6 +244,8 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
         paddingTop: insets.top,
         paddingBottom: insets.bottom,
         backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+        borderRightWidth: 0.5,
+        borderRightColor: getBorderColor(isDark, 'contrast_low'),
       }}
     >
       <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
@@ -278,9 +293,9 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
     </View>
   ), [currentUser, insets.top, insets.bottom, isDark, rootNavigation]);
 
-  const tabNavigator = (
+  const renderTabNavigator = (tabBarOverride?: (props: BottomTabBarProps) => React.ReactNode) => (
     <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={tabBarOverride ?? ((props) => <CustomTabBar {...props} />)}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -288,6 +303,14 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
           backgroundColor: "transparent",
           borderTopWidth: 0,
           elevation: 0,
+        },
+      }}
+      screenListeners={{
+        state: (e) => {
+          const state = e.data?.state as any;
+          if (state?.routeNames && typeof state.index === "number") {
+            setActiveTab(state.routeNames[state.index]);
+          }
         },
       }}
     >
@@ -306,28 +329,87 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
     </Tab.Navigator>
   );
 
-  // Web: Custom drawer implementation
+  // Desktop web: show side navigation similar to Bluesky
+  // Using fixed-position sidebars with content centered in viewport
+  if (isDesktopWeb) {
+    const tabNavigation = useNavigation<any>();
+    
+    const handleTabChange = (tab: keyof HomeTabParamList) => {
+      tabNavigation.navigate(tab);
+    };
+
+    return (
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
+        {/* Fixed Left Navigation */}
+        <DesktopLeftNav 
+          activeTab={activeTab} 
+          onTabChange={handleTabChange}
+        />
+        
+        {/* Main Content Area - centered with borders like Bluesky */}
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View
+            style={{
+              flex: 1,
+              width: '100%',
+              maxWidth: CENTER_CONTENT_MAX_WIDTH,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+              // Left and right borders around center content
+              borderLeftWidth: 1,
+              borderRightWidth: 1,
+              borderColor: getBorderColor(isDark, 'contrast_low'),
+            }}
+          >
+            {renderTabNavigator(() => null)}
+          </View>
+        </View>
+
+        {/* Fixed Right Navigation (only on wide screens) */}
+        <DesktopRightNav />
+      </View>
+    );
+  }
+
+
+
+  // Web: Custom drawer implementation (non-desktop)
   if (Platform.OS === "web") {
     return (
       <View style={{ flex: 1 }}>
-        {tabNavigator}
+        {renderTabNavigator()}
         {isDrawerVisible && (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }} pointerEvents="box-none">
             <Pressable
               onPress={() => setIsDrawerOpen(false)}
-              style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+              style={[
+                { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+              ]}
             >
               <Animated.View
-                className="absolute inset-0 bg-black dark:bg-slate-950"
-                style={overlayAnimatedStyle}
+                style={[
+                  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+                  overlayAnimatedStyle,
+                  { backgroundColor: isDark ? '#000000' : '#000000' },
+                ]}
+                pointerEvents="none"
               />
             </Pressable>
             <Animated.View
               style={[
-                { width: drawerWidth, height: "100%", position: "absolute", top: 0, left: 0 },
+                { 
+                  width: drawerWidth, 
+                  height: "100%", 
+                  position: "absolute", 
+                  top: 0, 
+                  left: 0,
+                  borderRightWidth: 0.5,
+                  borderRightColor: getBorderColor(isDark, 'contrast_low'),
+                },
                 drawerAnimatedStyle,
               ]}
               className="bg-white dark:bg-[#0a0f1a] shadow-2xl"
+              pointerEvents="box-none"
             >
               {renderDrawerContent()}
             </Animated.View>
@@ -356,21 +438,19 @@ export default function HomeTabs({ navigation }: HomeTabsProps) {
       swipeMinVelocity={100}
       swipeMinDistance={10}
     >
-      {tabNavigator}
+      {renderTabNavigator()}
     </Drawer>
   );
 }
 
 const liquidGlassStyles = StyleSheet.create({
   glassView: {
-    width: "65%",
     borderRadius: 9999, // Full rounded (pill shape)
     overflow: "hidden",
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
   blurView: {
-    width: "65%",
     borderRadius: 9999, // Full rounded (pill shape)
     overflow: "hidden",
     paddingHorizontal: 24,

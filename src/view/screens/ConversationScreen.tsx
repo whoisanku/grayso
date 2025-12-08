@@ -54,6 +54,10 @@ import { usePresence } from "../../features/messaging/hooks/usePresence";
 import { useEphemeralMessages } from "../../features/messaging/hooks/useEphemeralMessages";
 import { TypingIndicator } from "../components/TypingIndicator";
 import { useAccentColor } from "../../state/theme/useAccentColor";
+import { DesktopShell } from "../components/desktop/DesktopShell";
+import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
+import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "../../alf/breakpoints";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -92,6 +96,16 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
   const insets = useSafeAreaInsets();
   const { isDark, accentColor, accentSoft, accentStrong } = useAccentColor();
+  const { isDesktop } = useLayoutBreakpoints();
+  const isWebDesktop = Platform.OS === 'web' && isDesktop;
+  const modalIconButtonStyle = useMemo(() => ({
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  }), [isDark]);
   const composerBottomInset = Math.max(insets.bottom, 8);
 
   // --- Custom Hooks ---
@@ -397,13 +411,14 @@ export default function ConversationScreen({ navigation, route }: Props) {
   }, [error]);
 
   return (
-    <ScreenWrapper
-      edges={['top', 'left', 'right', 'bottom']}
-      keyboardAvoiding={Platform.OS === "ios"}
-      keyboardVerticalOffset={0}
-      backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
-      useKeyboardController={true}
-    >
+    <DesktopShell>
+      <ScreenWrapper
+        edges={['top', 'left', 'right', 'bottom']}
+        keyboardAvoiding={Platform.OS === "ios"}
+        keyboardVerticalOffset={0}
+        backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
+        useKeyboardController={true}
+      >
       {/* Custom Header */}
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center flex-1">
@@ -749,8 +764,9 @@ export default function ConversationScreen({ navigation, route }: Props) {
 
       <Modal
         visible={showMembersModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType={isWebDesktop ? "fade" : "slide"}
+        presentationStyle={isWebDesktop ? "overFullScreen" : "pageSheet"}
+        transparent={isWebDesktop}
         onRequestClose={() => {
           if (showAddMemberModal) {
             setShowAddMemberModal(false);
@@ -759,19 +775,22 @@ export default function ConversationScreen({ navigation, route }: Props) {
           }
         }}
       >
-        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-          {/* Conditional header based on which view is active */}
+        {(() => {
+          const membersModalContent = (
+            <>
+              {/* Conditional header based on which view is active */}
           {showAddMemberModal ? (
             // Add Member Header
             <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setShowAddMemberModal(false)}
-                style={{ padding: 4 }}
+                activeOpacity={0.85}
+                style={modalIconButtonStyle}
               >
-                <Feather name="arrow-left" size={24} color={isDark ? "#fff" : "#111"} />
+                <Feather name="arrow-left" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
               </TouchableOpacity>
               <Text className="text-xl font-bold text-[#111] dark:text-white">Add Member</Text>
-              <View style={{ width: 32 }} />
+              <View style={{ width: 36 }} />
             </View>
           ) : (
             // Group Members Header
@@ -781,247 +800,291 @@ export default function ConversationScreen({ navigation, route }: Props) {
                 {isOwner && (
                   <TouchableOpacity
                     onPress={() => setShowAddMemberModal(true)}
-                    style={{ marginRight: 16, padding: 8 }}
+                    activeOpacity={0.8}
+                    style={[modalIconButtonStyle, { marginRight: 12 }]}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    activeOpacity={0.7}
                   >
-                    <Feather name="user-plus" size={24} color={isDark ? "#f8fafc" : "#0f172a"} />
+                    <Feather name="user-plus" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity onPress={() => setShowMembersModal(false)} className="p-1">
-                  <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
+                <TouchableOpacity
+                  onPress={() => setShowMembersModal(false)}
+                  activeOpacity={0.8}
+                  style={modalIconButtonStyle}
+                >
+                  <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* Conditional content based on which view is active */}
-          {showAddMemberModal ? (
-            // Add Member Content
-            <>
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
-                  borderRadius: 14,
-                  paddingHorizontal: 16,
-                  height: 50,
-                  borderWidth: 1,
-                  borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
-                }}>
-                  <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
-                  <TextInput
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Search by username..."
-                    placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                    style={{
-                      flex: 1,
-                      marginLeft: 12,
-                      fontSize: 16,
-                      color: isDark ? '#ffffff' : '#0f172a',
-                      ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
-                    }}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-              </View>
-
-              <FlatList
-                data={searchResults}
-                extraData={addingMemberKey}
-                keyExtractor={(item) => item.publicKey}
-                renderItem={({ item: user }) => {
-                  const userImageUrl = getProfileImageUrl(user.publicKey || "");
-                  const isAddingThisUser = addingMemberKey === user.publicKey;
-
-                  return (
+              {/* Conditional content based on which view is active */}
+              {showAddMemberModal ? (
+                // Add Member Content
+                <>
+                  <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
                     <View style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      paddingHorizontal: 20,
-                      paddingVertical: 12,
-                      borderBottomWidth: 1,
-                      borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                      backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                      borderRadius: 14,
+                      paddingHorizontal: 16,
+                      height: 50,
+                      borderWidth: 1,
+                      borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
                     }}>
-                      <Image
-                        source={{ uri: userImageUrl }}
+                      <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
+                      <TextInput
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search by username..."
+                        placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                         style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 24,
-                          backgroundColor: isDark ? '#334155' : '#e2e8f0',
-                        }}
-                        resizeMode="cover"
-                      />
-                      <View style={{ marginLeft: 14, flex: 1 }}>
-                        <Text style={{
+                          flex: 1,
+                          marginLeft: 12,
                           fontSize: 16,
-                          fontWeight: '600',
                           color: isDark ? '#ffffff' : '#0f172a',
-                        }}>
-                          {user.username || "Anonymous"}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => handleAddMember(user)}
-                        disabled={!!addingMemberKey}
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 18,
-                          backgroundColor: accentColor,
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
                         }}
-                      >
-                        {isAddingThisUser ? (
-                          <ActivityIndicator size="small" color="white" />
-                        ) : (
-                          <Feather name="plus" size={20} color="#ffffff" />
-                        )}
-                      </TouchableOpacity>
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
                     </View>
-                  );
-                }}
-                ListEmptyComponent={
-                  isSearching ? (
-                    <View style={{
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 60,
-                    }}>
-                      <ActivityIndicator size="large" color={accentColor} />
-                    </View>
-                  ) : hasSearched && searchResults.length === 0 ? (
-                    <View style={{
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 40,
-                    }}>
-                      <View style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 32,
-                        backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: 16,
-                      }}>
-                        <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
-                      </View>
-                      <Text style={{
-                        fontSize: 16,
-                        fontWeight: '600',
-                        color: isDark ? '#94a3b8' : '#64748b',
-                      }}>No users found</Text>
-                    </View>
-                  ) : (
-                    <View style={{
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 40,
-                    }}>
-                      <View style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 32,
-                        backgroundColor: accentSoft,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: 16,
-                      }}>
-                        <Feather name="search" size={28} color={accentStrong} />
-                      </View>
-                      <Text style={{
-                        fontSize: 16,
-                        fontWeight: '600',
-                        color: isDark ? '#e2e8f0' : '#334155',
-                      }}>Search for users to add</Text>
-                    </View>
-                  )
-                }
-              />
-            </>
-          ) : (
-            // Group Members Content
-            <FlatList
-              data={[...groupMembers].sort((a, b) => {
-                // Put admin (owner) at the top
-                if (a.publicKey === recipientOwnerKey) return -1;
-                if (b.publicKey === recipientOwnerKey) return 1;
-                return 0;
-              })}
-              keyExtractor={(item) => item.publicKey}
-              renderItem={({ item: member }) => {
-                const memberImageUrl = member.profilePic
-                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
-                  : getProfileImageUrl(member.publicKey);
-                const isMe = member.publicKey === userPublicKey;
-                const isMemberOwner = member.publicKey === recipientOwnerKey;
+                  </View>
 
-                return (
-                  <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
-                    <Image
-                      source={{ uri: memberImageUrl }}
-                      className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
-                      resizeMode="cover"
-                    />
-                    <View className="ml-3 flex-1">
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text className="text-base font-semibold text-[#111] dark:text-white">
-                          {member.username || "Anonymous"} {isMe && "(You)"}
-                        </Text>
-                        {isMemberOwner && (
-                          <View style={{
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            backgroundColor: accentColor,
-                            borderRadius: 6,
-                          }}>
+                  <FlatList
+                    data={searchResults}
+                    extraData={addingMemberKey}
+                    keyExtractor={(item) => item.publicKey}
+                    renderItem={({ item: user }) => {
+                      const userImageUrl = getProfileImageUrl(user.publicKey || "");
+                      const isAddingThisUser = addingMemberKey === user.publicKey;
+
+                      return (
+                        <View style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: 20,
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.3)' : 'rgba(241, 245, 249, 0.8)',
+                        }}>
+                          <Image
+                            source={{ uri: userImageUrl }}
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 24,
+                              backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                            }}
+                            resizeMode="cover"
+                          />
+                          <View style={{ marginLeft: 14, flex: 1 }}>
                             <Text style={{
-                              fontSize: 10,
-                              fontWeight: '700',
-                              color: '#ffffff',
-                              textTransform: 'uppercase',
-                              letterSpacing: 0.5,
+                              fontSize: 16,
+                              fontWeight: '600',
+                              color: isDark ? '#ffffff' : '#0f172a',
                             }}>
-                              Admin
+                              {user.username || "Anonymous"}
                             </Text>
                           </View>
+                          <TouchableOpacity
+                            onPress={() => handleAddMember(user)}
+                            disabled={!!addingMemberKey}
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: 18,
+                              backgroundColor: accentColor,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {isAddingThisUser ? (
+                              <ActivityIndicator size="small" color="white" />
+                            ) : (
+                              <Feather name="plus" size={20} color="#ffffff" />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    }}
+                    ListEmptyComponent={
+                      isSearching ? (
+                        <View style={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          paddingVertical: 60,
+                        }}>
+                          <ActivityIndicator size="large" color={accentColor} />
+                        </View>
+                      ) : hasSearched && searchResults.length === 0 ? (
+                        <View style={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          paddingVertical: 40,
+                        }}>
+                          <View style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: 32,
+                            backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 16,
+                          }}>
+                            <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+                          </View>
+                          <Text style={{
+                            fontSize: 16,
+                            fontWeight: '600',
+                            color: isDark ? '#94a3b8' : '#64748b',
+                          }}>No users found</Text>
+                        </View>
+                      ) : (
+                        <View style={{
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          paddingVertical: 40,
+                        }}>
+                          <View style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: 32,
+                            backgroundColor: accentSoft,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 16,
+                          }}>
+                            <Feather name="search" size={28} color={accentStrong} />
+                          </View>
+                          <Text style={{
+                            fontSize: 16,
+                            fontWeight: '600',
+                            color: isDark ? '#e2e8f0' : '#334155',
+                          }}>Search for users to add</Text>
+                        </View>
+                      )
+                    }
+                  />
+                </>
+              ) : (
+                // Group Members Content
+                <FlatList
+                  data={[...groupMembers].sort((a, b) => {
+                    // Put admin (owner) at the top
+                    if (a.publicKey === recipientOwnerKey) return -1;
+                    if (b.publicKey === recipientOwnerKey) return 1;
+                    return 0;
+                  })}
+                  keyExtractor={(item) => item.publicKey}
+                  renderItem={({ item: member }) => {
+                    const memberImageUrl = member.profilePic
+                      ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
+                      : getProfileImageUrl(member.publicKey);
+                    const isMe = member.publicKey === userPublicKey;
+                    const isMemberOwner = member.publicKey === recipientOwnerKey;
+
+                    return (
+                      <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
+                        <Image
+                          source={{ uri: memberImageUrl }}
+                          className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
+                          resizeMode="cover"
+                        />
+                        <View className="ml-3 flex-1">
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text className="text-base font-semibold text-[#111] dark:text-white">
+                              {member.username || "Anonymous"} {isMe && "(You)"}
+                            </Text>
+                            {isMemberOwner && (
+                              <View style={{
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                backgroundColor: accentColor,
+                                borderRadius: 6,
+                              }}>
+                                <Text style={{
+                                  fontSize: 10,
+                                  fontWeight: '700',
+                                  color: '#ffffff',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.5,
+                                }}>
+                                  Admin
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        {isOwner && !isMe && (
+                          <TouchableOpacity
+                            onPress={() => handleRemoveMember(member.publicKey, member.username || "")}
+                            className="rounded-full"
+                            activeOpacity={0.8}
+                            style={{
+                              backgroundColor: accentSoft,
+                              width: 36,
+                              height: 36,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                            disabled={isRemovingMember}
+                          >
+                            <Feather name="trash-2" size={18} color={accentStrong} />
+                          </TouchableOpacity>
                         )}
                       </View>
-                    </View>
-                    {isOwner && !isMe && (
-                      <TouchableOpacity
-                        onPress={() => handleRemoveMember(member.publicKey, member.username || "")}
-                        className="p-2 rounded-full"
-                        style={{ backgroundColor: accentSoft }}
-                        disabled={isRemovingMember}
-                      >
-                        <Feather name="trash-2" size={18} color={accentStrong} />
-                      </TouchableOpacity>
-                    )}
+                    );
+                  }}
+                  ListEmptyComponent={
+                    !loadingMembers ? (
+                      <View className="flex-1 items-center justify-center py-14">
+                        <Feather name="users" size={48} color="#9ca3af" />
+                        <Text className="mt-4 text-base text-gray-500">No members found</Text>
+                      </View>
+                    ) : (
+                      <View className="flex-1 items-center justify-center py-14">
+                        <ActivityIndicator size="large" color={accentColor} />
+                      </View>
+                    )
+                  }
+                />
+              )}
+            </>
+          );
+
+          if (isWebDesktop) {
+            // Desktop: Show with sidebars visible
+            return (
+              <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}>
+                <DesktopLeftNav />
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <View style={{
+                    flex: 1,
+                    width: '100%',
+                    maxWidth: CENTER_CONTENT_MAX_WIDTH,
+                    backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+                    borderLeftWidth: 1,
+                    borderRightWidth: 1,
+                    borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
+                  }}>
+                    <SafeAreaView style={{ flex: 1 }}>
+                      {membersModalContent}
+                    </SafeAreaView>
                   </View>
-                );
-              }}
-              ListEmptyComponent={
-                !loadingMembers ? (
-                  <View className="flex-1 items-center justify-center py-14">
-                    <Feather name="users" size={48} color="#9ca3af" />
-                    <Text className="mt-4 text-base text-gray-500">No members found</Text>
-                  </View>
-                ) : (
-                  <View className="flex-1 items-center justify-center py-14">
-                    <ActivityIndicator size="large" color={accentColor} />
-                  </View>
-                )
-              }
-            />
-          )}
-        </SafeAreaView>
+                </View>
+                <DesktopRightNav />
+              </View>
+            );
+          }
+
+          return (
+            <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+              {membersModalContent}
+            </SafeAreaView>
+          );
+        })()}
       </Modal>
 
 
@@ -1069,6 +1132,7 @@ export default function ConversationScreen({ navigation, route }: Props) {
           </View>
         </View>
       </Modal>
-    </ScreenWrapper >
+      </ScreenWrapper>
+    </DesktopShell>
   );
 }

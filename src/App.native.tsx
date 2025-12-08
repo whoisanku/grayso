@@ -17,6 +17,7 @@ import { KeyboardProvider } from "./components/KeyboardProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./state/queryClient";
 import { AppThemeProvider } from "./state/theme/AppThemeProvider";
+import { AppearanceProvider } from "./state/theme/useAppearance";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -46,21 +47,23 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppThemeProvider>
-        <DeSoIdentityProvider>
-          <CryptoPolyfill />
-          <SafeAreaProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-                <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-                  <RootNavigator />
-                </NavigationContainer>
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </SafeAreaProvider>
-        </DeSoIdentityProvider>
-      </AppThemeProvider>
+      <AppearanceProvider>
+        <AppThemeProvider>
+          <DeSoIdentityProvider>
+            <CryptoPolyfill />
+            <SafeAreaProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                  <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+                    <RootNavigator />
+                  </NavigationContainer>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </SafeAreaProvider>
+          </DeSoIdentityProvider>
+        </AppThemeProvider>
+      </AppearanceProvider>
     </QueryClientProvider>
   );
 }
