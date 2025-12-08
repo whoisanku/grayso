@@ -80,6 +80,7 @@ type MockConversation = {
   stackedAvatarUris?: string[];
   chatType: ChatType;
   threadPublicKey: string;
+  threadIdentifier?: string;
   threadAccessGroupKeyName?: string;
   userAccessGroupKeyName?: string;
   partyGroupOwnerPublicKeyBase58Check?: string;
@@ -105,6 +106,29 @@ const formatTimestamp = (timestampMs: number) => {
     month: "short",
     day: "numeric",
   });
+};
+
+// Helper function to generate preview text for media messages
+const getMediaPreviewText = (
+  extraData: Record<string, any> | undefined,
+  senderName: string
+): string | null => {
+  if (!extraData) return null;
+
+  const isYou = senderName === "You";
+  const prefix = isYou ? "you" : senderName.toLowerCase();
+
+  // Check for video
+  if (extraData.encryptedVideoURLs || extraData["video.0.clientId"]) {
+    return `${prefix} sent a video`;
+  }
+
+  // Check for image
+  if (extraData.encryptedImageURLs || extraData["image.0.clientId"]) {
+    return `${prefix} sent an image`;
+  }
+
+  return null;
 };
 
 export default function HomeScreen() {
@@ -264,7 +288,16 @@ export default function HomeScreen() {
         const name = isGroup
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
           : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
-        const preview = `${senderName}: ${last?.DecryptedMessage || "..."}`;
+
+        // Check for media in extraData
+        const messageExtraData = last?.MessageInfo?.ExtraData as Record<string, any> | undefined;
+        const mediaPreview = getMediaPreviewText(messageExtraData, senderName);
+
+        // Generate preview text
+        const preview = mediaPreview
+          ? mediaPreview
+          : `${senderName}: ${last?.DecryptedMessage || "..."}`;
+
 
         // For group chats, check if there's a custom group image in extraData
         let avatarUri: string;
@@ -315,6 +348,9 @@ export default function HomeScreen() {
           uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
         }
 
+        // Extract thread identifier from message ExtraData
+        const threadIdentifier = (last?.MessageInfo?.ExtraData as Record<string, any> | undefined)?.threadIdentifier || "";
+
         return {
           id: uniqueId,
           name,
@@ -325,6 +361,7 @@ export default function HomeScreen() {
           isGroup,
           chatType: c.ChatType,
           threadPublicKey: otherPk,
+          threadIdentifier,
           lastTimestampNanos: last?.MessageInfo?.TimestampNanos,
           userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
           threadAccessGroupKeyName: isGroup
@@ -469,9 +506,13 @@ export default function HomeScreen() {
       });
 
       try {
+        // Use threadIdentifier from item, or fallback to constructing it
+        const threadId = item.threadIdentifier ||
+          `${currentUser.PublicKeyBase58Check}-${item.threadPublicKey}-default-key-default-key-false`;
+
         await moveSpamInbox(
           currentUser.PublicKeyBase58Check,
-          item.threadPublicKey,
+          threadId,
           moveToSpam
         );
         // Success - reload to get fresh data from server
@@ -804,7 +845,7 @@ export default function HomeScreen() {
                     style={isDesktopWeb ? { borderRadius: 14 } : undefined}
                   >
                     <View className="mr-3">
-                      {item.isGroup && item.hasGroupImage ? (
+                      {item.isGroup && item.hasGroupImage && item.avatarUri ? (
                         <Image
                           source={{ uri: item.avatarUri }}
                           className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"

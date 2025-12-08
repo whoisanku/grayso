@@ -32,6 +32,7 @@ const INBOX_THREADS_QUERY = `
               timestamp
               isGroupChatMessage
               threadIdentifier
+              extraData
               sender {
                 publicKey
                 username
@@ -190,10 +191,9 @@ export async function fetchInboxMessageThreads({
 }> {
   const mergedFilter = {
     initiator: { isBlacklisted: { equalTo: false } },
-    isSpam: { equalTo: isSpam },
     ...filter,
     // Explicit isSpam param takes precedence over caller-provided filter
-    ...(filter?.isSpam ? { isSpam: filter.isSpam } : { isSpam: { equalTo: isSpam } }),
+    isSpam: { equalTo: isSpam },
   } as Record<string, unknown>;
 
   const variables: Record<string, unknown> = {
