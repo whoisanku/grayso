@@ -38,11 +38,15 @@ import {
 import { useConversations } from "../hooks/useConversations";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "../../constants/events";
+import { getBorderColor } from "../../theme/borders";
 import { LiquidGlassView } from "../../utils/liquidGlass";
 import type { ConversationMap } from "../../services/conversations";
 import { NewGroupChatModal } from "../components/NewGroupChatModal";
 import { searchUsers, UserSearchResult } from "../../services/userSearch";
 import { useAccentColor } from "../../state/theme/useAccentColor";
+import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
+import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "../../alf/breakpoints";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -135,6 +139,9 @@ export default function HomeScreen() {
   const openDrawer = useCallback(() => {
     DeviceEventEmitter.emit(DRAWER_STATE_EVENT, { requestOpen: true });
   }, []);
+
+  const { isDesktop } = useLayoutBreakpoints();
+  const isDesktopWeb = Platform.OS === "web" && isDesktop;
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -408,15 +415,17 @@ export default function HomeScreen() {
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={openDrawer}
-              activeOpacity={0.7}
-              className="mr-3"
-            >
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </View>
-            </TouchableOpacity>
+            {!isDesktopWeb && (
+              <TouchableOpacity
+                onPress={openDrawer}
+                activeOpacity={0.7}
+                className="mr-3"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                  <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                </View>
+              </TouchableOpacity>
+            )}
             <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
               Chats
             </Text>
@@ -461,22 +470,22 @@ export default function HomeScreen() {
                 onPress={() => setActiveMailbox(filter.key)}
                 activeOpacity={0.8}
                 style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                  borderRadius: 20,
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 16,
                   backgroundColor: isActive
                     ? accentColor
                     : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
                   borderWidth: 1,
                   borderColor: isActive
                     ? accentStrong
-                    : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
+                    : getBorderColor(isDark, 'subtle'),
                 }}
               >
                 <Text
                   style={{
-                    fontSize: 14,
-                    fontWeight: '600',
+                    fontSize: 13,
+                    fontWeight: '500',
                     color: isActive
                       ? '#ffffff'
                       : (isDark ? '#94a3b8' : '#64748b'),
@@ -521,300 +530,322 @@ export default function HomeScreen() {
 
   const mainContent = (
     <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
-        <View className="flex-row items-center">
-          {/* Hamburger Menu Button */}
-          <TouchableOpacity
-            onPress={openDrawer}
-            activeOpacity={0.7}
-            className="mr-3"
-          >
-            {LiquidGlassView ? (
-              <LiquidGlassView
-                effect="regular"
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+      <View
+        style={{
+          width: "100%",
+          flex: 1,
+          paddingHorizontal: 0,
+        }}
+      >
+        {/* Header */}
+        <View
+          className="flex-row items-center justify-between pt-4 pb-3 px-4"
+        >
+          <View className="flex-row items-center">
+            {/* Hamburger Menu Button - hidden on desktop */}
+            {!isDesktopWeb && (
+              <TouchableOpacity
+                onPress={openDrawer}
+                activeOpacity={0.7}
+                className="mr-3"
               >
-                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </LiquidGlassView>
-            ) : (
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </View>
-            )}
-          </TouchableOpacity>
-          <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
-            Chats
-          </Text>
-        </View>
-
-        {/* Header Right Icons */}
-        <View className="flex-row items-center">
-          {/* New Group Chat Button */}
-          <TouchableOpacity
-            onPress={() => setShowGroupComposerModal(true)}
-            activeOpacity={0.7}
-            className="mr-1"
-          >
-            {LiquidGlassView ? (
-              <LiquidGlassView
-                effect="regular"
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </LiquidGlassView>
-            ) : (
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* New Chat Button - opens new chat modal */}
-          <TouchableOpacity
-            onPress={() => setShowNewChatModal(true)}
-            activeOpacity={0.7}
-          >
-            {LiquidGlassView ? (
-              <LiquidGlassView
-                effect="regular"
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </LiquidGlassView>
-            ) : (
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* WhatsApp-style filter chips */}
-      <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
-        {([
-          { key: "inbox", label: "Inbox" },
-          { key: "spam", label: "Spam" },
-        ] as const).map((filter) => {
-          const isActive = activeMailbox === filter.key;
-
-          return (
-            <TouchableOpacity
-              key={filter.key}
-              onPress={() => setActiveMailbox(filter.key)}
-              activeOpacity={0.8}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 20,
-                backgroundColor: isActive
-                  ? accentColor
-                  : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
-                borderWidth: 1,
-                borderColor: isActive
-                  ? accentStrong
-                  : (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(203, 213, 225, 0.6)'),
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: '600',
-                  color: isActive
-                    ? '#ffffff'
-                    : (isDark ? '#94a3b8' : '#64748b'),
-                }}
-              >
-                {filter.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View className="flex-1">
-        <FlatList
-          data={enhancedItems}
-          keyExtractor={(item) => item.id}
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => null}
-          contentContainerClassName={
-            items.length === 0
-              ? "flex-grow items-center justify-center px-4 pb-20"
-              : "px-0 pb-4"
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              onRefresh={reload}
-              tintColor={accentColor}
-              colors={[accentColor]}
-            />
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]"
-              activeOpacity={0.7}
-              onPress={() => handlePress(item)}
-            >
-              <View className="mr-3">
-                {item.isGroup && item.hasGroupImage ? (
-                  <Image
-                    source={{ uri: item.avatarUri }}
-                    className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                  />
-                ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
-                  <View className="h-14 w-14 relative">
-                    {item.stackedAvatarUris.map((uri, index) => (
-                      <Image
-                        key={index}
-                        source={{ uri }}
-                        className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                        style={{
-                          top: index === 0 ? 0 : index === 1 ? 14 : 4,
-                          left: index === 0 ? 0 : index === 1 ? 14 : 24,
-                          zIndex: 3 - index,
-                        }}
-                      />
-                    ))}
-                  </View>
-                ) : item.isGroup && item.isLoadingMembers ? (
-                  <View className="h-14 w-14 relative">
-                    {[0, 1, 2].map((i) => (
-                      <View
-                        key={`placeholder-${i}`}
-                        className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                        style={{
-                          top: i === 0 ? 0 : i === 1 ? 14 : 4,
-                          left: i === 0 ? 0 : i === 1 ? 14 : 24,
-                          zIndex: 3 - i,
-                        }}
-                      />
-                    ))}
-                  </View>
-                ) : item.avatarUri ? (
-                  <Image
-                    source={{ uri: item.avatarUri }}
-                    className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                  />
-                ) : (
-                  <View
-                    className="h-14 w-14 items-center justify-center rounded-full"
-                    style={{ backgroundColor: accentSoft }}
+                {LiquidGlassView ? (
+                  <LiquidGlassView
+                    effect="regular"
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
                   >
-                    <Text
-                      className="text-xl font-bold"
-                      style={{ color: accentStrong }}
-                    >
-                      {item.name.charAt(0).toUpperCase()}
-                    </Text>
+                    <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                  </LiquidGlassView>
+                ) : (
+                  <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                    <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
                   </View>
                 )}
-              </View>
-              <View className="flex-1 min-w-0">
-                <View className="flex-row items-center justify-between mb-1">
-                  <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
-                  >
-                    {item.name}
-                  </Text>
-                  {item.time ? (
-                    <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
-                      {item.time}
-                    </Text>
-                  ) : null}
-                </View>
-                <View className="flex-row items-center">
-                  {item.isGroup ? (
-                    <View
-                      style={{ 
-                        width: 22, 
-                        height: 22, 
-                        borderRadius: 11, 
-                        backgroundColor: accentSoft,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 8,
-                      }}
-                    >
-                      <Feather name="users" size={12} color={accentStrong} />
-                    </View>
-                  ) : null}
-                  <Text
-                    numberOfLines={1}
-                    className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
-                  >
-                    {item.preview}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={() => (
-            <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
-              <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />
-              <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
-              </Text>
-              <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
-                {activeMailbox === "spam"
-                  ? "Messages marked as spam will land here. Move them back to Inbox if they’re safe."
-                  : "Start a new conversation and it will show up here right away."}
-              </Text>
-              {activeMailbox === "spam" ? (
-                <TouchableOpacity
-                  className="mt-6 rounded-full bg-slate-200 px-6 py-3 dark:bg-slate-800"
-                  activeOpacity={0.85}
-                  onPress={() => setActiveMailbox("inbox")}
-                >
-                  <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Go to Inbox
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  className="mt-6 rounded-full px-6 py-3"
-                  activeOpacity={0.85}
-                  onPress={handleCompose}
+              </TouchableOpacity>
+            )}
+            <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
+              Chats
+            </Text>
+          </View>
+
+          {/* Header Right Icons */}
+          <View className="flex-row items-center">
+            {/* New Group Chat Button */}
+            <TouchableOpacity
+              onPress={() => setShowGroupComposerModal(true)}
+              activeOpacity={0.7}
+              className="mr-1"
+            >
+              {LiquidGlassView ? (
+                <LiquidGlassView
+                  effect="regular"
                   style={{
-                    backgroundColor: accentColor,
-                    shadowColor: accentColor,
-                    shadowOpacity: isDark ? 0.15 : 0.25,
-                    shadowRadius: 12,
-                    shadowOffset: { width: 0, height: 6 },
-                    elevation: 4,
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  <Text className="text-sm font-bold text-white">
-                    Start a message
-                  </Text>
-                </TouchableOpacity>
+                  <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                </LiquidGlassView>
+              ) : (
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                  <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                </View>
               )}
-            </View>
-          )}
-        />
+            </TouchableOpacity>
+
+            {/* New Chat Button - opens new chat modal */}
+            <TouchableOpacity
+              onPress={() => setShowNewChatModal(true)}
+              activeOpacity={0.7}
+            >
+              {LiquidGlassView ? (
+                <LiquidGlassView
+                  effect="regular"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                </LiquidGlassView>
+              ) : (
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                  <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* WhatsApp-style filter chips */}
+        <View
+          style={{
+            flexDirection: 'row',
+            paddingHorizontal: 16,
+            paddingBottom: 12,
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          {([
+            { key: "inbox", label: "Inbox" },
+            { key: "spam", label: "Spam" },
+          ] as const).map((filter) => {
+            const isActive = activeMailbox === filter.key;
+
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                onPress={() => setActiveMailbox(filter.key)}
+                activeOpacity={0.8}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: isActive
+                    ? accentColor
+                    : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                  borderWidth: 1,
+                  borderColor: isActive
+                    ? accentStrong
+                    : getBorderColor(isDark, 'subtle'),
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '500',
+                    color: isActive
+                      ? '#ffffff'
+                      : (isDark ? '#94a3b8' : '#64748b'),
+                  }}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View className="flex-1">
+          <FlatList
+            data={enhancedItems}
+            keyExtractor={(item) => item.id}
+            className="flex-1"
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => null}
+            contentContainerClassName={
+              items.length === 0
+                ? "flex-grow items-center justify-center px-4 pb-20"
+                : "px-0 pb-4"
+            }
+            contentContainerStyle={isDesktopWeb ? { paddingHorizontal: 0 } : undefined}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={reload}
+                tintColor={accentColor}
+                colors={[accentColor]}
+              />
+            }
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]"
+                activeOpacity={0.7}
+                onPress={() => handlePress(item)}
+                style={isDesktopWeb ? { borderRadius: 14 } : undefined}
+              >
+                <View className="mr-3">
+                  {item.isGroup && item.hasGroupImage ? (
+                    <Image
+                      source={{ uri: item.avatarUri }}
+                      className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                    />
+                  ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
+                    <View className="h-14 w-14 relative">
+                      {item.stackedAvatarUris.map((uri, index) => (
+                        <Image
+                          key={index}
+                          source={{ uri }}
+                          className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                          style={{
+                            top: index === 0 ? 0 : index === 1 ? 14 : 4,
+                            left: index === 0 ? 0 : index === 1 ? 14 : 24,
+                            zIndex: 3 - index,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  ) : item.isGroup && item.isLoadingMembers ? (
+                    <View className="h-14 w-14 relative">
+                      {[0, 1, 2].map((i) => (
+                        <View
+                          key={`placeholder-${i}`}
+                          className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                          style={{
+                            top: i === 0 ? 0 : i === 1 ? 14 : 4,
+                            left: i === 0 ? 0 : i === 1 ? 14 : 24,
+                            zIndex: 3 - i,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  ) : item.avatarUri ? (
+                    <Image
+                      source={{ uri: item.avatarUri }}
+                      className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                    />
+                  ) : (
+                    <View
+                      className="h-14 w-14 items-center justify-center rounded-full"
+                      style={{ backgroundColor: accentSoft }}
+                    >
+                      <Text
+                        className="text-xl font-bold"
+                        style={{ color: accentStrong }}
+                      >
+                        {item.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View className="flex-1 min-w-0">
+                  <View className="flex-row items-center justify-between mb-1">
+                    <Text
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
+                    >
+                      {item.name}
+                    </Text>
+                    {item.time ? (
+                      <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
+                        {item.time}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View className="flex-row items-center">
+                    {item.isGroup ? (
+                      <View
+                        style={{ 
+                          width: 22, 
+                          height: 22, 
+                          borderRadius: 11, 
+                          backgroundColor: accentSoft,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 8,
+                        }}
+                      >
+                        <Feather name="users" size={12} color={accentStrong} />
+                      </View>
+                    ) : null}
+                    <Text
+                      numberOfLines={1}
+                      className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+                    >
+                      {item.preview}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={() => (
+              <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
+                <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />
+                <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                  {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
+                </Text>
+                <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
+                  {activeMailbox === "spam"
+                    ? "Messages marked as spam will land here. Move them back to Inbox if they’re safe."
+                    : "Start a new conversation and it will show up here right away."}
+                </Text>
+                {activeMailbox === "spam" ? (
+                  <TouchableOpacity
+                    className="mt-6 rounded-full bg-slate-200 px-6 py-3 dark:bg-slate-800"
+                    activeOpacity={0.85}
+                    onPress={() => setActiveMailbox("inbox")}
+                  >
+                    <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      Go to Inbox
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    className="mt-6 rounded-full px-6 py-3"
+                    activeOpacity={0.85}
+                    onPress={handleCompose}
+                    style={{
+                      backgroundColor: accentColor,
+                      shadowColor: accentColor,
+                      shadowOpacity: isDark ? 0.15 : 0.25,
+                      shadowRadius: 12,
+                      shadowOffset: { width: 0, height: 6 },
+                      elevation: 4,
+                    }}
+                  >
+                    <Text className="text-sm font-bold text-white">
+                      Start a message
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          />
+        </View>
       </View>
 
       {/* Group Composer Modal */}
@@ -841,130 +872,177 @@ export default function HomeScreen() {
       />
 
       {/* New Chat Modal */}
-      < Modal
+      <Modal
         visible={showNewChatModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowNewChatModal(false)
-        }
+        animationType={isDesktopWeb ? "fade" : "slide"}
+        presentationStyle={isDesktopWeb ? "overFullScreen" : "pageSheet"}
+        transparent={isDesktopWeb}
+        onRequestClose={() => setShowNewChatModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-          {/* Header */}
-          <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-            <Text className="text-xl font-bold text-[#111] dark:text-white">New Message</Text>
-            <TouchableOpacity onPress={() => setShowNewChatModal(false)} className="p-1">
-              <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
-            </TouchableOpacity>
-          </View>
+        {(() => {
+          const closeButtonStyle = {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          } as const;
 
-          {/* Search Input */}
-          <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
-              borderRadius: 14,
-              paddingHorizontal: 16,
-              height: 50,
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(71, 85, 105, 0.3)' : 'rgba(203, 213, 225, 0.5)',
-            }}>
-              <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
-              <TextInput
-                style={{
-                  flex: 1,
-                  marginLeft: 12,
-                  fontSize: 16,
-                  color: isDark ? '#ffffff' : '#0f172a',
-                  ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
-                }}
-                placeholder="Search username..."
-                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                value={newChatSearchQuery}
-                onChangeText={setNewChatSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus={Platform.OS !== "web"}
-              />
-            </View>
-          </View>
-
-          {/* Search Results */}
-          {isSearchingNewChat ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color={accentColor} />
-            </View>
-          ) : hasSearchedNewChat && newChatResults.length === 0 ? (
-            <View className="flex-1 items-center justify-center px-8">
-              <Feather name="user-x" size={48} color={isDark ? "#334155" : "#cbd5e1"} />
-              <Text className="mt-4 text-center text-base text-slate-500 dark:text-slate-400">
-                No users found
-              </Text>
-            </View>
-          ) : !hasSearchedNewChat ? (
-            <View className="flex-1 items-center justify-center px-8">
-              <View style={{
-                width: 64,
-                height: 64,
-                borderRadius: 32,
-                backgroundColor: accentSoft,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <Feather name="search" size={28} color={accentStrong} />
-              </View>
-              <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
-                Find someone to chat with
-              </Text>
-              <Text className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
-                Search by username to start a conversation
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={newChatResults}
-              keyExtractor={(item) => item.publicKey}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
+          const modalContent = (
+            <>
+              {/* Header */}
+              <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+                <Text className="text-xl font-bold text-[#111] dark:text-white">New Message</Text>
                 <TouchableOpacity
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingHorizontal: 20,
-                    paddingVertical: 12,
-                  }}
-                  onPress={() => handleSelectNewChatProfile(item)}
-                  activeOpacity={0.7}
+                  onPress={() => setShowNewChatModal(false)}
+                  activeOpacity={0.8}
+                  style={closeButtonStyle}
                 >
-                  <Image
-                    source={{
-                      uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE
-                    }}
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: isDark ? '#334155' : '#e2e8f0',
-                    }}
-                  />
-                  <View style={{ marginLeft: 14, flex: 1 }}>
-                    <Text style={{
-                      fontSize: 16,
-                      fontWeight: '600',
-                      color: isDark ? '#ffffff' : '#0f172a',
-                    }} numberOfLines={1}>
-                      {item.username || "Anonymous"}
-                    </Text>
-                  </View>
+                  <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
                 </TouchableOpacity>
-              )}
-            />
-          )}
-        </SafeAreaView>
-      </Modal >
+              </View>
 
-    </SafeAreaView >
+              {/* Search Input */}
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
+                  borderRadius: 14,
+                  paddingHorizontal: 16,
+                  height: 50,
+                  borderWidth: 1,
+                  borderColor: getBorderColor(isDark, 'subtle'),
+                }}>
+                  <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      marginLeft: 12,
+                      fontSize: 16,
+                      color: isDark ? '#ffffff' : '#0f172a',
+                      ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                    }}
+                    placeholder="Search username..."
+                    placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                    value={newChatSearchQuery}
+                    onChangeText={setNewChatSearchQuery}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoFocus={Platform.OS !== "web"}
+                  />
+                </View>
+              </View>
+
+              {/* Search Results */}
+              {isSearchingNewChat ? (
+                <View className="flex-1 items-center justify-center">
+                  <ActivityIndicator size="large" color={accentColor} />
+                </View>
+              ) : hasSearchedNewChat && newChatResults.length === 0 ? (
+                <View className="flex-1 items-center justify-center px-8">
+                  <Feather name="user-x" size={48} color={isDark ? "#334155" : "#cbd5e1"} />
+                  <Text className="mt-4 text-center text-base text-slate-500 dark:text-slate-400">
+                    No users found
+                  </Text>
+                </View>
+              ) : !hasSearchedNewChat ? (
+                <View className="flex-1 items-center justify-center px-8">
+                  <View style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 32,
+                    backgroundColor: accentSoft,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <Feather name="search" size={28} color={accentStrong} />
+                  </View>
+                  <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
+                    Find someone to chat with
+                  </Text>
+                  <Text className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Search by username to start a conversation
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={newChatResults}
+                  keyExtractor={(item) => item.publicKey}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingHorizontal: 20,
+                        paddingVertical: 12,
+                      }}
+                      onPress={() => handleSelectNewChatProfile(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{
+                          uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE
+                        }}
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 24,
+                          backgroundColor: isDark ? '#334155' : '#e2e8f0',
+                        }}
+                      />
+                      <View style={{ marginLeft: 14, flex: 1 }}>
+                        <Text style={{
+                          fontSize: 16,
+                          fontWeight: '600',
+                          color: isDark ? '#ffffff' : '#0f172a',
+                        }} numberOfLines={1}>
+                          {item.username || "Anonymous"}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </>
+          );
+
+          if (isDesktopWeb) {
+            return (
+              <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}>
+                <DesktopLeftNav />
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <View style={{
+                    flex: 1,
+                    width: '100%',
+                    maxWidth: CENTER_CONTENT_MAX_WIDTH,
+                    backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+                    borderLeftWidth: 1,
+                    borderRightWidth: 1,
+                    borderColor: getBorderColor(isDark, 'contrast_low'),
+                  }}>
+                    <SafeAreaView style={{ flex: 1 }}>
+                      {modalContent}
+                    </SafeAreaView>
+                  </View>
+                </View>
+                <DesktopRightNav />
+              </View>
+            );
+          }
+
+          return (
+            <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+              {modalContent}
+            </SafeAreaView>
+          );
+        })()}
+      </Modal>
+
+    </SafeAreaView>
   );
   return mainContent;
 }

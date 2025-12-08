@@ -25,6 +25,9 @@ import { BlurView } from "expo-blur";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAccentColor } from "../../state/theme/useAccentColor";
+import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
+import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "../../alf/breakpoints";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -58,6 +61,8 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
   const insets = useSafeAreaInsets();
   const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
+  const { isDesktop } = useLayoutBreakpoints();
+  const isWebDesktop = Platform.OS === "web" && isDesktop;
 
   // Keyboard animation for toolbar positioning
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
@@ -328,7 +333,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
     );
   };
 
-  return (
+  const content = (
     <ScreenWrapper
       edges={['top', 'left', 'right']}
       keyboardAvoiding={false}
@@ -337,7 +342,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
       <View className="flex-1">
         {/* Custom Header */}
         <View
-          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-4 dark:border-slate-800 dark:bg-[#0a0f1a]"
+          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#0a0f1a]"
         >
           <TouchableOpacity
             onPress={onCancel}
@@ -350,7 +355,7 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
           <TouchableOpacity
             onPress={onPost}
             disabled={!canPost || isPosting}
-            className="rounded-full px-6 py-2"
+            className="rounded-full px-5 py-2"
             activeOpacity={0.8}
             style={
               canPost
@@ -483,4 +488,28 @@ export default function ComposerScreen({ navigation }: ComposerScreenProps) {
       </View>
     </ScreenWrapper>
   );
+
+  if (isWebDesktop) {
+    return (
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#f8fafc' }}>
+        <DesktopLeftNav />
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={{
+            flex: 1,
+            width: '100%',
+            maxWidth: CENTER_CONTENT_MAX_WIDTH,
+            backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
+          }}>
+            {content}
+          </View>
+        </View>
+        <DesktopRightNav />
+      </View>
+    );
+  }
+
+  return content;
 }

@@ -890,8 +890,9 @@ export const Composer = React.memo(function Composer({
                 style={{
                     flexDirection: 'row',
                     alignItems: 'flex-end',
-                    marginHorizontal: 12,
-                    marginVertical: 12,
+                    paddingHorizontal: 12,
+                    paddingTop: 10,
+                    paddingBottom: 4,
                     justifyContent: 'space-between',
                 }}
             >
