@@ -7,6 +7,10 @@ export const moveSpamInbox = async (
     threadIdentifier: string,
     isSpam: boolean
 ) => {
+    if (!threadIdentifier) {
+        throw new Error("threadIdentifier is required to move spam/inbox");
+    }
+
     try {
         const response = await createUserAssociation({
             TransactorPublicKeyBase58Check: userPublicKey,

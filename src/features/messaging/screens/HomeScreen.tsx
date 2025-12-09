@@ -18,7 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import {
   MenuProvider,
 } from "react-native-popup-menu";
-import { ChatType, buildProfilePictureUrl } from "deso-protocol";
+import { ChatType, buildProfilePictureUrl, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import {
   CompositeNavigationProp,
   useNavigation,
@@ -50,9 +50,10 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
-import { SwipeableChatItem } from "../components/SwipeableChatItem";
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { getConversationsQueryKey, fetchConversations } from "@/state/queries/messages/list";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -135,11 +136,10 @@ const getMediaPreviewText = (
 export function HomeScreen() {
   const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { conversations, spamConversations, profiles, groupMembers, groupExtraData, isLoading, isFetching, error, reload } =
-    useConversations();
 
   const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -169,9 +169,6 @@ export function HomeScreen() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MockConversation | null>(null);
 
-  // Track swipe state to prevent onClick during swipe (needed for desktop)
-  const isSwipingRef = React.useRef<Record<string, boolean>>({});
-
   // Helper to open drawer (controlled by HomeTabs)
   const openDrawer = useCallback(() => {
     DeviceEventEmitter.emit(DRAWER_STATE_EVENT, { requestOpen: true });
@@ -179,6 +176,32 @@ export function HomeScreen() {
 
   const { isDesktop } = useLayoutBreakpoints();
   const isDesktopWeb = Platform.OS === "web" && isDesktop;
+
+  const {
+    conversations,
+    profiles,
+    groupMembers,
+    groupExtraData,
+    isLoading: isLoadingInbox,
+    isFetching: isFetchingInbox,
+    isFetchingNextPage: isFetchingNextInbox,
+    hasNextPage: hasMoreInbox,
+    reload: reloadInbox,
+    loadMore: loadMoreInbox,
+    error: errorInbox,
+  } = useConversations("inbox");
+
+  const {
+    conversations: spamConversations,
+    profiles: spamProfiles,
+    isLoading: isLoadingSpam,
+    isFetching: isFetchingSpam,
+    isFetchingNextPage: isFetchingNextSpam,
+    hasNextPage: hasMoreSpam,
+    reload: reloadSpam,
+    loadMore: loadMoreSpam,
+    error: errorSpam,
+  } = useConversations("spam", { enabled: activeMailbox === "spam" });
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -260,11 +283,11 @@ export function HomeScreen() {
   }, [currentUser?.PublicKeyBase58Check, rootNavigation]);
 
   const buildItemsFromConversations = useCallback(
-    (source: ConversationMap) => {
+    (source: ConversationMap, profileMap: PublicKeyToProfileEntryResponseMap) => {
       const userPk = currentUser?.PublicKeyBase58Check;
       if (!userPk) return [];
 
-      return Object.values(source).map((c) => {
+      return Object.entries(source).map(([conversationKey, c]) => {
         const last =
           c.messages.find((msg) => {
             const extraData = msg.MessageInfo?.ExtraData as
@@ -282,7 +305,7 @@ export function HomeScreen() {
         const senderName =
           senderPk === userPk
             ? "You"
-            : profiles?.[senderPk]?.Username || formatPublicKey(senderPk);
+            : profileMap?.[senderPk]?.Username || formatPublicKey(senderPk);
         const isGroup = c.ChatType === ChatType.GROUPCHAT;
         const otherPk = isGroup
           ? recipientPk
@@ -291,7 +314,7 @@ export function HomeScreen() {
             : senderPk;
         const name = isGroup
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
-          : profiles?.[otherPk]?.Username || formatPublicKey(otherPk);
+          : profileMap?.[otherPk]?.Username || formatPublicKey(otherPk);
 
         // Check for media in extraData
         const messageExtraData = last?.MessageInfo?.ExtraData as Record<string, any> | undefined;
@@ -344,19 +367,11 @@ export function HomeScreen() {
           }
         }
 
-        let uniqueId: string;
-        if (isGroup) {
-          uniqueId = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName || DEFAULT_KEY_MESSAGING_GROUP_NAME}`;
-        } else {
-          const sortedKeys = [userPk, otherPk].sort();
-          uniqueId = `${sortedKeys[0]}-${sortedKeys[1]}-DM`;
-        }
-
         // Extract thread identifier from message ExtraData
         const threadIdentifier = (last?.MessageInfo?.ExtraData as Record<string, any> | undefined)?.threadIdentifier || "";
 
         return {
-          id: uniqueId,
+          id: conversationKey,
           name,
           preview,
           time,
@@ -382,117 +397,70 @@ export function HomeScreen() {
   );
 
   const inboxItems = useMemo(
-    () => buildItemsFromConversations(conversations),
-    [buildItemsFromConversations, conversations]
+    () => buildItemsFromConversations(conversations, profiles),
+    [buildItemsFromConversations, conversations, profiles]
   );
   const spamItems = useMemo(
-    () => buildItemsFromConversations(spamConversations),
-    [buildItemsFromConversations, spamConversations]
+    () => buildItemsFromConversations(spamConversations, spamProfiles ?? {}),
+    [buildItemsFromConversations, spamConversations, spamProfiles]
   );
-  const items = useMemo(
-    () => (activeMailbox === "spam" ? spamItems : inboxItems),
-    [activeMailbox, inboxItems, spamItems]
-  );
-
   const enhancedItems = useMemo(() => {
-    // Combine all items from both mailboxes, deduplicating by ID
-    const allItemsMap = new Map<string, MockConversation>();
-    
-    // Add inbox items
-    inboxItems.forEach(item => {
-      if (!allItemsMap.has(item.id)) {
-        allItemsMap.set(item.id, { ...item });
-      }
-    });
-    
-    // Add spam items (if same ID exists, we keep the first one - inbox takes priority)
-    spamItems.forEach(item => {
-      if (!allItemsMap.has(item.id)) {
-        allItemsMap.set(item.id, { ...item });
-      }
-    });
+    const baseItems = activeMailbox === "spam" ? spamItems : inboxItems;
+    const otherItems = activeMailbox === "spam" ? inboxItems : spamItems;
 
-    // Filter items based on active mailbox and optimistic overrides
-    const filteredItems: MockConversation[] = [];
-    
-    allItemsMap.forEach((item) => {
+    const visible: MockConversation[] = [];
+
+    // 1) Start with items belonging to the active mailbox
+    baseItems.forEach((item) => {
       const optimisticMailbox = optimisticOverrides[item.id];
-      
-      // Determine which mailbox this item should be in
-      let shouldBeInMailbox: 'inbox' | 'spam';
-      
-      if (optimisticMailbox) {
-        // If there's an optimistic override, use it (highest priority)
-        shouldBeInMailbox = optimisticMailbox;
-      } else {
-        // Otherwise, determine from which array it came from
-        const isInInbox = inboxItems.some(i => i.id === item.id);
-        const isInSpam = spamItems.some(i => i.id === item.id);
-        
-        if (isInSpam && !isInInbox) {
-          shouldBeInMailbox = 'spam';
-        } else {
-          // Default to inbox (inbox has priority if in both or neither)
-          shouldBeInMailbox = 'inbox';
-        }
+      if (optimisticMailbox && optimisticMailbox !== activeMailbox) {
+        // Optimistically moved out; skip showing here
+        return;
       }
-      
-      // Only include if it belongs in the active mailbox
-      if (shouldBeInMailbox === activeMailbox) {
-        // Clone to ensure new reference
-        let updatedItem = { ...item };
-        
-        // Apply optimistic preview if available
-        const optimistic = optimisticPreviews[item.id];
 
-        if (optimistic) {
-          const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
-          const existingTimestamp = item.lastTimestampNanos ?? 0;
-
-          if (optimistic.timestampNanos > existingTimestamp) {
-            // Determine preview text based on content
-            let previewText = '';
-            
-            // Check if it's a media message
-            const hasImages = optimistic.extraData?.decryptedImageURLs;
-            const hasVideos = optimistic.extraData?.decryptedVideoURLs;
-            
-            if (hasImages || hasVideos) {
-              if (hasVideos) {
-                previewText = 'You sent a video';
-              } else if (hasImages) {
-                previewText = 'You sent an image';
-              }
-              if (optimistic.messageText.trim()) {
-                previewText = `${previewText}: ${optimistic.messageText.trim()}`;
-              }
-            } else {
-              previewText = `You: ${optimistic.messageText.trim() === "🚀"
-                ? "🚀"
-                : optimistic.messageText
-                }`;
-            }
-            
-            updatedItem = {
-              ...updatedItem,
-              preview: previewText,
-              time: formatTimestamp(optimisticTimestampMs),
-              lastTimestampNanos: optimistic.timestampNanos,
-            };
-          }
+      let updatedItem = { ...item };
+      const optimistic = optimisticPreviews[item.id];
+      if (optimistic && optimistic.timestampNanos > (item.lastTimestampNanos ?? 0)) {
+        const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
+        const hasImages = optimistic.extraData?.decryptedImageURLs;
+        const hasVideos = optimistic.extraData?.decryptedVideoURLs;
+        let previewText = "";
+        if (hasVideos) previewText = "You sent a video";
+        else if (hasImages) previewText = "You sent an image";
+        if (optimistic.messageText.trim()) {
+          previewText = previewText
+            ? `${previewText}: ${optimistic.messageText.trim()}`
+            : `You: ${optimistic.messageText.trim() === "🚀" ? "🚀" : optimistic.messageText}`;
         }
-        
-        filteredItems.push(updatedItem);
+        updatedItem = {
+          ...updatedItem,
+          preview: previewText || updatedItem.preview,
+          time: formatTimestamp(optimisticTimestampMs),
+          lastTimestampNanos: optimistic.timestampNanos,
+        };
+      }
+      visible.push(updatedItem);
+    });
+
+    // 2) Add items from the other mailbox that were optimistically moved into this one
+    otherItems.forEach((item) => {
+      const optimisticMailbox = optimisticOverrides[item.id];
+      if (optimisticMailbox === activeMailbox) {
+        visible.push({ ...item });
       }
     });
 
-    // Sort by most recent message first
-    return filteredItems.sort((a, b) => {
-      const aTime = a.lastTimestampNanos ?? 0;
-      const bTime = b.lastTimestampNanos ?? 0;
-      return bTime - aTime;
-    });
+    return visible.sort((a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0));
   }, [activeMailbox, inboxItems, spamItems, optimisticPreviews, optimisticOverrides]);
+
+  const isLoadingMailbox = activeMailbox === "spam" ? isLoadingSpam : isLoadingInbox;
+  const isFetchingMailbox = activeMailbox === "spam" ? isFetchingSpam : isFetchingInbox;
+  const isFetchingNextMailbox = activeMailbox === "spam" ? isFetchingNextSpam : isFetchingNextInbox;
+  const isRefreshingMailbox = isFetchingMailbox && !isFetchingNextMailbox;
+  const hasMoreMailbox = activeMailbox === "spam" ? hasMoreSpam : hasMoreInbox;
+  const loadMoreMailbox = activeMailbox === "spam" ? loadMoreSpam : loadMoreInbox;
+  const reloadMailbox = activeMailbox === "spam" ? reloadSpam : reloadInbox;
+  const errorMailbox = activeMailbox === "spam" ? errorSpam : errorInbox;
 
 
   const handlePress = useCallback(
@@ -536,11 +504,110 @@ export function HomeScreen() {
     navigation.navigate("Composer");
   }, [navigation]);
 
+  const moveConversationInCache = useCallback(
+    (
+      conversationId: string,
+      fromMailbox: "inbox" | "spam",
+      toMailbox: "inbox" | "spam"
+    ) => {
+      if (!currentUser?.PublicKeyBase58Check) return;
+
+      type ConversationsPage = Awaited<ReturnType<typeof fetchConversations>>;
+      const fromKey = getConversationsQueryKey(currentUser.PublicKeyBase58Check, fromMailbox);
+      const toKey = getConversationsQueryKey(currentUser.PublicKeyBase58Check, toMailbox);
+
+      const fromData = queryClient.getQueryData<InfiniteData<ConversationsPage>>(fromKey);
+      if (!fromData) return;
+
+      let movedConversation: ConversationMap[string] | undefined;
+      let movedProfiles: PublicKeyToProfileEntryResponseMap = {};
+
+      const updatedFromPages = fromData.pages.map((page) => {
+        if (page.conversations[conversationId]) {
+          movedConversation = page.conversations[conversationId];
+          movedProfiles = { ...movedProfiles, ...page.profiles };
+          const nextPage = {
+            ...page,
+            conversations: { ...page.conversations },
+          } as ConversationsPage;
+          delete nextPage.conversations[conversationId];
+          return nextPage;
+        }
+        return page;
+      });
+
+      if (movedConversation) {
+        queryClient.setQueryData<InfiniteData<ConversationsPage>>(fromKey, {
+          ...fromData,
+          pages: updatedFromPages,
+        });
+
+        const toData = queryClient.getQueryData<InfiniteData<ConversationsPage>>(toKey);
+        if (toData) {
+          const updatedToPages = toData.pages.length
+            ? toData.pages.map((page, index) => {
+                if (index === 0) {
+                  return {
+                    ...page,
+                    conversations: {
+                      ...page.conversations,
+                      [conversationId]: movedConversation!,
+                    },
+                    profiles: {
+                      ...page.profiles,
+                      ...movedProfiles,
+                    },
+                  } as ConversationsPage;
+                }
+                return page;
+              })
+            : [
+                {
+                  conversations: { [conversationId]: movedConversation },
+                  profiles: movedProfiles,
+                  groupMembers: {},
+                  groupExtraData: {},
+                  hasMore: false,
+                  nextOffset: null,
+                } as ConversationsPage,
+              ];
+
+          queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
+            ...toData,
+            pages: updatedToPages,
+          });
+        } else {
+          // If target cache missing, seed it
+          queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
+            pageParams: [0],
+            pages: [
+              {
+                conversations: { [conversationId]: movedConversation },
+                profiles: movedProfiles,
+                groupMembers: {},
+                groupExtraData: {},
+                hasMore: false,
+                nextOffset: null,
+              } as ConversationsPage,
+            ],
+          });
+        }
+      }
+    },
+    [currentUser?.PublicKeyBase58Check, queryClient]
+  );
+
   const handleMoveSpam = useCallback(
     async (item: MockConversation, moveToSpam: boolean) => {
       if (!currentUser?.PublicKeyBase58Check) return;
+      const threadId = item.threadIdentifier;
+      if (!threadId) {
+        console.error("Cannot move spam/inbox without threadIdentifier", item.id);
+        return;
+      }
 
       const targetMailbox = moveToSpam ? "spam" : "inbox";
+      const sourceMailbox = moveToSpam ? "inbox" : "spam";
 
       // Optimistically update UI immediately
       setOptimisticOverrides((prev) => ({
@@ -555,19 +622,16 @@ export function HomeScreen() {
       });
 
       try {
-        // Use threadIdentifier from item, or fallback to constructing it
-        const threadId = item.threadIdentifier ||
-          `${currentUser.PublicKeyBase58Check}-${item.threadPublicKey}-default-key-default-key-false`;
-
         await moveSpamInbox(
           currentUser.PublicKeyBase58Check,
           threadId,
           moveToSpam
         );
-        // Success - reload to get fresh data from server
-        await reload();
 
-        // Clear optimistic state after reload
+        // Update caches locally to avoid global refresh
+        moveConversationInCache(item.id, sourceMailbox, targetMailbox);
+
+        // Clear optimistic override since cache now reflects truth
         setOptimisticOverrides((prev) => {
           const next = { ...prev };
           delete next[item.id];
@@ -589,12 +653,14 @@ export function HomeScreen() {
         });
       }
     },
-    [currentUser?.PublicKeyBase58Check, reload]
+    [currentUser?.PublicKeyBase58Check, moveConversationInCache]
   );
 
 
 
-  if (isLoading && items.length === 0) {
+  const items = enhancedItems; // for empty state usage
+
+  if (isLoadingMailbox && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
@@ -689,7 +755,7 @@ export function HomeScreen() {
     );
   }
 
-  if (error) {
+  if (errorMailbox) {
     return (
       <SafeAreaView className="flex-1 bg-white px-6 py-10 dark:bg-slate-950">
         <View className="flex-1 items-center justify-center rounded-3xl border border-red-200 bg-red-50 px-5 py-8 dark:border-red-900 dark:bg-red-950/30">
@@ -698,12 +764,12 @@ export function HomeScreen() {
             We couldn't load your inbox
           </Text>
           <Text className="mt-2 text-center text-sm text-red-700">
-            {error}
+            {errorMailbox}
           </Text>
           <TouchableOpacity
             className="mt-6 rounded-full bg-red-500 px-6 py-2"
             activeOpacity={0.8}
-            onPress={() => reload()}
+            onPress={() => reloadMailbox()}
           >
             <Text className="text-sm font-semibold text-white">Try again</Text>
           </TouchableOpacity>
@@ -722,7 +788,7 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {(!isLoading && isFetching) && (
+          {(!isLoadingMailbox && isRefreshingMailbox) && (
             <View
               style={{
                 width: "100%",
@@ -905,51 +971,43 @@ export function HomeScreen() {
               contentContainerStyle={isDesktopWeb ? { paddingHorizontal: 0 } : undefined}
               refreshControl={
                 <RefreshControl
-                  refreshing={isLoading}
-                  onRefresh={reload}
+                  refreshing={isRefreshingMailbox}
+                  onRefresh={reloadMailbox}
                   tintColor={isDark ? accentColor : accentColor}
                   colors={[accentColor]}
                 />
               }
+              onEndReached={() => {
+                if (hasMoreMailbox && !isFetchingNextMailbox) {
+                  loadMoreMailbox();
+                }
+              }}
+              onEndReachedThreshold={0.2}
+              ListFooterComponent={
+                isFetchingNextMailbox ? (
+                  <View className="py-4 items-center justify-center">
+                    <ActivityIndicator size="small" color={accentColor} />
+                    <Text className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      Loading more…
+                    </Text>
+                  </View>
+                ) : null
+              }
               renderItem={({ item }) => (
-                <SwipeableChatItem
-                  onSwipeAction={() => handleMoveSpam(item, activeMailbox === 'inbox')}
-                  isLoading={loadingItems.has(item.id)}
-                  actionType={activeMailbox === 'inbox' ? 'spam' : 'inbox'}
-                  accentColor={accentColor}
-                  isDark={isDark}
-                  onSwipeBegin={() => {
-                    isSwipingRef.current[item.id] = true;
-                  }}
-                  onSwipeEnd={() => {
-                    // Small delay to ensure swipe action completes before allowing clicks
-                    setTimeout(() => {
-                      isSwipingRef.current[item.id] = false;
-                    }, 50);
-                  }}
-                >
-                  <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
-                    <TouchableOpacity
-                      className="flex-1 flex-row items-center"
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        console.log('[HomeScreen] TouchableOpacity onPress, item:', item.id, 'isSwiping:', isSwipingRef.current[item.id]);
-                        // Prevent opening chat if currently swiping (important for desktop)
-                        if (!isSwipingRef.current[item.id]) {
-                          handlePress(item);
-                        } else {
-                          console.log('[HomeScreen] Blocked - swipe in progress');
-                        }
-                      }}
-                      onLongPress={() => {
-                        if (Platform.OS !== 'web') {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        }
-                        setSelectedItem(item);
-                        setShowActionModal(true);
-                      }}
-                      style={isDesktopWeb ? { borderRadius: 14 } : undefined}
-                    >
+                <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
+                  <TouchableOpacity
+                    className="flex-1 flex-row items-center"
+                    activeOpacity={0.7}
+                    onPress={() => handlePress(item)}
+                    onLongPress={() => {
+                      if (Platform.OS !== 'web') {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      }
+                      setSelectedItem(item);
+                      setShowActionModal(true);
+                    }}
+                    style={isDesktopWeb ? { borderRadius: 14 } : undefined}
+                  >
                       <View className="mr-3">
                         {item.isGroup && item.hasGroupImage && item.avatarUri ? (
                           <Image
@@ -1045,45 +1103,36 @@ export function HomeScreen() {
                       </View>
                     </TouchableOpacity>
                   </View>
-                </SwipeableChatItem>
-              )}
+                )}
               ListEmptyComponent={() => (
-                <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
-                  <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />
-                  <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                <View className="flex-1 items-center justify-center px-6 py-20">
+                  <Feather name="inbox" size={48} color={isDark ? "#64748b" : "#94a3af"} />
+                  <Text className="mt-6 text-lg font-semibold text-slate-900 dark:text-slate-100">
                     {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
                   </Text>
-                  <Text className="mt-2 text-center text-sm text-gray-500 dark:text-slate-400">
+                  <Text className="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
                     {activeMailbox === "spam"
-                      ? "Messages marked as spam will land here. Move them back to Inbox if they’re safe."
+                      ? "Messages marked as spam will land here."
                       : "Start a new conversation and it will show up here right away."}
                   </Text>
                   {activeMailbox === "spam" ? (
                     <TouchableOpacity
-                      className="mt-6 rounded-full bg-slate-200 px-6 py-3 dark:bg-slate-800"
+                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3"
                       activeOpacity={0.85}
                       onPress={() => setActiveMailbox("inbox")}
                     >
-                      <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      <Text className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                         Go to Inbox
                       </Text>
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
-                      className="mt-6 rounded-full px-6 py-3"
+                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3"
                       activeOpacity={0.85}
                       onPress={handleCompose}
-                      style={{
-                        backgroundColor: accentColor,
-                        shadowColor: accentColor,
-                        shadowOpacity: isDark ? 0.15 : 0.25,
-                        shadowRadius: 12,
-                        shadowOffset: { width: 0, height: 6 },
-                        elevation: 4,
-                      }}
                     >
-                      <Text className="text-sm font-bold text-white">
-                        Start a message
+                      <Text className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        Start a new chat
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -1099,7 +1148,7 @@ export function HomeScreen() {
           onClose={() => setShowGroupComposerModal(false)}
           onGroupCreated={() => {
             setShowGroupComposerModal(false);
-            reload(); // Reload conversations to show the new group
+            reloadMailbox(); // Reload conversations to show the new group
           }}
           onNavigateToGroup={(groupName, ownerPublicKey, initialMessage) => {
             setShowGroupComposerModal(false);

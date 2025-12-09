@@ -1,7 +1,13 @@
-import { useContext, useEffect, useRef } from "react";
+import { useContext, useEffect, useRef, useMemo } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { fetchConversations, getConversationsQueryKey } from "@/state/queries/messages/list";
+import { PublicKeyToProfileEntryResponseMap } from "deso-protocol";
+import { ConversationMap } from "@/features/messaging/api/conversations";
 import { identity } from "deso-protocol";
 import {
   getSupabaseClient,
@@ -9,25 +15,59 @@ import {
 } from "@/lib/supabaseClient";
 import { Platform } from "react-native";
 import { StorageService } from "@/lib/storage";
+import { GroupMember } from "@/services/desoGraphql";
 
-export const useConversations = () => {
+type Mailbox = "inbox" | "spam";
+
+type ConversationsPage = Awaited<ReturnType<typeof fetchConversations>>;
+type GroupMembersMap = Record<string, GroupMember[]>;
+type GroupExtraMap = Record<string, Record<string, string> | null>;
+
+type UseConversationsResult = {
+  conversations: ConversationMap;
+  profiles: PublicKeyToProfileEntryResponseMap;
+  groupMembers: GroupMembersMap;
+  groupExtraData: GroupExtraMap;
+  isLoading: boolean;
+  isFetchingNextPage: boolean;
+  hasNextPage: boolean | undefined;
+  isFetching: boolean;
+  error: string | null;
+  reload: () => Promise<unknown>;
+  loadMore: () => Promise<unknown>;
+};
+
+export const useConversations = (
+  mailbox: Mailbox = "inbox",
+  options: { enabled?: boolean } = {}
+): UseConversationsResult => {
   const { currentUser } = useContext(DeSoIdentityContext);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
-
-  type ConversationsResponse = Awaited<ReturnType<typeof fetchConversations>>;
 
   // Hydrate cached conversations immediately for fast paint
   useEffect(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
     if (!userPk) return;
     (async () => {
-      const cached = await StorageService.getConversations(userPk);
+      const cached = await StorageService.getConversations(userPk, mailbox);
       if (cached) {
-        queryClient.setQueryData(getConversationsQueryKey(userPk), cached);
+        const hydrated =
+          cached && typeof cached === "object" && "pages" in cached
+            ? cached
+            : {
+                pages: [cached],
+                pageParams: [0],
+              };
+        queryClient.setQueryData(
+          getConversationsQueryKey(userPk, mailbox),
+          hydrated
+        );
       }
     })();
-  }, [currentUser?.PublicKeyBase58Check, queryClient]);
+  }, [currentUser?.PublicKeyBase58Check, mailbox, queryClient]);
+
+  const initialPageParam = 0;
 
   const {
     data,
@@ -36,11 +76,24 @@ export const useConversations = () => {
     error,
     refetch,
     isFetching,
-  } = useQuery<ConversationsResponse>({
-    queryKey: getConversationsQueryKey(currentUser?.PublicKeyBase58Check),
-    queryFn: async () => {
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<
+    ConversationsPage,
+    Error,
+    InfiniteData<ConversationsPage>,
+    ReturnType<typeof getConversationsQueryKey>,
+    number
+  >({
+    queryKey: getConversationsQueryKey(currentUser?.PublicKeyBase58Check, mailbox),
+    queryFn: async ({ pageParam }) => {
       try {
-        return await fetchConversations(currentUser!.PublicKeyBase58Check);
+        return await fetchConversations(currentUser!.PublicKeyBase58Check, {
+          offset: pageParam ?? 0,
+          limit: 20,
+          mailbox,
+        });
       } catch (e: any) {
         const message: string = e?.message ?? "";
         if (message.includes("Cannot decrypt messages")) {
@@ -57,8 +110,13 @@ export const useConversations = () => {
         throw e;
       }
     },
-    enabled: !!currentUser?.PublicKeyBase58Check,
-    staleTime: Infinity, // rely on manual/realtime updates instead of auto refetch
+    getNextPageParam: (lastPage) =>
+      lastPage && typeof lastPage === "object"
+        ? lastPage.nextOffset ?? undefined
+        : undefined,
+    initialPageParam,
+    enabled: !!currentUser?.PublicKeyBase58Check && (options.enabled ?? true),
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -67,7 +125,10 @@ export const useConversations = () => {
   useEffect(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
     if (!userPk || !data) return;
-    void StorageService.saveConversations(userPk, data);
+    // Only persist if data has expected shape
+    if (data.pages) {
+      void StorageService.saveConversations(userPk, mailbox, data);
+    }
   }, [currentUser?.PublicKeyBase58Check, data]);
 
   useEffect(() => {
@@ -79,7 +140,7 @@ export const useConversations = () => {
     }
 
     const supabase = getSupabaseClient();
-    const channelIdentifier = `messages:${userPublicKey}`;
+      const channelIdentifier = `messages:${userPublicKey}`;
 
     const channel = supabase
       .channel(channelIdentifier)
@@ -116,15 +177,42 @@ export const useConversations = () => {
     };
   }, [currentUser?.PublicKeyBase58Check, refetch]);
 
+  const merged = useMemo(() => {
+    if (!data?.pages) {
+      return {
+        conversations: {},
+        profiles: {},
+        groupMembers: {} as GroupMembersMap,
+        groupExtraData: {} as GroupExtraMap,
+      };
+    }
+    const conversations = data.pages.reduce<ConversationsPage["conversations"]>(
+      (acc, page) => ({ ...acc, ...page.conversations }),
+      {}
+    );
+    const profiles = data.pages.reduce<ConversationsPage["profiles"]>(
+      (acc, page) => ({ ...acc, ...page.profiles }),
+      {}
+    );
+    return {
+      conversations,
+      profiles,
+      groupMembers: {} as GroupMembersMap, // fetched lazily elsewhere
+      groupExtraData: {} as GroupExtraMap,
+    };
+  }, [data?.pages]);
+
   return {
-    conversations: data?.conversations ?? {},
-    spamConversations: data?.spamConversations ?? {},
-    profiles: data?.profiles ?? {},
-    groupMembers: data?.groupMembers ?? {},
-    groupExtraData: data?.groupExtraData ?? {},
+    conversations: merged.conversations,
+    profiles: merged.profiles,
+    groupMembers: merged.groupMembers,
+    groupExtraData: merged.groupExtraData,
     isLoading,
+    isFetchingNextPage,
+    hasNextPage,
     isFetching,
     error: isError ? (error as Error).message : null,
     reload: refetch,
+    loadMore: fetchNextPage,
   };
 };

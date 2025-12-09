@@ -84,8 +84,12 @@ export const StorageService = {
         return null;
     },
 
-    saveConversations: async (userPublicKey: string, payload: unknown) => {
-        const key = `${StorageKeys.CONVERSATIONS}_${userPublicKey}`;
+    saveConversations: async (
+        userPublicKey: string,
+        mailbox: "inbox" | "spam",
+        payload: unknown
+    ) => {
+        const key = `${StorageKeys.CONVERSATIONS}_${mailbox}_${userPublicKey}`;
         try {
             const json = JSON.stringify(payload);
             await AsyncStorage.setItem(key, json);
@@ -94,8 +98,8 @@ export const StorageService = {
         }
     },
 
-    getConversations: async (userPublicKey: string) => {
-        const key = `${StorageKeys.CONVERSATIONS}_${userPublicKey}`;
+    getConversations: async (userPublicKey: string, mailbox: "inbox" | "spam") => {
+        const key = `${StorageKeys.CONVERSATIONS}_${mailbox}_${userPublicKey}`;
         try {
             const json = await AsyncStorage.getItem(key);
             if (json) {

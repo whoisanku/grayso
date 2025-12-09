@@ -12,6 +12,7 @@ import {
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
     decryptAccessGroupMessages,
+    fetchProfilesBatch,
 } from "@/features/messaging/api/conversations";
 import {
     MESSAGE_PAGE_SIZE,
@@ -218,6 +219,27 @@ export const useConversationMessages = ({
             const profilesMap: PublicKeyToProfileEntryResponseMap = {
                 ...(result.publicKeyToProfileEntryResponseMap ?? {}),
             };
+
+            // Ensure we have profile metadata for every sender/receiver in this page
+            const missingKeys = new Set<string>();
+            decryptedMessages.forEach((msg) => {
+                const sender = msg.SenderInfo?.OwnerPublicKeyBase58Check;
+                const recipient = msg.RecipientInfo?.OwnerPublicKeyBase58Check;
+                [sender, recipient].forEach((pk) => {
+                    if (!pk) return;
+                    if (profilesMap[pk]) return;
+                    if (profileCacheRef.current.has(pk)) return;
+                    missingKeys.add(pk);
+                });
+            });
+
+            if (missingKeys.size > 0) {
+                const fetchedProfiles = await fetchProfilesBatch(Array.from(missingKeys));
+                Object.assign(profilesMap, fetchedProfiles);
+                Array.from(missingKeys).forEach((pk) => {
+                    profileCacheRef.current.set(pk, "fetched");
+                });
+            }
 
             const merged = mergeMessages([], decryptedMessages);
 

@@ -235,14 +235,19 @@ const pickDefaultAccessGroup = (
 
 export const getConversationsFromFocusGraphql = async (
   userPublicKeyBase58Check: string,
-  allAccessGroups: AccessGroupEntryResponse[]
+  allAccessGroups: AccessGroupEntryResponse[],
+  offset = 0,
+  first = 20
 ): Promise<{
   conversations: ConversationMap;
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
   updatedAllAccessGroups: AccessGroupEntryResponse[];
+  hasMore: boolean;
 }> => {
-  const { nodes: threadNodes } = await fetchInboxMessageThreads({
+  const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
     userPublicKey: userPublicKeyBase58Check,
+    first,
+    offset,
   });
 
   const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
@@ -357,6 +362,7 @@ export const getConversationsFromFocusGraphql = async (
       conversations: {},
       publicKeyToProfileEntryResponseMap,
       updatedAllAccessGroups: allAccessGroups,
+      hasMore: false,
     };
   }
 
@@ -373,20 +379,40 @@ export const getConversationsFromFocusGraphql = async (
     conversations,
     publicKeyToProfileEntryResponseMap,
     updatedAllAccessGroups,
+    hasMore: Boolean(pageInfo?.hasNextPage),
   };
 };
 
 export const getSpamConversationsFromFocusGraphql = async (
   userPublicKeyBase58Check: string,
-  allAccessGroups: AccessGroupEntryResponse[]
+  allAccessGroups: AccessGroupEntryResponse[],
+  offset = 0,
+  first = 20
 ): Promise<{
   conversations: ConversationMap;
   publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
   updatedAllAccessGroups: AccessGroupEntryResponse[];
+  hasMore: boolean;
 }> => {
-  const { nodes: threadNodes } = await fetchInboxMessageThreads({
+  console.log('[SPAM DEBUG] Fetching spam conversations', { userPublicKeyBase58Check, offset, first });
+  
+  const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
     userPublicKey: userPublicKeyBase58Check,
     isSpam: true,
+    first,
+    offset,
+  });
+
+  console.log('[SPAM DEBUG] Received thread nodes:', threadNodes.length);
+  
+  // Log isSpam values for all threads to understand what the API returns
+  threadNodes.forEach((thread, index) => {
+    console.log(`[SPAM DEBUG] Thread ${index}:`, {
+      threadIdentifier: thread.threadIdentifier,
+      isSpam: thread.isSpam,
+      isSpamType: typeof thread.isSpam,
+      initiator: thread.initiatorPublicKey?.substring(0, 10) + '...'
+    });
   });
 
   const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
@@ -394,6 +420,15 @@ export const getSpamConversationsFromFocusGraphql = async (
 
   const rawMessages: NewMessageEntryResponse[] = threadNodes
     .map((thread) => {
+      // CRITICAL: Mirror inbox logic (inverted)
+      // Inbox filters OUT spam (thread.isSpam === true)
+      // Spam filters OUT non-spam (thread.isSpam !== true)
+      // This keeps only threads where isSpam is explicitly true
+      if (!thread.isSpam) {
+        console.log('[SPAM DEBUG] Filtering out non-spam thread (isSpam =', thread.isSpam, '):', thread.threadIdentifier);
+        return null;
+      }
+
       const message = thread.thread?.messages?.nodes?.[0];
       if (!message?.encryptedText) {
         return null;
@@ -492,11 +527,18 @@ export const getSpamConversationsFromFocusGraphql = async (
         Boolean(message?.MessageInfo?.EncryptedText)
     );
 
+  console.log('[SPAM DEBUG] Raw messages after filtering:', rawMessages.length);
+  if (rawMessages.length > 0) {
+    console.log('[SPAM DEBUG] First raw message:', rawMessages[0]);
+  }
+
   if (rawMessages.length === 0) {
+    console.log('[SPAM DEBUG] No raw messages found, returning empty');
     return {
       conversations: {},
       publicKeyToProfileEntryResponseMap,
       updatedAllAccessGroups: allAccessGroups,
+      hasMore: false,
     };
   }
 
@@ -507,12 +549,21 @@ export const getSpamConversationsFromFocusGraphql = async (
       allAccessGroups
     );
 
+  console.log('[SPAM DEBUG] Decrypted messages:', decrypted.length);
+  if (decrypted.length > 0) {
+    console.log('[SPAM DEBUG] First decrypted message:', decrypted[0]);
+  }
+
   const conversations = buildConversationMapFromMessages(decrypted);
+
+  console.log('[SPAM DEBUG] Final conversations count:', Object.keys(conversations).length);
+  console.log('[SPAM DEBUG] Conversation keys:', Object.keys(conversations));
 
   return {
     conversations,
     publicKeyToProfileEntryResponseMap,
     updatedAllAccessGroups,
+    hasMore: Boolean(pageInfo?.hasNextPage),
   };
 };
 
@@ -1115,6 +1166,34 @@ export async function fetchPaginatedDmThreadMessages(
     },
   };
 }
+
+export const fetchProfilesBatch = async (
+  publicKeys: string[]
+): Promise<PublicKeyToProfileEntryResponseMap> => {
+  if (!publicKeys.length) return {};
+
+  const uniqueKeys = Array.from(new Set(publicKeys.filter(Boolean)));
+  const results: PublicKeyToProfileEntryResponseMap = {};
+
+  await Promise.all(
+    uniqueKeys.map(async (pk) => {
+      try {
+        const response = await fetch(
+          `https://node.deso.org/api/v0/get-single-profile?PublicKeyBase58Check=${pk}`
+        );
+        const json = await response.json();
+        const profile = json?.ProfileEntryResponse;
+        if (profile) {
+          results[pk] = profile as PublicKeyToProfileEntryResponseMap[string];
+        }
+      } catch (error) {
+        console.warn('[fetchProfilesBatch] Failed for', pk, error);
+      }
+    })
+  );
+
+  return results;
+};
 
 export async function fetchPaginatedGroupThreadMessages(
   payload: GetPaginatedMessagesForGroupThreadRequest,
