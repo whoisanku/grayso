@@ -13,6 +13,7 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
+import * as Haptics from 'expo-haptics';
 import { Feather } from "@expo/vector-icons";
 import {
   MenuProvider,
@@ -50,7 +51,8 @@ import { useAccentColor } from "../../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "../../alf/breakpoints";
-import { ChatMenu } from "../components/ChatMenu";
+import { SwipeableChatItem } from "../components/SwipeableChatItem";
+import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "../../services/spam";
 
 // Navigation types
@@ -161,6 +163,7 @@ export default function HomeScreen() {
       {
         messageText: string;
         timestampNanos: number;
+        extraData?: Record<string, any>;
       }
     >
   >({});
@@ -169,6 +172,13 @@ export default function HomeScreen() {
   const [optimisticOverrides, setOptimisticOverrides] = useState<Record<string, "inbox" | "spam">>({});
   // Track loading state for specific items
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
+
+  // Long-press modal state
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MockConversation | null>(null);
+
+  // Track swipe state to prevent onClick during swipe (needed for desktop)
+  const isSwipingRef = React.useRef<Record<string, boolean>>({});
 
   // Helper to open drawer (controlled by HomeTabs)
   const openDrawer = useCallback(() => {
@@ -186,6 +196,7 @@ export default function HomeScreen() {
           conversationId: string;
           messageText: string;
           timestampNanos: number;
+          extraData?: Record<string, any>;
         }
       ) => {
         setOptimisticPreviews((prev) => ({
@@ -193,6 +204,7 @@ export default function HomeScreen() {
           [payload.conversationId]: {
             messageText: payload.messageText,
             timestampNanos: payload.timestampNanos,
+            extraData: payload.extraData,
           },
         }));
       }
@@ -391,17 +403,54 @@ export default function HomeScreen() {
   );
 
   const enhancedItems = useMemo(() => {
-    // Combine all items to handle moves between lists
-    // Use a Map to deduplicate by ID in case an item appears in both lists (shouldn't happen but good safety)
+    // Combine all items from both mailboxes, deduplicating by ID
     const allItemsMap = new Map<string, MockConversation>();
-    inboxItems.forEach(item => allItemsMap.set(item.id, item));
-    spamItems.forEach(item => allItemsMap.set(item.id, item));
+    
+    // Add inbox items
+    inboxItems.forEach(item => {
+      if (!allItemsMap.has(item.id)) {
+        allItemsMap.set(item.id, { ...item });
+      }
+    });
+    
+    // Add spam items (if same ID exists, we keep the first one - inbox takes priority)
+    spamItems.forEach(item => {
+      if (!allItemsMap.has(item.id)) {
+        allItemsMap.set(item.id, { ...item });
+      }
+    });
 
-    const allItems = Array.from(allItemsMap.values());
-
-    const mapped = allItems
-      .map((item) => {
-        // Use the item's unique ID for optimistic preview lookup
+    // Filter items based on active mailbox and optimistic overrides
+    const filteredItems: MockConversation[] = [];
+    
+    allItemsMap.forEach((item) => {
+      const optimisticMailbox = optimisticOverrides[item.id];
+      
+      // Determine which mailbox this item should be in
+      let shouldBeInMailbox: 'inbox' | 'spam';
+      
+      if (optimisticMailbox) {
+        // If there's an optimistic override, use it (highest priority)
+        shouldBeInMailbox = optimisticMailbox;
+      } else {
+        // Otherwise, determine from which array it came from
+        const isInInbox = inboxItems.some(i => i.id === item.id);
+        const isInSpam = spamItems.some(i => i.id === item.id);
+        
+        if (isInSpam && !isInInbox) {
+          shouldBeInMailbox = 'spam';
+        } else {
+          // Default to inbox (inbox has priority if in both or neither)
+          shouldBeInMailbox = 'inbox';
+        }
+      }
+      
+      // Only include if it belongs in the active mailbox
+      if (shouldBeInMailbox === activeMailbox) {
+        // Clone to ensure new reference
+        let updatedItem = { ...item };
+        
+        // Apply optimistic preview if available
         const optimistic = optimisticPreviews[item.id];
 
         if (optimistic) {
@@ -409,45 +458,44 @@ export default function HomeScreen() {
           const existingTimestamp = item.lastTimestampNanos ?? 0;
 
           if (optimistic.timestampNanos > existingTimestamp) {
-            return {
-              ...item,
-              preview: `You: ${optimistic.messageText.trim() === "🚀"
+            // Determine preview text based on content
+            let previewText = '';
+            
+            // Check if it's a media message
+            const hasImages = optimistic.extraData?.decryptedImageURLs;
+            const hasVideos = optimistic.extraData?.decryptedVideoURLs;
+            
+            if (hasImages || hasVideos) {
+              if (hasVideos) {
+                previewText = 'You sent a video';
+              } else if (hasImages) {
+                previewText = 'You sent an image';
+              }
+              if (optimistic.messageText.trim()) {
+                previewText = `${previewText}: ${optimistic.messageText.trim()}`;
+              }
+            } else {
+              previewText = `You: ${optimistic.messageText.trim() === "🚀"
                 ? "🚀"
                 : optimistic.messageText
-                }`,
+                }`;
+            }
+            
+            updatedItem = {
+              ...updatedItem,
+              preview: previewText,
               time: formatTimestamp(optimisticTimestampMs),
               lastTimestampNanos: optimistic.timestampNanos,
             };
           }
         }
-
-        return item;
-      })
-      // Filter based on active mailbox and optimistic overrides
-      .filter((item) => {
-        // Determine the effective mailbox for this item
-        // 1. Check optimistic override first
-        const override = optimisticOverrides[item.id];
-        if (override) {
-          return override === activeMailbox;
-        }
-
-        // 2. Fallback to original location
-        // Check if it was originally in the current active list
-        // We need to know if the item *originally* belonged to inbox or spam
-        // Since we combined them, we can check if it exists in the original source arrays
-        const isOriginallyInInbox = inboxItems.some(i => i.id === item.id);
-        const isOriginallyInSpam = spamItems.some(i => i.id === item.id);
-
-        if (activeMailbox === "inbox") {
-          return isOriginallyInInbox;
-        } else {
-          return isOriginallyInSpam;
-        }
-      });
+        
+        filteredItems.push(updatedItem);
+      }
+    });
 
     // Sort by most recent message first
-    return mapped.sort((a, b) => {
+    return filteredItems.sort((a, b) => {
       const aTime = a.lastTimestampNanos ?? 0;
       const bTime = b.lastTimestampNanos ?? 0;
       return bTime - aTime;
@@ -457,9 +505,18 @@ export default function HomeScreen() {
 
   const handlePress = useCallback(
     (item: MockConversation) => {
+      console.log('[HomeScreen] handlePress called for item:', item.id, item.name);
+      
       if (!currentUser?.PublicKeyBase58Check) {
+        console.log('[HomeScreen] No currentUser, aborting navigation');
         return;
       }
+
+      console.log('[HomeScreen] Navigating to conversation:', {
+        threadPublicKey: item.threadPublicKey || item.id,
+        chatType: item.chatType,
+        name: item.name
+      });
 
       navigation.navigate("Conversation", {
         threadPublicKey: item.threadPublicKey || item.id,
@@ -819,6 +876,7 @@ export default function HomeScreen() {
             <FlatList
               data={enhancedItems}
               keyExtractor={(item) => item.id}
+              extraData={optimisticOverrides} // Force re-render when items move between mailboxes
               className="flex-1"
               showsVerticalScrollIndicator={false}
               ItemSeparatorComponent={() => null}
@@ -832,123 +890,145 @@ export default function HomeScreen() {
                 <RefreshControl
                   refreshing={isLoading}
                   onRefresh={reload}
-                  tintColor={accentColor}
+                  tintColor={isDark ? accentColor : accentColor}
                   colors={[accentColor]}
                 />
               }
               renderItem={({ item }) => (
-                <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
-                  <TouchableOpacity
-                    className="flex-1 flex-row items-center"
-                    activeOpacity={0.7}
-                    onPress={() => handlePress(item)}
-                    style={isDesktopWeb ? { borderRadius: 14 } : undefined}
-                  >
-                    <View className="mr-3">
-                      {item.isGroup && item.hasGroupImage && item.avatarUri ? (
-                        <Image
-                          source={{ uri: item.avatarUri }}
-                          className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                        />
-                      ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
-                        <View className="h-14 w-14 relative">
-                          {item.stackedAvatarUris.map((uri, index) => (
-                            <Image
-                              key={index}
-                              source={{ uri }}
-                              className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                              style={{
-                                top: index === 0 ? 0 : index === 1 ? 14 : 4,
-                                left: index === 0 ? 0 : index === 1 ? 14 : 24,
-                                zIndex: 3 - index,
-                              }}
-                            />
-                          ))}
-                        </View>
-                      ) : item.isGroup && item.isLoadingMembers ? (
-                        <View className="h-14 w-14 relative">
-                          {[0, 1, 2].map((i) => (
-                            <View
-                              key={`placeholder-${i}`}
-                              className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                              style={{
-                                top: i === 0 ? 0 : i === 1 ? 14 : 4,
-                                left: i === 0 ? 0 : i === 1 ? 14 : 24,
-                                zIndex: 3 - i,
-                              }}
-                            />
-                          ))}
-                        </View>
-                      ) : item.avatarUri ? (
-                        <Image
-                          source={{ uri: item.avatarUri }}
-                          className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                        />
-                      ) : (
-                        <View
-                          className="h-14 w-14 items-center justify-center rounded-full"
-                          style={{ backgroundColor: accentSoft }}
-                        >
-                          <Text
-                            className="text-xl font-bold"
-                            style={{ color: accentStrong }}
-                          >
-                            {item.name.charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <View className="flex-1 min-w-0">
-                      <View className="flex-row items-center justify-between mb-1">
-                        <Text
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
-                        >
-                          {item.name}
-                        </Text>
-                        {item.time ? (
-                          <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
-                            {item.time}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <View className="flex-row items-center">
-                        {item.isGroup ? (
-                          <View
-                            style={{
-                              width: 22,
-                              height: 22,
-                              borderRadius: 11,
-                              backgroundColor: accentSoft,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginRight: 8,
-                            }}
-                          >
-                            <Feather name="users" size={12} color={accentStrong} />
+                <SwipeableChatItem
+                  onSwipeAction={() => handleMoveSpam(item, activeMailbox === 'inbox')}
+                  isLoading={loadingItems.has(item.id)}
+                  actionType={activeMailbox === 'inbox' ? 'spam' : 'inbox'}
+                  accentColor={accentColor}
+                  isDark={isDark}
+                  onSwipeBegin={() => {
+                    isSwipingRef.current[item.id] = true;
+                  }}
+                  onSwipeEnd={() => {
+                    // Small delay to ensure swipe action completes before allowing clicks
+                    setTimeout(() => {
+                      isSwipingRef.current[item.id] = false;
+                    }, 50);
+                  }}
+                >
+                  <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
+                    <TouchableOpacity
+                      className="flex-1 flex-row items-center"
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        console.log('[HomeScreen] TouchableOpacity onPress, item:', item.id, 'isSwiping:', isSwipingRef.current[item.id]);
+                        // Prevent opening chat if currently swiping (important for desktop)
+                        if (!isSwipingRef.current[item.id]) {
+                          handlePress(item);
+                        } else {
+                          console.log('[HomeScreen] Blocked - swipe in progress');
+                        }
+                      }}
+                      onLongPress={() => {
+                        if (Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        }
+                        setSelectedItem(item);
+                        setShowActionModal(true);
+                      }}
+                      style={isDesktopWeb ? { borderRadius: 14 } : undefined}
+                    >
+                      <View className="mr-3">
+                        {item.isGroup && item.hasGroupImage && item.avatarUri ? (
+                          <Image
+                            source={{ uri: item.avatarUri }}
+                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                          />
+                        ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
+                          <View className="h-14 w-14 relative">
+                            {item.stackedAvatarUris.map((uri, index) => (
+                              <Image
+                                key={index}
+                                source={{ uri }}
+                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                                style={{
+                                  top: index === 0 ? 0 : index === 1 ? 14 : 4,
+                                  left: index === 0 ? 0 : index === 1 ? 14 : 24,
+                                  zIndex: 3 - index,
+                                }}
+                              />
+                            ))}
                           </View>
-                        ) : null}
-                        <Text
-                          numberOfLines={1}
-                          className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
-                        >
-                          {item.preview}
-                        </Text>
+                        ) : item.isGroup && item.isLoadingMembers ? (
+                          <View className="h-14 w-14 relative">
+                            {[0, 1, 2].map((i) => (
+                              <View
+                                key={`placeholder-${i}`}
+                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
+                                style={{
+                                  top: i === 0 ? 0 : i === 1 ? 14 : 4,
+                                  left: i === 0 ? 0 : i === 1 ? 14 : 24,
+                                  zIndex: 3 - i,
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : item.avatarUri ? (
+                          <Image
+                            source={{ uri: item.avatarUri }}
+                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
+                          />
+                        ) : (
+                          <View
+                            className="h-14 w-14 items-center justify-center rounded-full"
+                            style={{ backgroundColor: accentSoft }}
+                          >
+                            <Text
+                              className="text-xl font-bold"
+                              style={{ color: accentStrong }}
+                            >
+                              {item.name.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Three dots menu */}
-                  <ChatMenu
-                    isDark={isDark}
-                    accentColor={accentColor}
-                    activeMailbox={activeMailbox}
-                    isLoading={loadingItems.has(item.id)}
-                    onMoveToSpam={() => handleMoveSpam(item, true)}
-                    onMoveToInbox={() => handleMoveSpam(item, false)}
-                  />
-                </View>
+                      <View className="flex-1 min-w-0">
+                        <View className="flex-row items-center justify-between mb-1">
+                          <Text
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
+                          >
+                            {item.name}
+                          </Text>
+                          {item.time ? (
+                            <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
+                              {item.time}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View className="flex-row items-center">
+                          {item.isGroup ? (
+                            <View
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 11,
+                                backgroundColor: accentSoft,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginRight: 8,
+                              }}
+                            >
+                              <Feather name="users" size={12} color={accentStrong} />
+                            </View>
+                          ) : null}
+                          <Text
+                            numberOfLines={1}
+                            className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+                          >
+                            {item.preview}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </SwipeableChatItem>
               )}
               ListEmptyComponent={() => (
                 <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
@@ -1137,6 +1217,7 @@ export default function HomeScreen() {
                           }}
                           style={{
                             width: 48,
+                
                             height: 48,
                             borderRadius: 24,
                             backgroundColor: isDark ? '#334155' : '#e2e8f0',
@@ -1190,6 +1271,25 @@ export default function HomeScreen() {
           })()}
         </Modal>
 
+        {/* Chat Action Modal */}
+        <ChatActionModal
+          visible={showActionModal}
+          onClose={() => {
+            setShowActionModal(false);
+            setSelectedItem(null);
+          }}
+          onAction={() => {
+            if (selectedItem) {
+              handleMoveSpam(selectedItem, activeMailbox === 'inbox');
+            }
+          }}
+          actionType={activeMailbox === 'inbox' ? 'spam' : 'inbox'}
+          isDark={isDark}
+          accentColor={accentColor}
+          isLoading={selectedItem ? loadingItems.has(selectedItem.id) : false}
+          chatName={selectedItem?.name || ''}
+          chatAvatar={selectedItem?.avatarUri || undefined}
+        />
       </SafeAreaView>
     </MenuProvider>
   );
