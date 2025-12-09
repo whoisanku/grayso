@@ -9,7 +9,7 @@ import { DeSoIdentityProvider } from "react-deso-protocol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { configure } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
-import RootNavigator from "./navigation/RootNavigator";
+import { RootNavigator } from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./state/queryClient";

@@ -8,8 +8,13 @@ import {
   getConversationsNewMap,
   getConversationsFromFocusGraphql,
   getSpamConversationsFromFocusGraphql,
-} from "../../../services/conversations";
+} from "@/features/messaging/api/conversations";
 import { fetchAccessGroupMembers, GroupMember } from "../../../services/desoGraphql";
+
+const GROUP_MEMBER_CACHE: Map<
+  string,
+  { members: GroupMember[]; extraData: Record<string, string> | null }
+> = new Map();
 
 export const getConversationsQueryKey = (userPublicKey?: string) =>
   ["conversations", userPublicKey] as const;
@@ -85,6 +90,16 @@ export const fetchConversations = async (userPublicKey: string) => {
 
       if (!accessGroupKeyName || !ownerPublicKey) return;
 
+      const groupKey = `${ownerPublicKey}-${accessGroupKeyName}`;
+
+      // Fast path: use in-memory session cache to avoid repeat fetches
+      const cached = GROUP_MEMBER_CACHE.get(groupKey);
+      if (cached) {
+        membersMap[groupKey] = cached.members;
+        groupExtraDataMap[groupKey] = cached.extraData;
+        return;
+      }
+
       try {
         const { members, extraData } = await fetchAccessGroupMembers({
           accessGroupKeyName,
@@ -92,10 +107,9 @@ export const fetchConversations = async (userPublicKey: string) => {
           limit: 4, // Fetch just enough for the stack
         });
 
-        // Create a unique key for the group
-        const groupKey = `${ownerPublicKey}-${accessGroupKeyName}`;
         membersMap[groupKey] = members;
         groupExtraDataMap[groupKey] = extraData || null;
+        GROUP_MEMBER_CACHE.set(groupKey, { members, extraData: extraData || null });
       } catch (err) {
         console.warn(
           `Failed to fetch members for group ${accessGroupKeyName}`,

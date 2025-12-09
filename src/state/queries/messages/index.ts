@@ -6,7 +6,7 @@ import {
 import {
   fetchPaginatedDmThreadMessages,
   fetchPaginatedGroupThreadMessages,
-} from "../../../services/conversations";
+} from "@/features/messaging/api/conversations";
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
   MESSAGE_PAGE_SIZE,

@@ -1,7 +1,7 @@
 import React, { useContext, useCallback, useMemo } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import HomeScreen from "../view/screens/HomeScreen";
-import ProfileScreen from "../view/screens/profile/ProfileScreen";
+import { HomeScreen } from "../features/messaging/screens/HomeScreen";
+import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 
@@ -29,8 +29,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useAccentColor } from "../state/theme/useAccentColor";
-import { DesktopLeftNav } from "../view/components/desktop/DesktopLeftNav";
-import { DesktopRightNav } from "../view/components/desktop/DesktopRightNav";
+import { DesktopLeftNav } from "../features/messaging/components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "../features/messaging/components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH } from "../alf/breakpoints";
 import { getBorderColor } from "../theme/borders";
 
@@ -174,7 +174,7 @@ type HomeTabsProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Main">;
 };
 
-export default function HomeTabs({ navigation }: HomeTabsProps) {
+export function HomeTabs({ navigation }: HomeTabsProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();

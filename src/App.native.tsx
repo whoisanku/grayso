@@ -11,7 +11,7 @@ import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { configure, identity } from "deso-protocol";
 import { getTransactionSpendingLimits } from "./utils/deso";
-import RootNavigator from "./navigation/RootNavigator";
+import { RootNavigator } from "./navigation/RootNavigator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "./components/KeyboardProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
