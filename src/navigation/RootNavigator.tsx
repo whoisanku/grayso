@@ -75,7 +75,10 @@ export function RootNavigator() {
             <Stack.Screen
               name="Settings"
               component={SettingsScreen}
-              options={{ headerShown: false }}
+              options={{ 
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
             />
           </Stack.Group>
           <Stack.Group

@@ -54,6 +54,9 @@ import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { getConversationsQueryKey, fetchConversations } from "@/state/queries/messages/list";
+import type { GroupMember } from "@/services/desoGraphql";
+import UserGroupIcon from "@/assets/navIcons/user-group.svg";
+import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -79,7 +82,6 @@ type MockConversation = {
   time: string;
   avatarUri?: string | null;
   isGroup: boolean;
-  stackedAvatarUris?: string[];
   chatType: ChatType;
   threadPublicKey: string;
   threadIdentifier?: string;
@@ -88,7 +90,6 @@ type MockConversation = {
   partyGroupOwnerPublicKeyBase58Check?: string;
   lastTimestampNanos?: number;
   recipientInfo?: any; // Using any for now to match the data structure
-  isLoadingMembers?: boolean;
   hasGroupImage?: boolean;
 };
 
@@ -328,43 +329,24 @@ export function HomeScreen() {
 
         // For group chats, check if there's a custom group image in extraData
         let avatarUri: string;
+        let hasGroupImage = false;
+        
         if (isGroup) {
           const groupKey = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName}`;
           const extraData = groupExtraData?.[groupKey];
-          avatarUri = extraData?.groupImage || FALLBACK_GROUP_IMAGE;
+          
+          // If there's a custom group image, use it
+          if (extraData?.groupImage) {
+            avatarUri = extraData.groupImage;
+            hasGroupImage = true;
+          } else {
+            // No group image, will show placeholder icon instead
+            avatarUri = FALLBACK_GROUP_IMAGE;
+          }
         } else {
           avatarUri = buildProfilePictureUrl(otherPk, {
             fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
           });
-        }
-
-        let stackedAvatarUris: string[] = [];
-        let isLoadingMembers = false;
-        let hasGroupImage = false;
-
-        if (isGroup) {
-          const groupKey = `${last?.RecipientInfo?.OwnerPublicKeyBase58Check}-${last?.RecipientInfo?.AccessGroupKeyName}`;
-          const extraData = groupExtraData?.[groupKey];
-
-          // If there's a custom group image, use it instead of stacked avatars
-          if (extraData?.groupImage) {
-            hasGroupImage = true;
-          } else {
-            // Only fetch/show stacked avatars if there's no custom group image
-            const members = groupMembers[groupKey] || [];
-
-            if (members.length === 0) {
-              isLoadingMembers = true;
-            }
-
-            stackedAvatarUris = members
-              .slice(0, 3)
-              .map((m: { publicKey: string; profilePic?: string | null }) =>
-                m.profilePic
-                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${m.publicKey}?fallback=${m.profilePic}`
-                  : getProfileImageUrl(m.publicKey) || FALLBACK_PROFILE_IMAGE
-              );
-          }
         }
 
         // Extract thread identifier from message ExtraData
@@ -376,7 +358,6 @@ export function HomeScreen() {
           preview,
           time,
           avatarUri,
-          stackedAvatarUris,
           isGroup,
           chatType: c.ChatType,
           threadPublicKey: otherPk,
@@ -388,7 +369,6 @@ export function HomeScreen() {
             : DEFAULT_KEY_MESSAGING_GROUP_NAME,
           partyGroupOwnerPublicKeyBase58Check: otherPk,
           recipientInfo: last?.RecipientInfo,
-          isLoadingMembers,
           hasGroupImage,
         };
       });
@@ -495,9 +475,10 @@ export function HomeScreen() {
             `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
             ]
             : undefined,
+        initialProfile: profiles[item.threadPublicKey], // Pass profile to avoid loading delay
       });
     },
-    [currentUser?.PublicKeyBase58Check, navigation]
+    [currentUser?.PublicKeyBase58Check, navigation, profiles, groupMembers]
   );
 
   const handleCompose = useCallback(() => {
@@ -521,11 +502,15 @@ export function HomeScreen() {
 
       let movedConversation: ConversationMap[string] | undefined;
       let movedProfiles: PublicKeyToProfileEntryResponseMap = {};
+      let movedGroupMembers: Record<string, GroupMember[]> = {};
+      let movedGroupExtraData: Record<string, Record<string, string> | null> = {};
 
       const updatedFromPages = fromData.pages.map((page) => {
         if (page.conversations[conversationId]) {
           movedConversation = page.conversations[conversationId];
           movedProfiles = { ...movedProfiles, ...page.profiles };
+          movedGroupMembers = { ...movedGroupMembers, ...page.groupMembers };
+          movedGroupExtraData = { ...movedGroupExtraData, ...page.groupExtraData };
           const nextPage = {
             ...page,
             conversations: { ...page.conversations },
@@ -557,20 +542,28 @@ export function HomeScreen() {
                       ...page.profiles,
                       ...movedProfiles,
                     },
+                    groupMembers: {
+                      ...page.groupMembers,
+                      ...movedGroupMembers,
+                    },
+                    groupExtraData: {
+                      ...page.groupExtraData,
+                      ...movedGroupExtraData,
+                    },
                   } as ConversationsPage;
                 }
                 return page;
               })
             : [
-                {
-                  conversations: { [conversationId]: movedConversation },
-                  profiles: movedProfiles,
-                  groupMembers: {},
-                  groupExtraData: {},
-                  hasMore: false,
-                  nextOffset: null,
-                } as ConversationsPage,
-              ];
+              {
+                conversations: { [conversationId]: movedConversation },
+                profiles: movedProfiles,
+                groupMembers: movedGroupMembers,
+                groupExtraData: movedGroupExtraData,
+                hasMore: false,
+                nextOffset: null,
+              } as ConversationsPage,
+            ];
 
           queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
             ...toData,
@@ -584,8 +577,8 @@ export function HomeScreen() {
               {
                 conversations: { [conversationId]: movedConversation },
                 profiles: movedProfiles,
-                groupMembers: {},
-                groupExtraData: {},
+                groupMembers: movedGroupMembers,
+                groupExtraData: movedGroupExtraData,
                 hasMore: false,
                 nextOffset: null,
               } as ConversationsPage,
@@ -690,7 +683,7 @@ export function HomeScreen() {
               className="mr-1"
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
               </View>
             </TouchableOpacity>
 
@@ -815,6 +808,8 @@ export function HomeScreen() {
 
           {/* Header */}
           <View
+            // @ts-ignore - data attribute for CSS scroll lock
+            dataSet={{ scrollLock: "true" }}
             className="flex-row items-center justify-between pt-4 pb-3 px-4"
           >
             <View className="flex-row items-center">
@@ -869,11 +864,11 @@ export function HomeScreen() {
                       justifyContent: 'center',
                     }}
                   >
-                    <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                    <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
                   </LiquidGlassView>
                 ) : (
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                    <Feather name="users" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                    <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -907,6 +902,8 @@ export function HomeScreen() {
 
           {/* WhatsApp-style filter chips */}
           <View
+            // @ts-ignore - data attribute for CSS scroll lock
+            dataSet={{ scrollLock: "true" }}
             style={{
               flexDirection: 'row',
               paddingHorizontal: 16,
@@ -955,7 +952,11 @@ export function HomeScreen() {
             })}
           </View>
 
-          <View className="flex-1">
+          <View 
+            // @ts-ignore - data attribute for CSS virtualized list
+            dataSet={{ virtualizedList: "true" }}
+            className="flex-1"
+          >
             <FlashList
               data={enhancedItems}
               keyExtractor={(item) => item.id}
@@ -965,10 +966,16 @@ export function HomeScreen() {
               ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0
-                  ? "flex-grow items-center justify-center px-4 pb-20"
-                  : "px-0 pb-4"
+                  ? "flex-grow items-center justify-center px-4"
+                  : "px-0"
               }
-              contentContainerStyle={isDesktopWeb ? { paddingHorizontal: 0 } : undefined}
+              contentContainerStyle={
+                isDesktopWeb 
+                  ? { paddingHorizontal: 0 } 
+                  : items.length === 0 
+                    ? { paddingBottom: 80 } 
+                    : { paddingBottom: 70 }
+              }
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshingMailbox}
@@ -985,11 +992,8 @@ export function HomeScreen() {
               onEndReachedThreshold={0.2}
               ListFooterComponent={
                 isFetchingNextMailbox ? (
-                  <View className="py-4 items-center justify-center">
+                  <View className="py-6 items-center justify-center">
                     <ActivityIndicator size="small" color={accentColor} />
-                    <Text className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      Loading more…
-                    </Text>
                   </View>
                 ) : null
               }
@@ -1014,34 +1018,12 @@ export function HomeScreen() {
                             source={{ uri: item.avatarUri }}
                             className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
                           />
-                        ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
-                          <View className="h-14 w-14 relative">
-                            {item.stackedAvatarUris.map((uri, index) => (
-                              <Image
-                                key={index}
-                                source={{ uri }}
-                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                                style={{
-                                  top: index === 0 ? 0 : index === 1 ? 14 : 4,
-                                  left: index === 0 ? 0 : index === 1 ? 14 : 24,
-                                  zIndex: 3 - index,
-                                }}
-                              />
-                            ))}
-                          </View>
-                        ) : item.isGroup && item.isLoadingMembers ? (
-                          <View className="h-14 w-14 relative">
-                            {[0, 1, 2].map((i) => (
-                              <View
-                                key={`placeholder-${i}`}
-                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                                style={{
-                                  top: i === 0 ? 0 : i === 1 ? 14 : 4,
-                                  left: i === 0 ? 0 : i === 1 ? 14 : 24,
-                                  zIndex: 3 - i,
-                                }}
-                              />
-                            ))}
+                        ) : item.isGroup ? (
+                          // Group chat without custom image - show placeholder icon
+                          <View
+                            className="h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
+                          >
+                            <UserGroupIcon width={24} height={24} stroke={isDark ? "#94a3b8" : "#64748b"} strokeWidth={2} />
                           </View>
                         ) : item.avatarUri ? (
                           <Image
@@ -1090,7 +1072,7 @@ export function HomeScreen() {
                                 marginRight: 8,
                               }}
                             >
-                              <Feather name="users" size={12} color={accentStrong} />
+                              <UserGroupIcon width={12} height={12} stroke={accentStrong} strokeWidth={2} />
                             </View>
                           ) : null}
                           <Text

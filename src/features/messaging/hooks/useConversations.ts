@@ -194,11 +194,20 @@ export const useConversations = (
       (acc, page) => ({ ...acc, ...page.profiles }),
       {}
     );
+    const groupMembers = data.pages.reduce<GroupMembersMap>((acc, page) => ({
+      ...acc,
+      ...page.groupMembers,
+    }), {} as GroupMembersMap);
+
+    const groupExtraData = data.pages.reduce<GroupExtraMap>((acc, page) => ({
+      ...acc,
+      ...page.groupExtraData,
+    }), {} as GroupExtraMap);
     return {
       conversations,
       profiles,
-      groupMembers: {} as GroupMembersMap, // fetched lazily elsewhere
-      groupExtraData: {} as GroupExtraMap,
+      groupMembers,
+      groupExtraData,
     };
   }, [data?.pages]);
 

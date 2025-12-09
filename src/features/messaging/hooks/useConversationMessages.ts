@@ -53,6 +53,7 @@ type UseConversationMessagesProps = {
     lastTimestampNanos?: number;
     recipientInfo?: any;
     conversationId: string;
+    initialProfile?: any; // Profile to seed immediately
 };
 
 export const useConversationMessages = ({
@@ -65,6 +66,7 @@ export const useConversationMessages = ({
     lastTimestampNanos,
     recipientInfo,
     conversationId,
+    initialProfile,
 }: UseConversationMessagesProps) => {
     const queryClient = useQueryClient();
     const [error, setError] = useState<string | null>(null);
@@ -316,13 +318,18 @@ export const useConversationMessages = ({
         staleTime: 1000 * 30,
     });
 
-    const profiles = useMemo(
-        () =>
-            data?.pages?.reduce<PublicKeyToProfileEntryResponseMap>((acc, page) => {
-                return { ...acc, ...page.profiles };
-            }, {}) ?? {},
-        [data?.pages]
-    );
+    const profiles = useMemo(() => {
+        const baseProfiles = data?.pages?.reduce<PublicKeyToProfileEntryResponseMap>((acc, page) => {
+            return { ...acc, ...page.profiles };
+        }, {}) ?? {};
+        
+        // Seed with initialProfile to avoid loading delay
+        if (initialProfile && counterPartyPublicKey) {
+            return { [counterPartyPublicKey]: initialProfile, ...baseProfiles };
+        }
+        
+        return baseProfiles;
+    }, [data?.pages, initialProfile, counterPartyPublicKey]);
 
     const messages = useMemo(() => {
         if (!data?.pages) return [];

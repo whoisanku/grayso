@@ -14,6 +14,7 @@ export type ConversationRouteParams = {
   recipientInfo?: any;
   initialGroupMembers?: any[];
   initialMessage?: string;
+  initialProfile?: any; // Profile data to avoid loading delay
 };
 
 export type HomeTabParamList = {

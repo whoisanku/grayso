@@ -3,14 +3,14 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { HomeScreen } from "../features/messaging/screens/HomeScreen";
 import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
+import MessageIconFilled from "../assets/navIcons/message-filled.svg";
 import UserIcon from "../assets/navIcons/user.svg";
+import UserIconFilled from "../assets/navIcons/user-filled.svg";
 
-import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable, ScrollView } from "react-native";
+import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
-import { BlurView } from "expo-blur";
-import { LiquidGlassView } from "../utils/liquidGlass";
 import { Drawer } from "react-native-drawer-layout";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useColorScheme } from "nativewind";
@@ -41,10 +41,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { accentColor, accentStrong } = useAccentColor();
-  const { width: windowWidth } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
-  const tabBarWidth = isDesktopWeb ? Math.min(520, windowWidth * 0.5) : "65%";
-  const tabBarBottomOffset = isDesktopWeb ? 12 : 32;
+  const insets = useSafeAreaInsets();
 
   const tabButtons = state.routes.map((route, index) => {
     const { options } = descriptors[route.key];
@@ -66,24 +63,33 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       }
     };
 
-    // Center button (Compose) - special styling
+    // Center button (Compose) - integrated into bottom bar
     if (route.name === "Post") {
       return (
         <TouchableOpacity
           key={route.key}
           onPress={() => navigation.navigate("Composer")}
           activeOpacity={0.8}
-          className="mx-4 h-14 w-14 items-center justify-center rounded-full"
           style={{
-            backgroundColor: accentColor,
-            shadowColor: accentStrong,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 5,
+            flex: 1,
+            paddingTop: 13,
+            paddingBottom: 4,
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          <Feather name="edit-2" size={24} color="white" />
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: accentColor,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Feather name="edit-2" size={18} color="white" />
+          </View>
         </TouchableOpacity>
       );
     }
@@ -93,79 +99,69 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         key={route.key}
         onPress={onPress}
         activeOpacity={0.7}
-        className="items-center justify-center p-2"
+        style={{
+          flex: 1,
+          paddingTop: 13,
+          paddingBottom: 4,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         {route.name === "Messages" ? (
-          <MessageIcon
-            width={24}
-            height={24}
-            stroke={isFocused ? (isDark ? "#f8fafc" : "#0f172a") : (isDark ? "#64748b" : "#94a3b8")}
-            strokeWidth={isFocused ? 2.5 : 2}
-            fill="none"
-          />
+          isFocused ? (
+            <MessageIconFilled
+              width={27}
+              height={27}
+              fill={isDark ? "#f8fafc" : "#0f172a"}
+            />
+          ) : (
+            <MessageIcon
+              width={27}
+              height={27}
+              stroke={isDark ? "#64748b" : "#94a3b8"}
+              strokeWidth={2}
+            />
+          )
         ) : (
-          <UserIcon
-            width={24}
-            height={24}
-            stroke={isFocused ? (isDark ? "#f8fafc" : "#0f172a") : (isDark ? "#64748b" : "#94a3b8")}
-            strokeWidth={isFocused ? 2.5 : 2}
-            fill="none"
-          />
-        )}
-        {isFocused && (
-          <View className="absolute -bottom-1 h-1 w-1 rounded-full bg-slate-900 dark:bg-slate-100" />
+          isFocused ? (
+            <UserIconFilled
+              width={27}
+              height={27}
+              fill={isDark ? "#f8fafc" : "#0f172a"}
+            />
+          ) : (
+            <UserIcon
+              width={27}
+              height={27}
+              stroke={isDark ? "#64748b" : "#94a3b8"}
+              strokeWidth={2}
+            />
+          )
         )}
       </TouchableOpacity>
     );
   });
 
-  // Use LiquidGlassView on iOS 26+, fallback to BlurView on older versions
-  const glassContainerStyle = {
-    borderWidth: 1,
-    borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)",
-    shadowColor: isDark ? "#000" : "#64748b",
-    shadowOffset: { width: 0, height: isDark ? 12 : 8 },
-    shadowOpacity: isDark ? 0.5 : 0.12,
-    shadowRadius: isDark ? 20 : 24,
-    elevation: 10,
-  };
-
-  // Render content based on iOS version
-  const renderGlassContainer = () => {
-    if (LiquidGlassView) {
-      // iOS 26+ with Liquid Glass effect
-      return (
-        <LiquidGlassView
-          effect="regular"
-          style={[liquidGlassStyles.glassView, glassContainerStyle, { width: tabBarWidth }]}
-        >
-          <View style={liquidGlassStyles.tabButtonsContainer}>
-            {tabButtons}
-          </View>
-        </LiquidGlassView>
-      );
-    }
-
-    // Fallback to BlurView for older iOS/Android
-    return (
-      <BlurView
-        intensity={Platform.OS === "ios" ? 50 : 80}
-        tint={isDark ? "dark" : "light"}
-        style={[liquidGlassStyles.blurView, glassContainerStyle, { width: tabBarWidth }]}
-      >
-        <View style={liquidGlassStyles.tabButtonsContainer}>
-          {tabButtons}
-        </View>
-      </BlurView>
-    );
-  };
-
+  // Bluesky-style attached bottom bar
   return (
     <View
-      className="absolute left-0 right-0 items-center justify-center"
-      style={{ bottom: tabBarBottomOffset }}
+      // @ts-ignore - data attribute for CSS scroll lock
+      dataSet={{ scrollLock: "true" }}
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: "row",
+        backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: getBorderColor(isDark, "contrast_low"),
+        paddingLeft: 5,
+        paddingRight: 10,
+        paddingBottom: Math.max(insets.bottom, 15),
+      }}
     >
-      {renderGlassContainer()}
+      {tabButtons}
     </View>
   );
 }
@@ -443,23 +439,4 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   );
 }
 
-const liquidGlassStyles = StyleSheet.create({
-  glassView: {
-    borderRadius: 9999, // Full rounded (pill shape)
-    overflow: "hidden",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  blurView: {
-    borderRadius: 9999, // Full rounded (pill shape)
-    overflow: "hidden",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  tabButtonsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-});
+

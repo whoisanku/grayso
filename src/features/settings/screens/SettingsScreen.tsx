@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import React, { useCallback } from "react";
+import { View, Text, TouchableOpacity, ScrollView, Platform, DeviceEventEmitter, useWindowDimensions } from "react-native";
 import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import { Feather } from "@expo/vector-icons";
@@ -13,6 +13,9 @@ export function SettingsScreen({ navigation }: any) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colorMode, setColorMode } = useAppearance();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  
   const {
     accentId,
     setAccentId,
@@ -22,14 +25,23 @@ export function SettingsScreen({ navigation }: any) {
     accentSoft,
   } = useAccentColor();
 
+  const handleBackPress = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
+
   return (
     <DesktopShell>
       <ScreenWrapper
         backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
-        edges={['top', 'left', 'right']}
+        edges={['top']}
       >
         <View className="flex-row items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-           <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
+           <TouchableOpacity 
+             onPress={handleBackPress} 
+             className="mr-3"
+           >
               <Feather name="arrow-left" size={24} color={isDark ? "white" : "black"} />
            </TouchableOpacity>
            <Text className="text-xl font-bold text-slate-900 dark:text-white">Settings</Text>
@@ -44,6 +56,12 @@ export function SettingsScreen({ navigation }: any) {
                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(241, 245, 249, 0.8)',
                  borderWidth: 1,
                  borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
+                 ...Platform.select({
+                   web: {
+                     // @ts-ignore - web-only CSS
+                     transition: 'background-color 0.3s ease-in-out, border-color 0.3s ease-in-out',
+                   },
+                 }),
                }}
              >
                <View className="flex-row items-center mb-3">

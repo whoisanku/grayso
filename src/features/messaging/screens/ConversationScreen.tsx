@@ -58,6 +58,8 @@ import { DesktopShell } from "../components/desktop/DesktopShell";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
+import UserGroupIcon from "@/assets/navIcons/user-group.svg";
+import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -75,6 +77,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     title,
     recipientInfo,
     initialGroupMembers,
+    initialProfile,
   } = route.params;
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
@@ -134,6 +137,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     lastTimestampNanos,
     recipientInfo,
     conversationId,
+    initialProfile, // Pass initialProfile to hook
   });
 
   const {
@@ -336,7 +340,9 @@ export function ConversationScreen({ navigation, route }: Props) {
     // Check recipientInfo.username first for new conversations (when headerProfile doesn't exist yet)
     const recipientUsername = (recipientInfo as { username?: string })?.username;
     if (recipientUsername) return recipientUsername;
-    return getProfileDisplayName(headerProfile, counterPartyPublicKey);
+    // Show "Loading..." instead of truncated public key while profile loads
+    if (headerProfile?.Username) return headerProfile.Username;
+    return "Loading...";
   }, [counterPartyPublicKey, headerProfile, isGroupChat, recipientInfo, title]);
 
   const headerAvatarUri = useMemo(() => {
@@ -420,7 +426,11 @@ export function ConversationScreen({ navigation, route }: Props) {
         useKeyboardController={true}
       >
       {/* Custom Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]">
+      <View 
+        // @ts-ignore - data attribute for CSS scroll lock
+        dataSet={{ scrollLock: "true" }}
+        className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]"
+      >
         <View className="flex-row items-center flex-1">
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -933,7 +943,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                             justifyContent: 'center',
                             marginBottom: 16,
                           }}>
-                            <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+                            <UserGroupIcon width={28} height={28} stroke={isDark ? "#64748b" : "#94a3b8"} strokeWidth={2} />
                           </View>
                           <Text style={{
                             fontSize: 16,
@@ -1040,7 +1050,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                   ListEmptyComponent={
                     !loadingMembers ? (
                       <View className="flex-1 items-center justify-center py-14">
-                        <Feather name="users" size={48} color="#9ca3af" />
+                        <UserGroupIcon width={48} height={48} stroke="#9ca3af" strokeWidth={2} />
                         <Text className="mt-4 text-base text-gray-500">No members found</Text>
                       </View>
                     ) : (

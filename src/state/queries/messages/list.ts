@@ -32,6 +32,8 @@ export const fetchConversations = async (
   let conversations: ConversationMap = {};
   let publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap = {};
   let hasMore = false;
+  let groupMembers: Record<string, GroupMember[]> = {};
+  let groupExtraData: Record<string, Record<string, string> | null> = {};
 
   try {
     const focusResult =
@@ -54,6 +56,8 @@ export const fetchConversations = async (
       focusResult.publicKeyToProfileEntryResponseMap;
     allAccessGroups = focusResult.updatedAllAccessGroups;
     hasMore = focusResult.hasMore;
+    groupMembers = focusResult.groupMembers;
+    groupExtraData = focusResult.groupExtraData;
   } catch (err) {
     console.warn("Focus GraphQL inbox fetch failed, falling back", err);
   }
@@ -69,6 +73,15 @@ export const fetchConversations = async (
   // We skip group member fetch here to keep payload light; fetch lazily per row if needed.
   const membersMap: Record<string, GroupMember[]> = {};
   const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
+
+  // Prefer results from Focus GraphQL when available; otherwise fall back to empty.
+  if (Object.keys(groupMembers).length) {
+    Object.assign(membersMap, groupMembers);
+  }
+
+  if (Object.keys(groupExtraData).length) {
+    Object.assign(groupExtraDataMap, groupExtraData);
+  }
 
   return {
     conversations,

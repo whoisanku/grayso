@@ -26,6 +26,8 @@ import { useAccentColor } from '@/state/theme/useAccentColor';
 import { DesktopLeftNav } from './desktop/DesktopLeftNav';
 import { DesktopRightNav } from './desktop/DesktopRightNav';
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from '@/alf/breakpoints';
+import UserGroupIcon from '@/assets/navIcons/user-group.svg';
+import UserGroupIconFilled from '@/assets/navIcons/user-group-filled.svg';
 
 interface NewGroupChatModalProps {
     visible: boolean;
@@ -512,7 +514,7 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                                 justifyContent: 'center',
                                 marginBottom: 16,
                             }}>
-                                <Feather name="users" size={28} color={isDark ? "#64748b" : "#94a3b8"} />
+                                <UserGroupIcon width={28} height={28} stroke={isDark ? "#64748b" : "#94a3b8"} strokeWidth={2} />
                             </View>
                             <Text style={{
                                 fontSize: 16,
@@ -652,10 +654,11 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                         <ActivityIndicator color={isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8")} />
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Feather
-                                name="users"
-                                size={18}
-                                color={isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8")}
+                            <UserGroupIcon
+                                width={18}
+                                height={18}
+                                stroke={isFormValid ? onAccent : (isDark ? "#64748b" : "#94a3b8")}
+                                strokeWidth={2}
                                 style={{ marginRight: 8 }}
                             />
                             <Text style={{
