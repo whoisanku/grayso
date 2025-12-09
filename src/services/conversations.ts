@@ -306,15 +306,15 @@ export const getConversationsFromFocusGraphql = async (
 
       const recipientGroup = isGroupChat
         ? {
-            keyName:
-              thread.thread?.accessGroupKeyName ||
-              DEFAULT_KEY_MESSAGING_GROUP_NAME,
-            owner:
-              thread.thread?.accessGroupOwnerPublicKey ||
-              receiverPublicKey ||
-              senderPublicKey,
-            publicKey: null as string | null,
-          }
+          keyName:
+            thread.thread?.accessGroupKeyName ||
+            DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          owner:
+            thread.thread?.accessGroupOwnerPublicKey ||
+            receiverPublicKey ||
+            senderPublicKey,
+          publicKey: null as string | null,
+        }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
       const recipientAccessGroupPublicKey =
@@ -340,7 +340,10 @@ export const getConversationsFromFocusGraphql = async (
           EncryptedText: message.encryptedText,
           TimestampNanos: nanos,
           TimestampNanosString: nanosString,
-          ExtraData: message.extraData || {},
+          ExtraData: {
+            ...(message.extraData || {}),
+            threadIdentifier: thread.threadIdentifier || "",
+          },
         },
       } as NewMessageEntryResponse;
     })
@@ -443,15 +446,15 @@ export const getSpamConversationsFromFocusGraphql = async (
 
       const recipientGroup = isGroupChat
         ? {
-            keyName:
-              thread.thread?.accessGroupKeyName ||
-              DEFAULT_KEY_MESSAGING_GROUP_NAME,
-            owner:
-              thread.thread?.accessGroupOwnerPublicKey ||
-              receiverPublicKey ||
-              senderPublicKey,
-            publicKey: null as string | null,
-          }
+          keyName:
+            thread.thread?.accessGroupKeyName ||
+            DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          owner:
+            thread.thread?.accessGroupOwnerPublicKey ||
+            receiverPublicKey ||
+            senderPublicKey,
+          publicKey: null as string | null,
+        }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
       const recipientAccessGroupPublicKey =
@@ -477,7 +480,10 @@ export const getSpamConversationsFromFocusGraphql = async (
           EncryptedText: message.encryptedText,
           TimestampNanos: nanos,
           TimestampNanosString: nanosString,
-          ExtraData: message.extraData || {},
+          ExtraData: {
+            ...(message.extraData || {}),
+            threadIdentifier: thread.threadIdentifier || "",
+          },
         },
       } as NewMessageEntryResponse;
     })

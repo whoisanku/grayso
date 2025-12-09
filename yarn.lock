@@ -5929,6 +5929,11 @@ react-native-nitro-modules@*, react-native-nitro-modules@^0.31.10:
   resolved "https://registry.npmjs.org/react-native-nitro-modules/-/react-native-nitro-modules-0.31.10.tgz"
   integrity sha512-hcvjTu9YJE9fMmnAUvhG8CxvYLpOuMQ/2eyi/S6GyrecezF6Rmk/uRQEL6v09BRFWA/xRVZNQVulQPS+2HS3mQ==
 
+react-native-popup-menu@^0.18.0:
+  version "0.18.0"
+  resolved "https://registry.npmjs.org/react-native-popup-menu/-/react-native-popup-menu-0.18.0.tgz"
+  integrity sha512-XD3gyp/hwL5YWw2J034DerfvbJ6S2YHqAzvqAFRU+UGnFD4JyTqggfm4UyynBD26O1PDoRb45Loil+NZCGfCnA==
+
 "react-native-randombytes@>=2.0.0 <4.0.0":
   version "3.6.2"
   resolved "https://registry.npmjs.org/react-native-randombytes/-/react-native-randombytes-3.6.2.tgz"

@@ -74,7 +74,47 @@ export function getTransactionSpendingLimits(
       AUTHORIZE_DERIVED_KEY: 1,
       NEW_MESSAGE: UNLIMITED as any,
       SUBMIT_POST: UNLIMITED as any,
+      ACCESS_GROUP: UNLIMITED as any,
+      ACCESS_GROUP_MEMBERS: UNLIMITED as any,
+      DELETE_USER_ASSOCIATION: UNLIMITED as any,
     } as any,
+    AssociationLimitMap: [
+      // Specific permission for spam/inbox operations
+      {
+        AssociationClass: "User" as any,
+        AssociationType: "CUSTOM_MESSAGING_THREAD_SETTINGS",
+        AppScopeType: "Any" as any,
+        AppPublicKeyBase58Check: "",
+        AssociationOperation: "Create" as any,
+        OpCount: UNLIMITED as any,
+      },
+      {
+        AssociationClass: "User" as any,
+        AssociationType: "CUSTOM_MESSAGING_THREAD_SETTINGS",
+        AppScopeType: "Any" as any,
+        AppPublicKeyBase58Check: "",
+        AssociationOperation: "Delete" as any,
+        OpCount: UNLIMITED as any,
+      },
+      // Broad permissions for Post associations
+      {
+        AssociationClass: "Post" as any,
+        AssociationType: "",
+        AppScopeType: "Any" as any,
+        AppPublicKeyBase58Check: "",
+        AssociationOperation: "Any" as any,
+        OpCount: UNLIMITED as any,
+      },
+      // Broad permissions for User associations
+      {
+        AssociationClass: "User" as any,
+        AssociationType: "",
+        AppScopeType: "Any" as any,
+        AppPublicKeyBase58Check: "",
+        AssociationOperation: "Any" as any,
+        OpCount: UNLIMITED as any,
+      },
+    ],
     AccessGroupLimitMap: [
       {
         AccessGroupOwnerPublicKeyBase58Check: publicKey,

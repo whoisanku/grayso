@@ -1,6 +1,6 @@
 import {
+  AccessGroupEntryResponse,
   ChatType,
-  getAllAccessGroups,
   PublicKeyToProfileEntryResponseMap,
 } from "deso-protocol";
 import {
@@ -19,13 +19,8 @@ export const fetchConversations = async (userPublicKey: string) => {
     throw new Error("User public key is required");
   }
 
-  const { AccessGroupsOwned, AccessGroupsMember } = await getAllAccessGroups({
-    PublicKeyBase58Check: userPublicKey,
-  });
-
-  let allAccessGroups = (AccessGroupsOwned || []).concat(
-    AccessGroupsMember || []
-  );
+  // Start with empty access groups - they will be fetched by GraphQL functions if needed during decryption
+  let allAccessGroups: AccessGroupEntryResponse[] = [];
 
   let conversations: ConversationMap = {};
   let spamConversations: ConversationMap = {};
