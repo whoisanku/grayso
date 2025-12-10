@@ -52,6 +52,7 @@ import {
   SelectedBubblePreview,
   computeModalPositions,
 } from "../components/ActionSheet";
+import { BlurBackdrop } from "../components/BlurBackdrop";
 
 // Hooks
 import { useConversationMessages } from "@/features/messaging/hooks/useConversationMessages";
@@ -174,6 +175,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     selectedBubbleLayout,
     setSelectedBubbleLayout,
     bubbleLayoutsRef,
+    blurAnim, // Add blur animation
     backdropStyle,
     actionSheetStyle,
     bubblePreviewStyle,
@@ -363,6 +365,7 @@ export function ConversationScreen({ navigation, route }: Props) {
   // --- UI State & Refs ---
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [actualBubbleHeight, setActualBubbleHeight] = useState<number | undefined>(undefined);
   const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
@@ -382,6 +385,13 @@ export function ConversationScreen({ navigation, route }: Props) {
       useNativeDriver: true,
     }).start();
   }, [composerHideAnim, selectedMessage]);
+
+  // Reset actual bubble height when modal closes
+  useEffect(() => {
+    if (!selectedMessage) {
+      setActualBubbleHeight(undefined);
+    }
+  }, [selectedMessage]);
 
   const composerAnimatedStyle = {
     transform: [
@@ -851,38 +861,8 @@ export function ConversationScreen({ navigation, route }: Props) {
           onRequestClose={handleCloseMessageActions}
         >
           <View style={{ flex: 1 }}>
-            <Reanimated.View
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFillObject, backdropStyle]}
-            >
-              {Platform.OS === "ios" || Platform.OS === "android" ? (
-                <>
-                  <BlurView
-                    intensity={120}
-                    tint="dark"
-                    style={StyleSheet.absoluteFill}
-                  />
-                  {/* Additional darkening layer on top of blur for better focus */}
-                  <View
-                    style={[
-                      StyleSheet.absoluteFillObject,
-                      { backgroundColor: "rgba(0,0,0,0.4)" },
-                    ]}
-                  />
-                </>
-              ) : (
-                <View
-                  style={[
-                    StyleSheet.absoluteFillObject,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(0,0,0,0.90)"
-                        : "rgba(0,0,0,0.85)",
-                    },
-                  ]}
-                />
-              )}
-            </Reanimated.View>
+            {/* Full-screen blur backdrop - blurs conversation area only on desktop */}
+            <BlurBackdrop isDark={isDark} opacity={blurAnim} />
 
             <TouchableOpacity
               activeOpacity={1}
@@ -895,7 +875,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                   const positions = computeModalPositions(
                     selectedBubbleLayout,
                     composerBottomInset,
-                    Boolean(selectedMessage?.IsSender)
+                    Boolean(selectedMessage?.IsSender),
+                    actualBubbleHeight // Pass actual measured bubble height
                   );
                   return (
                     <>
@@ -919,6 +900,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                           layout={{
                             width: selectedBubbleLayout.width,
                             height: selectedBubbleLayout.height,
+                          }}
+                          onLayout={(event) => {
+                            const { height } = event.nativeEvent.layout;
+                            setActualBubbleHeight(height);
                           }}
                         />
                       </Reanimated.View>

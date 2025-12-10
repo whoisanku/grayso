@@ -11,13 +11,15 @@ import {
   isEditedValue,
   formatTimestamp,
 } from "../../../utils/messageUtils";
+import { FileAndMessageBubble } from "./FileAndMessageBubble";
+import { VideoMessageBubble } from "./VideoMessageBubble";
 import { LiquidGlassView } from "../../../utils/liquidGlass";
 import { BlurView } from "expo-blur";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 
 const ACTION_SHEET_WIDTH = 240;
 const ESTIMATED_ACTION_HEIGHT = 160; // Slightly increased for better estimation
-const GAP_BETWEEN_BUBBLE_AND_SHEET = 20; // Consistent gap - fixed spacing
+const GAP_BETWEEN_BUBBLE_AND_SHEET = 8; // Reduced gap for closer spacing
 const WINDOW = Dimensions.get("window");
 
 type ActionSheetCardProps = {
@@ -119,6 +121,7 @@ type SelectedBubblePreviewProps = {
   isDark: boolean;
   messageIdMap?: Map<string, DecryptedMessageEntryResponse>;
   layout?: { width: number; height: number };
+  onLayout?: (event: any) => void; // Callback to measure actual bubble height
 };
 
 export function SelectedBubblePreview({
@@ -127,6 +130,7 @@ export function SelectedBubblePreview({
   isDark,
   messageIdMap,
   layout,
+  onLayout,
 }: SelectedBubblePreviewProps) {
   const isMine = Boolean(message.IsSender);
   const text = getDisplayedMessageText(message) || "Message";
@@ -138,20 +142,9 @@ export function SelectedBubblePreview({
   const timestamp = message.MessageInfo?.TimestampNanos;
   const { accentColor, accentSoft, onAccent } = useAccentColor();
 
-  // Media handling
+  // Media handling - components handle the rendering
   const decryptedImageURLs = extra?.decryptedImageURLs;
   const decryptedVideoURLs = extra?.decryptedVideoURLs;
-  const hasImages =
-    typeof decryptedImageURLs === "string" && decryptedImageURLs.length > 0;
-  const hasVideos =
-    typeof decryptedVideoURLs === "string" && decryptedVideoURLs.length > 0;
-
-  const imageUrls = hasImages
-    ? decryptedImageURLs.split(",").filter((url: string) => url.trim())
-    : [];
-  const videoUrls = hasVideos
-    ? decryptedVideoURLs.split(",").filter((url: string) => url.trim())
-    : [];
 
   // Reply logic
   const repliedToMessageId = extra?.RepliedToMessageId;
@@ -225,6 +218,7 @@ export function SelectedBubblePreview({
     >
       <View
         className="px-4 py-3"
+        onLayout={onLayout} // Measure actual bubble height
         style={{
           width: layout?.width,
           borderRadius: 22,
@@ -250,141 +244,56 @@ export function SelectedBubblePreview({
         {/* Username removed - only show message text like iMessage */}
         {renderReplyPreview()}
 
-        {/* Render images if present */}
-        {imageUrls.length > 0 && (
-          <View
-            style={{
-              marginHorizontal: -16,
-              marginTop: -12,
-              marginBottom: 8,
-              borderRadius: 12,
-              overflow: "hidden",
-            }}
-          >
-            {imageUrls.length === 1 ? (
-              <Image
-                source={{ uri: imageUrls[0] }}
-                style={{
-                  width: "100%",
-                  height: 200,
-                  borderRadius: 12,
-                }}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-                {imageUrls.slice(0, 4).map((url: string, index: number) => (
-                  <Image
-                    key={index}
-                    source={{ uri: url }}
-                    style={{
-                      width: imageUrls.length === 2 ? "49%" : "48.5%",
-                      height: 120,
-                      borderRadius: 8,
-                    }}
-                    resizeMode="cover"
-                  />
-                ))}
-              </View>
-            )}
-          </View>
-        )}
+        {/* Render media using same components as MessageBubble */}
+        <View style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}>
+          <FileAndMessageBubble
+            decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
+            extraData={extra}
+            isDark={isDark}
+            onImagePress={() => {}} // No-op in preview
+          />
+          <VideoMessageBubble
+            decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
+            extraData={extra}
+            isDark={isDark}
+          />
+        </View>
 
-        {/* Render video thumbnail if present */}
-        {videoUrls.length > 0 && (
-          <View
-            style={{
-              marginHorizontal: -16,
-              marginTop: -12,
-              marginBottom: 8,
-              borderRadius: 12,
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <Image
-              source={{ uri: videoUrls[0] }}
-              style={{
-                width: "100%",
-                height: 200,
-                borderRadius: 12,
-                backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
-              }}
-              resizeMode="cover"
-            />
-            <View
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                justifyContent: "center",
-                alignItems: "center",
-                backgroundColor: "rgba(0,0,0,0.3)",
-              }}
-            >
-              <View
-                style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: 25,
-                  backgroundColor: "rgba(255,255,255,0.9)",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Feather
-                  name="play"
-                  size={24}
-                  color="#000"
-                  style={{ marginLeft: 3 }}
-                />
-              </View>
-            </View>
-          </View>
-        )}
-
+        {/* WhatsApp-style: text + inline timestamp using nested Text */}
         {text && text.trim().length > 0 && (
           <Text
             className="text-[16px] leading-[22px]"
-            textBreakStrategy="balanced"
-            selectable={false}
-            selectionColor={accentColor}
             style={
               {
+                flexShrink: 1,
                 color: isMine ? onAccent : isDark ? "#e2e8f0" : "#0f172a",
-                marginTop: imageUrls.length > 0 || videoUrls.length > 0 ? 4 : 0,
+                marginTop: 4, // Spacing after media
               } as any
             }
           >
             {text}
+            {/* Invisible spacer to ensure minimum gap before timestamp */}
+            <Text style={{ fontSize: 10, opacity: 0 }}>
+              {"  "}{isEdited ? "edited " : ""}{timestamp ? formatTimestamp(timestamp) : ""}
+            </Text>
           </Text>
         )}
-        <View
-          className={`mt-1.5 flex-row items-center ${isMine ? "justify-end" : "justify-start"}`}
+        
+        {/* Absolute positioned timestamp - matches MessageBubble.tsx */}
+        <Text
+          style={{
+            position: "absolute",
+            bottom: 12,
+            right: 12,
+            fontSize: 10,
+            color: isMine ? onAccent : isDark ? "#94a3b8" : "#94a3b8",
+          }}
         >
           {isEdited ? (
-            <Text
-              className="mr-2 text-[11px] font-semibold"
-              style={{
-                color: isMine ? onAccent : isDark ? "#cbd5e1" : "#475569",
-              }}
-            >
-              Edited
-            </Text>
+            <Text style={{ fontStyle: "italic" }}>edited </Text>
           ) : null}
-          {timestamp ? (
-            <Text
-              className="text-[11px]"
-              style={{
-                color: isMine ? onAccent : isDark ? "#94a3b8" : "#94a3b8",
-              }}
-            >
-              {formatTimestamp(timestamp)}
-            </Text>
-          ) : null}
-        </View>
+          {timestamp ? formatTimestamp(timestamp) : ""}
+        </Text>
       </View>
     </View>
   );
@@ -405,7 +314,8 @@ function clamp(value: number, min: number, max: number): number {
 export function computeModalPositions(
   layout: { x: number; y: number; width: number; height: number },
   bottomInset: number,
-  isSender: boolean
+  isSender: boolean,
+  actualBubbleHeight?: number // Optional: actual rendered bubble height for precise gap
 ): {
   bubbleTop: number;
   actionTop: number;
@@ -416,15 +326,18 @@ export function computeModalPositions(
   const minTop = headerHeight + 20;
   const maxBottom = WINDOW.height - bottomInset - 20;
 
+  // Use actual bubble height if available, otherwise fallback to layout height
+  const effectiveHeight = actualBubbleHeight ?? layout.height;
+
   // Total space needed: bubble + fixed gap + action sheet
   const totalNeededHeight =
-    layout.height + GAP_BETWEEN_BUBBLE_AND_SHEET + ESTIMATED_ACTION_HEIGHT;
+    effectiveHeight + GAP_BETWEEN_BUBBLE_AND_SHEET + ESTIMATED_ACTION_HEIGHT;
 
   // Start with original bubble position
   let bubbleTop = layout.y;
 
   // Calculate where action sheet would end up
-  let actionTop = bubbleTop + layout.height + GAP_BETWEEN_BUBBLE_AND_SHEET;
+  let actionTop = bubbleTop + effectiveHeight + GAP_BETWEEN_BUBBLE_AND_SHEET;
   let actionBottom = actionTop + ESTIMATED_ACTION_HEIGHT;
 
   // If action sheet would go off screen, move bubble up
@@ -439,11 +352,11 @@ export function computeModalPositions(
     }
 
     // Recalculate action position with EXACT gap
-    actionTop = bubbleTop + layout.height + GAP_BETWEEN_BUBBLE_AND_SHEET;
+    actionTop = bubbleTop + effectiveHeight + GAP_BETWEEN_BUBBLE_AND_SHEET;
   } else if (bubbleTop < minTop) {
     // Bubble is too high, bring it down to minimum
     bubbleTop = minTop;
-    actionTop = bubbleTop + layout.height + GAP_BETWEEN_BUBBLE_AND_SHEET;
+    actionTop = bubbleTop + effectiveHeight + GAP_BETWEEN_BUBBLE_AND_SHEET;
   }
 
   // Calculate left position - align with the bubble content

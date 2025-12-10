@@ -61,6 +61,7 @@ export const useMessageActions = ({
   // Reanimated shared values for modal animations
   const actionSheetAnim = useSharedValue(0);
   const backdropAnim = useSharedValue(0);
+  const blurAnim = useSharedValue(0); // For blur backdrop
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropAnim.value,
@@ -90,6 +91,7 @@ export const useMessageActions = ({
 
   const animateOpenActions = useCallback(() => {
     backdropAnim.value = withTiming(1, { duration: 200 });
+    blurAnim.value = withTiming(1, { duration: 250 }); // Blur fade-in
     actionSheetAnim.value = withSpring(1, {
       damping: 15,
       stiffness: 200,
@@ -99,6 +101,7 @@ export const useMessageActions = ({
 
   const animateCloseActions = useCallback((onFinished?: () => void) => {
     backdropAnim.value = withTiming(0, { duration: 150 });
+    blurAnim.value = withTiming(0, { duration: 150 }); // Blur fade-out
     actionSheetAnim.value = withTiming(0, { duration: 150 }, (finished) => {
       if (finished && onFinished) {
         runOnJS(onFinished)();
@@ -260,6 +263,7 @@ export const useMessageActions = ({
     selectedBubbleLayout,
     setSelectedBubbleLayout,
     bubbleLayoutsRef,
+    blurAnim, // Export blur animation shared value
     backdropStyle,
     actionSheetStyle,
     bubblePreviewStyle,
