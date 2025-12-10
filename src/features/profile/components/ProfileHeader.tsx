@@ -1,11 +1,12 @@
-import React, { useMemo } from "react";
-import { View, Text, Platform } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View, Text, Platform, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
 import { LinearGradient } from "expo-linear-gradient";
 import { type FocusAccount } from "@/lib/focus/graphql";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey, getProfileImageUrl } from "@/utils/deso";
+import { ImageGalleryModal } from "@/features/messaging/components/ImageGalleryModal";
 
 const DEFAULT_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 const BANNER_BLURHASH = "LGF5]+Yk^6#M@-5c,1J5@[or[Q6.";
@@ -20,11 +21,19 @@ const getExtraString = (
 
 type Props = {
   account?: FocusAccount | null;
+  onAvatarPress?: () => void;
+  showBackButton?: boolean;
+  onBackPress?: () => void;
 };
 
-export function ProfileHeader({ account }: Props) {
+export function ProfileHeader({ account, onAvatarPress, showBackButton = false, onBackPress }: Props) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+
+  // Image gallery state
+  const [galleryVisible, setGalleryVisible] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
 
   const extraData = (account?.extraData as Record<string, unknown> | undefined) ?? undefined;
 
@@ -56,6 +65,20 @@ export function ProfileHeader({ account }: Props) {
   // Check if user is verified (placeholder - implement actual verification logic)
   const isVerified = false; // TODO: Implement verification check
 
+  const handleBannerPress = () => {
+    if (bannerUrl) {
+      setGalleryImages([bannerUrl]);
+      setGalleryInitialIndex(0);
+      setGalleryVisible(true);
+    }
+  };
+
+  const handleAvatarImagePress = () => {
+    setGalleryImages([avatarUrl]);
+    setGalleryInitialIndex(0);
+    setGalleryVisible(true);
+  };
+
   return (
     <View {...(Platform.OS === 'web' ? { accessibilityRole: 'main' as any } : {})} className="w-full">
       {/* Banner */}
@@ -64,13 +87,15 @@ export function ProfileHeader({ account }: Props) {
         style={{ height: 150 }}
       >
         {bannerUrl ? (
-          <Image
-            source={{ uri: bannerUrl }}
-            className="w-full h-full"
-            contentFit="cover"
-            placeholder={BANNER_BLURHASH}
-            transition={300}
-          />
+          <TouchableOpacity onPress={handleBannerPress} activeOpacity={0.9} className="w-full h-full">
+            <Image
+              source={{ uri: bannerUrl }}
+              className="w-full h-full"
+              contentFit="cover"
+              placeholder={BANNER_BLURHASH}
+              transition={300}
+            />
+          </TouchableOpacity>
         ) : (
           <LinearGradient
             colors={
@@ -83,12 +108,36 @@ export function ProfileHeader({ account }: Props) {
             className="w-full h-full"
           />
         )}
+        
+        {/* Back Button Overlay - Bluesky style */}
+        {showBackButton && onBackPress && (
+          <TouchableOpacity
+            onPress={onBackPress}
+            activeOpacity={0.7}
+            style={{
+              position: 'absolute',
+              top: Platform.OS === 'ios' ? 50 : 16,
+              left: 16,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="arrow-left" size={20} color="#ffffff" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Content Container with padding */}
       <View className="px-4">
         {/* Avatar - positioned to overlap banner */}
-        <View 
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleAvatarImagePress}
+          onLongPress={onAvatarPress}
           className="rounded-full -mt-12 mb-2"
           style={{
             width: 90,
@@ -105,7 +154,7 @@ export function ProfileHeader({ account }: Props) {
             placeholder={DEFAULT_BLURHASH}
             transition={300}
           />
-        </View>
+        </TouchableOpacity>
 
         {/* Name and Username */}
         <View className="mb-2">
@@ -144,7 +193,14 @@ export function ProfileHeader({ account }: Props) {
           </View>
         ) : null}
       </View>
+
+      {/* Fullscreen Image Gallery Modal */}
+      <ImageGalleryModal
+        visible={galleryVisible}
+        images={galleryImages}
+        initialIndex={galleryInitialIndex}
+        onClose={() => setGalleryVisible(false)}
+      />
     </View>
   );
 }
-

@@ -15,11 +15,14 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
   Animated,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  ScrollView,
 } from "react-native";
+import { Image } from "expo-image";
+import { UserAvatar } from "@/components/UserAvatar";
 
 import Reanimated from "react-native-reanimated";
 import { BlurView } from "expo-blur";
@@ -71,6 +74,8 @@ import {
 } from "@/alf/breakpoints";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
+
+const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
@@ -445,6 +450,13 @@ export function ConversationScreen({ navigation, route }: Props) {
   // Supabase is only used for broadcast notifications, not message storage
   const displayMessages = messages;
 
+  const handleAvatarPress = useCallback((publicKey: string, username?: string) => {
+    navigation.navigate('UserProfile', {
+      username: username || undefined,
+      publicKey: publicKey,
+    });
+  }, [navigation]);
+
   const renderItem = useCallback(
     ({
       item,
@@ -472,6 +484,7 @@ export function ConversationScreen({ navigation, route }: Props) {
           }}
           messageIdMap={messageIdMap}
           isDark={isDark}
+          onAvatarPress={handleAvatarPress}
         />
       );
     },
@@ -484,6 +497,7 @@ export function ConversationScreen({ navigation, route }: Props) {
       profiles,
       bubbleLayoutsRef,
       messages,
+      handleAvatarPress,
     ]
   );
 
@@ -589,9 +603,14 @@ export function ConversationScreen({ navigation, route }: Props) {
             onPress={() => {
               if (isGroupChat) {
                 setShowMembersModal(true);
+              } else {
+                // Navigate to DM partner's profile
+                navigation.navigate('UserProfile', {
+                  username: headerProfile?.Username || undefined,
+                  publicKey: counterPartyPublicKey,
+                });
               }
             }}
-            disabled={!isGroupChat}
             activeOpacity={0.6}
             className="flex-row items-center ml-2"
           >
@@ -619,8 +638,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                           className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""}`}
                           style={{ zIndex: 3 - index }}
                         >
-                          <Image
-                            source={{ uri }}
+                          <UserAvatar
+                            uri={uri}
+                            name={member.username || ""}
+                            size={36}
                             className="h-full w-full rounded-full"
                           />
                         </View>
@@ -628,9 +649,11 @@ export function ConversationScreen({ navigation, route }: Props) {
                     })}
               </View>
             ) : (
-              <Image
-                source={{ uri: headerAvatarUri }}
-                className="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700"
+              <UserAvatar
+                uri={headerAvatarUri}
+                name={headerDisplayName || ""}
+                size={36}
+                className="bg-slate-200 dark:bg-slate-700"
               />
             )}
           </TouchableOpacity>
@@ -1080,16 +1103,23 @@ export function ConversationScreen({ navigation, route }: Props) {
                                 : "rgba(241, 245, 249, 0.8)",
                             }}
                           >
-                            <Image
-                              source={{ uri: userImageUrl }}
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 24,
-                                backgroundColor: isDark ? "#334155" : "#e2e8f0",
+                            <TouchableOpacity
+                              onPress={() => {
+                                setShowAddMemberModal(false);
+                                navigation.navigate('UserProfile', {
+                                  username: user.username || undefined,
+                                  publicKey: user.publicKey,
+                                });
                               }}
-                              resizeMode="cover"
-                            />
+                              activeOpacity={0.7}
+                            >
+                              <UserAvatar
+                                uri={userImageUrl}
+                                name={user.username || ""}
+                                size={48}
+                                className="bg-slate-200 dark:bg-slate-700"
+                              />
+                            </TouchableOpacity>
                             <View style={{ marginLeft: 14, flex: 1 }}>
                               <Text
                                 style={{
@@ -1237,11 +1267,23 @@ export function ConversationScreen({ navigation, route }: Props) {
 
                       return (
                         <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
-                          <Image
-                            source={{ uri: memberImageUrl }}
-                            className="h-12 w-12 rounded-full bg-gray-200 dark:bg-slate-700"
-                            resizeMode="cover"
-                          />
+                            <TouchableOpacity
+                              onPress={() => {
+                                setShowMembersModal(false);
+                                navigation.navigate('UserProfile', {
+                                  username: member.username || undefined,
+                                  publicKey: member.publicKey,
+                                });
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <UserAvatar
+                                uri={memberImageUrl}
+                                name={member.username || ""}
+                                size={48}
+                                className="bg-gray-200 dark:bg-slate-700"
+                              />
+                            </TouchableOpacity>
                           <View className="ml-3 flex-1">
                             <View
                               style={{

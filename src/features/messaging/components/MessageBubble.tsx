@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useMemo } from "react";
-import { View, Text, Image, Keyboard, Platform } from "react-native";
+import { View, Text, Image, Keyboard, Platform, TouchableOpacity } from "react-native";
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -47,6 +47,7 @@ export type MessageBubbleProps = {
     ) => void;
     messageIdMap: Map<string, DecryptedMessageEntryResponse>;
     isDark: boolean;
+    onAvatarPress?: (publicKey: string, username?: string) => void;
 };
 
 export const MessageBubble = React.memo(function MessageBubble({
@@ -61,6 +62,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     onBubbleMeasure,
     messageIdMap,
     isDark,
+    onAvatarPress,
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
@@ -415,10 +417,15 @@ export const MessageBubble = React.memo(function MessageBubble({
                             {!isMine && isGroupChat ? (
                                 <View className="mr-2" style={{ width: 32 }}>
                                     {isLastInGroup && hasAvatar ? (
-                                        <Image
-                                            source={{ uri: avatarUri }}
-                                            className="h-8 w-8 rounded-full bg-gray-200"
-                                        />
+                                        <TouchableOpacity
+                                            onPress={() => onAvatarPress?.(senderPk, senderProfile?.Username)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Image
+                                                source={{ uri: avatarUri }}
+                                                className="h-8 w-8 rounded-full bg-gray-200"
+                                            />
+                                        </TouchableOpacity>
                                     ) : isLastInGroup ? (
                                         <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
                                             <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />

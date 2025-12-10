@@ -99,19 +99,6 @@ export function ProfileStats({
           </Text>
         </View>
       )}
-
-      {/* Separator */}
-      <Text className="text-base text-slate-400 dark:text-slate-600">·</Text>
-
-      {/* Posts */}
-      <View className="flex-row items-center">
-        <Text className="text-base font-semibold text-slate-900 dark:text-white">
-          {formatCount(postCount)}
-        </Text>
-        <Text className="text-base text-slate-500 dark:text-slate-400 ml-1">
-          {pluralize(postCount, "post", "posts")}
-        </Text>
-      </View>
     </View>
   );
 }

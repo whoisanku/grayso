@@ -30,6 +30,10 @@ export type RootStackParamList = {
   Conversation: ConversationRouteParams;
   Settings: undefined;
   NewChat: undefined;
+  UserProfile: {
+    username?: string;
+    publicKey?: string;
+  };
 };
 
 export type ConversationScreenRouteProp = RouteProp<

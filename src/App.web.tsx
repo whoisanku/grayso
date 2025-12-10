@@ -41,6 +41,7 @@ const linking: LinkingOptions<RootStackParamList> = {
       Conversation: 'conversation/:threadPublicKey',
       NewChat: 'new-chat',
       Login: 'login',
+      UserProfile: 'profile/:username',
     },
   },
 };

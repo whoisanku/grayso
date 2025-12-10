@@ -3,7 +3,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
   ActivityIndicator,
   RefreshControl,
   DeviceEventEmitter,
@@ -12,6 +11,7 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
+import { UserAvatar } from "@/components/UserAvatar";
 import { FlashList } from "@shopify/flash-list";
 import * as Haptics from 'expo-haptics';
 import { Feather } from "@expo/vector-icons";
@@ -73,6 +73,8 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
   MessagesTabNavigationProp,
   ComposerNavigationProp
 >;
+
+const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 // UI-only mock data
 type MockConversation = {
@@ -327,17 +329,19 @@ export function HomeScreen() {
           : `${senderName}: ${last?.DecryptedMessage || "..."}`;
 
 
-        // For group chats, check if there's a custom group image in extraData
+        // For group chats, check if there's a custom group image in RecipientInfo ExtraData
         let avatarUri: string;
         let hasGroupImage = false;
         
         if (isGroup) {
-          const groupKey = `${otherPk}-${last?.RecipientInfo?.AccessGroupKeyName}`;
-          const extraData = groupExtraData?.[groupKey];
+          // Extract group image from message ExtraData or RecipientInfo
+          const recipientExtraData = (last?.RecipientInfo as any)?.ExtraData as Record<string, any> | undefined;
+          const messageExtraData2 = last?.MessageInfo?.ExtraData as Record<string, any> | undefined;
+          const groupImageURL = recipientExtraData?.GroupImageURL || messageExtraData2?.GroupImageURL;
           
           // If there's a custom group image, use it
-          if (extraData?.groupImage) {
-            avatarUri = extraData.groupImage;
+          if (groupImageURL && typeof groupImageURL === 'string') {
+            avatarUri = groupImageURL;
             hasGroupImage = true;
           } else {
             // No group image, will show placeholder icon instead
@@ -373,7 +377,7 @@ export function HomeScreen() {
         };
       });
     },
-    [currentUser?.PublicKeyBase58Check, profiles, groupMembers, groupExtraData]
+    [currentUser?.PublicKeyBase58Check, profiles, groupMembers]
   );
 
   const inboxItems = useMemo(
@@ -1013,36 +1017,13 @@ export function HomeScreen() {
                     style={isDesktopWeb ? { borderRadius: 14 } : undefined}
                   >
                       <View className="mr-3">
-                        {item.isGroup && item.hasGroupImage && item.avatarUri ? (
-                          <Image
-                            source={{ uri: item.avatarUri }}
-                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                          />
-                        ) : item.isGroup ? (
-                          // Group chat without custom image - show placeholder icon
-                          <View
-                            className="h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800"
-                          >
-                            <UserGroupIcon width={24} height={24} stroke={isDark ? "#94a3b8" : "#64748b"} strokeWidth={2} />
-                          </View>
-                        ) : item.avatarUri ? (
-                          <Image
-                            source={{ uri: item.avatarUri }}
-                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                          />
-                        ) : (
-                          <View
-                            className="h-14 w-14 items-center justify-center rounded-full"
-                            style={{ backgroundColor: accentSoft }}
-                          >
-                            <Text
-                              className="text-xl font-bold"
-                              style={{ color: accentStrong }}
-                            >
-                              {item.name.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
+                        <UserAvatar
+                          uri={item.avatarUri}
+                          name={item.name}
+                          size={56} // 14 * 4 = 56px
+                          isGroup={item.isGroup}
+                          recyclingKey={item.id}
+                        />
                       </View>
                       <View className="flex-1 min-w-0">
                         <View className="flex-row items-center justify-between mb-1">
@@ -1244,17 +1225,11 @@ export function HomeScreen() {
                         onPress={() => handleSelectNewChatProfile(item)}
                         activeOpacity={0.7}
                       >
-                        <Image
-                          source={{
-                            uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE
-                          }}
-                          style={{
-                            width: 48,
-                
-                            height: 48,
-                            borderRadius: 24,
-                            backgroundColor: isDark ? '#334155' : '#e2e8f0',
-                          }}
+                        <UserAvatar
+                          uri={getProfileImageUrl(item.publicKey)}
+                          name={item.username || "?"}
+                          size={48}
+                          className="bg-slate-200 dark:bg-slate-700"
                         />
                         <View style={{ marginLeft: 14, flex: 1 }}>
                           <Text style={{

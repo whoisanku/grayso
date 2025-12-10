@@ -96,6 +96,198 @@ const ACCOUNT_EXTENDED_BY_PUBLIC_KEY = `
   }
 `;
 
+const ACCOUNT_FOLLOWERS_LIST = `
+  query AccountFollowersList($publicKey: String!, $first: Int, $offset: Int, $orderBy: [FollowsOrderBy!] = [NATURAL]) {
+    profile(publicKey: $publicKey) {
+      publicKey
+      account {
+        ...FollowingStats
+        publicKey
+        followers(first: $first, offset: $offset, orderBy: $orderBy) {
+          pageInfo {
+            hasNextPage
+            __typename
+          }
+          nodes {
+            followerPkid
+            followedPkid
+            follower {
+              ...CoreAccountFields
+              ...FollowingStats
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+  
+  fragment AccountModerationFields on Account {
+    isBlacklisted
+    isGreylisted: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "GREYLIST" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isNSFW: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "NSFW" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isVerifier: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "VERIFIER" }, associationValue: { equalTo: "VERIFIER" } }
+    ) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+  
+  fragment FollowingStats on Account {
+    followingCounts {
+      totalFollowing
+      totalWhaleFollowing
+      __typename
+    }
+    followerCounts {
+      totalFollowers
+      totalWhaleFollowers
+      __typename
+    }
+    __typename
+  }
+  
+  fragment CoreAccountFields on Account {
+    id
+    publicKey
+    username
+    extraData
+    description
+    pkid
+    isVerified
+    creatorBasisPoints
+    totalBalanceUsdCents
+    daoCoinMintingDisabled
+    daoCoinsInCirculationNanosHex
+    isVerified
+    subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+      totalCount
+      nodes {
+        id
+        __typename
+      }
+      __typename
+    }
+    ...AccountModerationFields
+    __typename
+  }
+`;
+
+const ACCOUNT_FOLLOWING_LIST = `
+  query AccountFollowingList($publicKey: String!, $first: Int, $offset: Int, $orderBy: [FollowsOrderBy!] = [NATURAL]) {
+    profile(publicKey: $publicKey) {
+      publicKey
+      account {
+        ...FollowingStats
+        publicKey
+        following(first: $first, offset: $offset, orderBy: $orderBy) {
+          pageInfo {
+            hasNextPage
+            __typename
+          }
+          nodes {
+            followerPkid
+            followedPkid
+            followee {
+              ...CoreAccountFields
+              ...FollowingStats
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+  
+  fragment AccountModerationFields on Account {
+    isBlacklisted
+    isGreylisted: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "GREYLIST" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isNSFW: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "NSFW" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isVerifier: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "VERIFIER" }, associationValue: { equalTo: "VERIFIER" } }
+    ) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+  
+  fragment FollowingStats on Account {
+    followingCounts {
+      totalFollowing
+      totalWhaleFollowing
+      __typename
+    }
+    followerCounts {
+      totalFollowers
+      totalWhaleFollowers
+      __typename
+    }
+    __typename
+  }
+  
+  fragment CoreAccountFields on Account {
+    id
+    publicKey
+    username
+    extraData
+    description
+    pkid
+    isVerified
+    creatorBasisPoints
+    totalBalanceUsdCents
+    daoCoinMintingDisabled
+    daoCoinsInCirculationNanosHex
+    isVerified
+    subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+      totalCount
+      nodes {
+        id
+        __typename
+      }
+      __typename
+    }
+    ...AccountModerationFields
+    __typename
+  }
+`;
+
 const INBOX_THREADS_QUERY = `
   query InboxMessageThreadsByPublicKey(
     $userPublicKey: String!
@@ -276,6 +468,48 @@ const focusAccountSchema = z.object({
     .nullish(),
 });
 
+const followPageInfoSchema = z
+  .object({
+    hasNextPage: z.boolean().nullish(),
+  })
+  .passthrough()
+  .nullish();
+
+const followNodeSchema = z
+  .object({
+    followerPkid: z.string().nullish(),
+    followedPkid: z.string().nullish(),
+    follower: focusAccountSchema.nullish(),
+    followee: focusAccountSchema.nullish(),
+  })
+  .passthrough();
+
+const followConnectionSchema = z
+  .object({
+    pageInfo: followPageInfoSchema,
+    nodes: z.array(followNodeSchema).default([]),
+  })
+  .passthrough()
+  .nullish();
+
+const followersResponseSchema = z.object({
+  data: z.object({
+    profile: z
+      .object({
+        publicKey: z.string(),
+        account: z
+          .object({
+            publicKey: z.string().optional(),
+            followers: followConnectionSchema,
+            following: followConnectionSchema,
+          })
+          .nullish(),
+      })
+      .nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
 const accountExtendedResponseSchema = z.object({
   data: z.object({
     accountByPublicKey: focusAccountSchema.nullish(),
@@ -284,6 +518,7 @@ const accountExtendedResponseSchema = z.object({
 });
 
 export type FocusAccount = z.infer<typeof focusAccountSchema>;
+export type FocusFollowEdge = z.infer<typeof followNodeSchema>;
 
 async function performGraphqlRequest(
   body: Record<string, unknown>,
@@ -363,6 +598,135 @@ export async function fetchAccountExtendedByPublicKey({
   }
 
   return parsed.data.data.accountByPublicKey ?? null;
+}
+
+type FollowListResult = {
+  accounts: FocusAccount[];
+  pageInfo: { hasNextPage?: boolean | null };
+};
+
+export async function fetchFollowersList({
+  publicKey,
+  first = 10,
+  offset = 0,
+  orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ?? DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  publicKey: string;
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  graphqlEndpoint?: string;
+}): Promise<FollowListResult> {
+  const body = {
+    operationName: "AccountFollowersList",
+    query: ACCOUNT_FOLLOWERS_LIST,
+    variables: { publicKey, first, offset, orderBy },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}`
+    );
+  }
+
+  const json = await response.json();
+  const parsed = followersResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse followers response"
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Followers query returned errors"
+    );
+  }
+
+  const nodes = parsed.data.data.profile?.account?.followers?.nodes ?? [];
+  const pageInfo = parsed.data.data.profile?.account?.followers?.pageInfo ?? {};
+
+  return {
+    accounts: nodes
+      .map((node) => node?.follower)
+      .filter((acct): acct is FocusAccount => Boolean(acct)),
+    pageInfo,
+  };
+}
+
+export async function fetchFollowingList({
+  publicKey,
+  first = 10,
+  offset = 0,
+  orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ?? DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  publicKey: string;
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  graphqlEndpoint?: string;
+}): Promise<FollowListResult> {
+  const body = {
+    operationName: "AccountFollowingList",
+    query: ACCOUNT_FOLLOWING_LIST,
+    variables: { publicKey, first, offset, orderBy },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}`
+    );
+  }
+
+  const json = await response.json();
+  const parsed = followersResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse following response"
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Following query returned errors"
+    );
+  }
+
+  const nodes = parsed.data.data.profile?.account?.following?.nodes ?? [];
+  const pageInfo = parsed.data.data.profile?.account?.following?.pageInfo ?? {};
+
+  return {
+    accounts: nodes
+      .map((node) => node?.followee)
+      .filter((acct): acct is FocusAccount => Boolean(acct)),
+    pageInfo,
+  };
 }
 
 export async function fetchInboxMessageThreads({

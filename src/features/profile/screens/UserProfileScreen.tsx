@@ -1,23 +1,32 @@
-import React, { useContext, useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Platform } from "react-native";
-import { DeSoIdentityContext } from "react-deso-protocol";
 import { useColorScheme } from "nativewind";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { RootStackParamList } from "@/navigation/types";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { ProfileHeader } from "../components/ProfileHeader";
 import { ProfileStats } from "../components/ProfileStats";
 import { useAccountProfile } from "../api/useAccountProfile";
 import { Toast } from "@/components/ui/Toast";
 import { FollowListModal } from "../components/FollowListModal";
+import { DesktopLeftNav } from "@/features/messaging/components/desktop/DesktopLeftNav";
+import { DesktopRightNav } from "@/features/messaging/components/desktop/DesktopRightNav";
+import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
 
-export function ProfileScreen() {
-  const { currentUser } = useContext(DeSoIdentityContext);
+type Props = NativeStackScreenProps<RootStackParamList, "UserProfile">;
+
+export function UserProfileScreen({ route, navigation }: Props) {
+  const { username, publicKey: routePublicKey } = route.params || {};
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { isDesktop } = useLayoutBreakpoints();
+  const isWebDesktop = Platform.OS === "web" && isDesktop;
 
   const [isModalVisible, setModalVisible] = useState(false);
   const [listTab, setListTab] = useState<"followers" | "following">("followers");
 
-  const publicKey = currentUser?.PublicKeyBase58Check;
+  // Use publicKey from route params directly
+  const publicKey = routePublicKey;
 
   const {
     data: account,
@@ -48,24 +57,70 @@ export function ProfileScreen() {
 
   const handleCloseModal = useCallback(() => setModalVisible(false), []);
 
-  if (!publicKey) {
-    return (
-      <ScreenWrapper backgroundColor={isDark ? "#0a0f1a" : "#ffffff"} edges={['top', 'left', 'right']}>
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-lg font-semibold text-slate-900 dark:text-white mb-2">You are not signed in</Text>
-          <Text className="text-base text-center text-slate-500 dark:text-slate-400">
-            Sign in to view your profile, followers, and following lists.
-          </Text>
-        </View>
-      </ScreenWrapper>
-    );
-  }
+  // Set header title to username
+  React.useEffect(() => {
+    if (account?.username) {
+      navigation.setOptions({
+        title: `@${account.username}`,
+      });
+    } else if (username) {
+      navigation.setOptions({
+        title: `@${username}`,
+      });
+    }
+  }, [account?.username, username, navigation]);
 
   return (
-    <ScreenWrapper
-      backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
-      edges={['top', 'left', 'right']}
-    >
+    <>
+      {isWebDesktop ? (
+        <View style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
+          <DesktopLeftNav />
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{
+              flex: 1,
+              width: '100%',
+              maxWidth: CENTER_CONTENT_MAX_WIDTH,
+              backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+              borderLeftWidth: 1,
+              borderRightWidth: 1,
+              borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
+            }}>
+              {renderContent()}
+            </View>
+          </View>
+          <DesktopRightNav />
+        </View>
+      ) : (
+        <ScreenWrapper
+          backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
+          edges={['top', 'left', 'right']}
+        >
+          {renderContent()}
+        </ScreenWrapper>
+      )}
+
+      <FollowListModal
+        visible={isModalVisible}
+        publicKey={publicKey}
+        initialTab={listTab}
+        onClose={handleCloseModal}
+      />
+    </>
+  );
+
+  function renderContent() {
+    if (!publicKey && !username) {
+      return (
+        <View style={{ flex: 1 }} className="items-center justify-center px-6">
+          <Text className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Profile not found</Text>
+          <Text className="text-base text-center text-slate-500 dark:text-slate-400">
+            Unable to load this profile. The username or public key may be invalid.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
       <ScrollView
         contentContainerStyle={{ paddingBottom: 32 }}
         refreshControl={
@@ -116,7 +171,12 @@ export function ProfileScreen() {
         ) : (
           <>
             {/* Profile Header (includes bio) */}
-            <ProfileHeader account={account} onAvatarPress={handleFollowersPress} />
+            <ProfileHeader 
+              account={account} 
+              onAvatarPress={handleFollowersPress}
+              showBackButton={true}
+              onBackPress={() => navigation.goBack()}
+            />
 
             {/* Stats */}
             <View className="px-4 mt-3">
@@ -137,12 +197,6 @@ export function ProfileScreen() {
           </View>
         ) : null}
       </ScrollView>
-      <FollowListModal
-        visible={isModalVisible}
-        publicKey={publicKey}
-        initialTab={listTab}
-        onClose={handleCloseModal}
-      />
-    </ScreenWrapper>
-  );
+    );
+  }
 }
