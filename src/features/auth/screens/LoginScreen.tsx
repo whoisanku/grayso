@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Platform,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { identity } from "deso-protocol";
 import ScreenWrapper from "../../../components/ScreenWrapper";
@@ -14,11 +15,40 @@ import {
   CENTER_CONTENT_MAX_WIDTH,
   useLayoutBreakpoints,
 } from "../../../alf/breakpoints";
+import { Toast } from "../../../components/ui/Toast";
 
 export function LoginScreen() {
   const { isDark } = useAccentColor();
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleLogin = async () => {
+    try {
+      setIsLoggingIn(true);
+      await identity.login();
+      // Success handled by DeSoIdentityProvider
+    } catch (error: any) {
+      console.error("[LoginScreen] Login error:", error);
+      
+      // Check if user canceled/rejected
+      if (error?.message?.includes("cancel") || error?.message?.includes("reject")) {
+        Toast.show({
+          type: "info",
+          text1: "Login cancelled",
+          text2: "You can try again anytime",
+        });
+      } else {
+        Toast.show({
+          type: "error",
+          text1: "Login failed",
+          text2: error?.message || "Please try again",
+        });
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   return (
     <ScreenWrapper
@@ -42,21 +72,27 @@ export function LoginScreen() {
           </Text>
 
           <TouchableOpacity
-            onPress={() => identity.login()}
+            onPress={handleLogin}
+            disabled={isLoggingIn}
             className="w-full rounded-full py-4"
             style={{
-              backgroundColor: "#2563eb",
+              backgroundColor: isLoggingIn ? "#94a3b8" : "#2563eb",
               shadowColor: "#1d4ed8",
               shadowOpacity: isDark ? 0.15 : 0.25,
               shadowRadius: 10,
               shadowOffset: { width: 0, height: 6 },
               elevation: 4,
+              opacity: isLoggingIn ? 0.7 : 1,
             }}
             activeOpacity={0.9}
           >
-            <Text className="text-center text-lg font-bold text-white">
-              Log in / Sign up
-            </Text>
+            {isLoggingIn ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text className="text-center text-lg font-bold text-white">
+                Log in / Sign up
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

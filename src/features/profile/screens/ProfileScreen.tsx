@@ -1,5 +1,5 @@
-import React, { useContext } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Image } from "react-native";
+import React, { useContext, useState } from "react";
+import { View, Text, TouchableOpacity, ScrollView, Image, ActivityIndicator } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
@@ -7,15 +7,40 @@ import { Feather } from "@expo/vector-icons";
 import { buildProfilePictureUrl } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../../../utils/deso";
 import { identity } from "deso-protocol";
+import { handleLogout } from "../../../lib/auth";
+import { Toast } from "../../../components/ui/Toast";
 
 export function ProfileScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const avatarUri = currentUser?.PublicKeyBase58Check
     ? buildProfilePictureUrl(currentUser.PublicKeyBase58Check)
     : FALLBACK_PROFILE_IMAGE;
+
+  const onLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await handleLogout(() => identity.logout());
+      
+      Toast.show({
+        type: "success",
+        text1: "Logged out successfully",
+        text2: "See you soon!",
+      });
+    } catch (error: any) {
+      console.error("[ProfileScreen] Logout error:", error);
+      Toast.show({
+        type: "error",
+        text1: "Logout failed",
+        text2: error?.message || "Please try again",
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <ScreenWrapper
@@ -40,13 +65,21 @@ export function ProfileScreen() {
         </View>
 
         <TouchableOpacity
-          onPress={() => identity.logout()}
+          onPress={onLogout}
+          disabled={isLoggingOut}
           className="flex-row items-center justify-center rounded-xl bg-red-50 dark:bg-red-900/20 py-3 border border-red-200 dark:border-red-900/50"
+          style={{ opacity: isLoggingOut ? 0.6 : 1 }}
         >
-          <Feather name="log-out" size={18} color={isDark ? "#fca5a5" : "#ef4444"} />
-          <Text className="ml-2 font-semibold text-red-600 dark:text-red-300">
-            Log Out
-          </Text>
+          {isLoggingOut ? (
+            <ActivityIndicator size="small" color={isDark ? "#fca5a5" : "#ef4444"} />
+          ) : (
+            <>
+              <Feather name="log-out" size={18} color={isDark ? "#fca5a5" : "#ef4444"} />
+              <Text className="ml-2 font-semibold text-red-600 dark:text-red-300">
+                Log Out
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </ScreenWrapper>

@@ -12,6 +12,7 @@ import { useColorScheme } from "nativewind";
 
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { type RootStackParamList } from "./types";
+import { Toast } from "../components/ui/Toast";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -19,6 +20,7 @@ export function RootNavigator() {
   const { currentUser, isLoading } = useContext(DeSoIdentityContext);
   const { colorScheme } = useColorScheme();
   const [showSplash, setShowSplash] = useState(true);
+  const [hasShownLoginToast, setHasShownLoginToast] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -37,6 +39,23 @@ export function RootNavigator() {
       return () => clearTimeout(timer);
     }
   }, [isLoading, showSplash, fadeAnim]);
+
+  // Show login success toast when user logs in
+  useEffect(() => {
+    if (currentUser && !isLoading && !showSplash && !hasShownLoginToast) {
+      setHasShownLoginToast(true);
+      Toast.show({
+        type: 'success',
+        text1: 'Welcome back!',
+        text2: `Logged in as @${currentUser.ProfileEntryResponse?.Username || 'user'}`,
+      });
+    }
+    
+    // Reset flag when user logs out
+    if (!currentUser) {
+      setHasShownLoginToast(false);
+    }
+  }, [currentUser, isLoading, showSplash, hasShownLoginToast]);
 
   // Show splash while checking initial auth state
   if (showSplash) {

@@ -6069,6 +6069,11 @@ react-native-sync-tasks@^0.1.1:
   resolved "https://registry.npmjs.org/react-native-sync-tasks/-/react-native-sync-tasks-0.1.1.tgz"
   integrity sha512-EtSKHduFbZnxuls9FG4+GbOcwbOV9FtM25MrkIInNjPb7vtxjwqMF87F2UsuLyFBxarRU+utU8vPsmy03MVa4w==
 
+react-native-toast-message@^2.3.3:
+  version "2.3.3"
+  resolved "https://registry.npmjs.org/react-native-toast-message/-/react-native-toast-message-2.3.3.tgz"
+  integrity sha512-4IIUHwUPvKHu4gjD0Vj2aGQzqPATiblL1ey8tOqsxOWRPGGu52iIbL8M/mCz4uyqecvPdIcMY38AfwRuUADfQQ==
+
 react-native-url-polyfill@^3.0.0:
   version "3.0.0"
   resolved "https://registry.npmjs.org/react-native-url-polyfill/-/react-native-url-polyfill-3.0.0.tgz"

@@ -1060,21 +1060,6 @@ export function HomeScreen() {
                           ) : null}
                         </View>
                         <View className="flex-row items-center">
-                          {item.isGroup ? (
-                            <View
-                              style={{
-                                width: 22,
-                                height: 22,
-                                borderRadius: 11,
-                                backgroundColor: accentSoft,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginRight: 8,
-                              }}
-                            >
-                              <UserGroupIcon width={12} height={12} stroke={accentStrong} strokeWidth={2} />
-                            </View>
-                          ) : null}
                           <Text
                             numberOfLines={1}
                             className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"

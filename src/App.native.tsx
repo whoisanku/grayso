@@ -18,6 +18,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./state/queryClient";
 import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 import { AppearanceProvider } from "./state/theme/useAppearance";
+import { AppToast } from "./components/ui/Toast";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -59,6 +60,7 @@ export default function App() {
                     <RootNavigator />
                   </NavigationContainer>
                 </KeyboardProvider>
+                <AppToast />
               </GestureHandlerRootView>
             </SafeAreaProvider>
           </DeSoIdentityProvider>

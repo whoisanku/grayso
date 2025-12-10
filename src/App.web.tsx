@@ -16,6 +16,7 @@ import { queryClient } from "./state/queryClient";
 import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 import { AppearanceProvider } from "./state/theme/useAppearance";
 import { RootStackParamList } from "./navigation/types";
+import { AppToast } from "./components/ui/Toast";
 
 // Web specific config if needed
 configure({
@@ -68,6 +69,7 @@ export default function App() {
                   >
                     <RootNavigator />
                   </NavigationContainer>
+                  <AppToast />
               </GestureHandlerRootView>
             </SafeAreaProvider>
           </DeSoIdentityProvider>
