@@ -28,6 +28,7 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
+import { Toast } from "@/components/ui/Toast";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -146,7 +147,11 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     
     // Wait for any pending uploads
     if (!allUploaded) {
-      alert("Please wait for images to finish uploading");
+      Toast.show({
+        type: 'error',
+        text1: 'Please wait',
+        text2: 'Images are still uploading',
+      });
       return;
     }
 
@@ -167,10 +172,20 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
         },
       });
 
+      Toast.show({
+        type: 'success',
+        text1: 'Post created!',
+        text2: 'Your post has been published',
+      });
+
       navigation.goBack();
     } catch (error) {
       console.error("Failed to create post:", error);
-      alert("Failed to create post. Please try again.");
+      Toast.show({
+        type: 'error',
+        text1: 'Failed to create post',
+        text2: 'Please try again',
+      });
     } finally {
       setIsPosting(false);
     }

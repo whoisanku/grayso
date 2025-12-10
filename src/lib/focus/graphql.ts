@@ -1,4 +1,100 @@
+import { z } from "zod";
+
 const DEFAULT_FOCUS_GRAPHQL_URL = "https://graphql.focus.xyz/graphql";
+
+const ACCOUNT_EXTENDED_BY_PUBLIC_KEY = `
+  query AccountExtendedByPublicKey($publicKey: String!) {
+    accountByPublicKey(publicKey: $publicKey) {
+      ...CoreAccountFields
+      description
+      profile {
+        publicKey
+        description
+        coinPriceDesoNanos
+        __typename
+      }
+      ...FollowingStats
+      subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+        totalCount
+        nodes {
+          id
+          subscriptions {
+            totalCount
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+
+  fragment AccountModerationFields on Account {
+    isBlacklisted
+    isGreylisted: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "GREYLIST" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isNSFW: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "NSFW" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isVerifier: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "VERIFIER" }, associationValue: { equalTo: "VERIFIER" } }
+    ) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+
+  fragment CoreAccountFields on Account {
+    id
+    publicKey
+    username
+    extraData
+    description
+    pkid
+    isVerified
+    creatorBasisPoints
+    totalBalanceUsdCents
+    daoCoinMintingDisabled
+    daoCoinsInCirculationNanosHex
+    isVerified
+    subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+      totalCount
+      nodes {
+        id
+        __typename
+      }
+      __typename
+    }
+    ...AccountModerationFields
+    __typename
+  }
+
+  fragment FollowingStats on Account {
+    followingCounts {
+      totalFollowing
+      totalWhaleFollowing
+      __typename
+    }
+    followerCounts {
+      totalFollowers
+      totalWhaleFollowers
+      __typename
+    }
+    __typename
+  }
+`;
 
 const INBOX_THREADS_QUERY = `
   query InboxMessageThreadsByPublicKey(
@@ -137,6 +233,58 @@ type FocusInboxResponse = {
   errors?: Array<{ message?: string }> | null;
 };
 
+const numberLike = z.union([z.number(), z.string()]).transform((value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+});
+
+const focusAccountSchema = z.object({
+  id: z.string(),
+  publicKey: z.string(),
+  username: z.string().nullish(),
+  description: z.string().nullish(),
+  extraData: z.record(z.any()).nullish(),
+  pkid: z.string().nullish(),
+  isVerified: z.boolean().nullish(),
+  creatorBasisPoints: z.string().nullish(),
+  totalBalanceUsdCents: numberLike.nullish(),
+  daoCoinMintingDisabled: z.boolean().nullish(),
+  daoCoinsInCirculationNanosHex: z.string().nullish(),
+  subscriptionTiers: z
+    .object({
+      totalCount: numberLike,
+    })
+    .nullish(),
+  profile: z
+    .object({
+      publicKey: z.string(),
+      description: z.string().nullish(),
+      coinPriceDesoNanos: z.string().nullish(),
+    })
+    .nullish(),
+  followingCounts: z
+    .object({
+      totalFollowing: numberLike,
+      totalWhaleFollowing: numberLike.nullish(),
+    })
+    .nullish(),
+  followerCounts: z
+    .object({
+      totalFollowers: numberLike,
+      totalWhaleFollowers: numberLike.nullish(),
+    })
+    .nullish(),
+});
+
+const accountExtendedResponseSchema = z.object({
+  data: z.object({
+    accountByPublicKey: focusAccountSchema.nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
+export type FocusAccount = z.infer<typeof focusAccountSchema>;
+
 async function performGraphqlRequest(
   body: Record<string, unknown>,
   graphqlEndpoint: string
@@ -166,6 +314,55 @@ async function performGraphqlRequest(
     method: "GET",
     headers: { Accept: "application/json" },
   });
+}
+
+export async function fetchAccountExtendedByPublicKey({
+  publicKey,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  publicKey: string;
+  graphqlEndpoint?: string;
+}): Promise<FocusAccount | null> {
+  const body = {
+    operationName: "AccountExtendedByPublicKey",
+    query: ACCOUNT_EXTENDED_BY_PUBLIC_KEY,
+    variables: { publicKey },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120
+      )}`
+    );
+  }
+
+  const json = await response.json();
+
+  const parsed = accountExtendedResponseSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse profile response"
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Profile query returned errors"
+    );
+  }
+
+  return parsed.data.data.accountByPublicKey ?? null;
 }
 
 export async function fetchInboxMessageThreads({
