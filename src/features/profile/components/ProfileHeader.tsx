@@ -5,7 +5,11 @@ import { Feather } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
 import { LinearGradient } from "expo-linear-gradient";
 import { type FocusAccount } from "@/lib/focus/graphql";
-import { FALLBACK_PROFILE_IMAGE, formatPublicKey, getProfileImageUrl } from "@/utils/deso";
+import {
+  FALLBACK_PROFILE_IMAGE,
+  formatPublicKey,
+  getProfileImageUrl,
+} from "@/utils/deso";
 import { ImageGalleryModal } from "@/features/messaging/components/ImageGalleryModal";
 
 const DEFAULT_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
@@ -26,7 +30,12 @@ type Props = {
   onBackPress?: () => void;
 };
 
-export function ProfileHeader({ account, onAvatarPress, showBackButton = false, onBackPress }: Props) {
+export function ProfileHeader({
+  account,
+  onAvatarPress,
+  showBackButton = false,
+  onBackPress,
+}: Props) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
@@ -35,14 +44,21 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [hasAvatarError, setHasAvatarError] = useState(false);
+  const [hasBannerError, setHasBannerError] = useState(false);
+  const [isAvatarLoading, setIsAvatarLoading] = useState(true);
+  const [isBannerLoading, setIsBannerLoading] = useState(true);
+  const [isBannerLoaded, setIsBannerLoaded] = useState(false);
 
-  const extraData = (account?.extraData as Record<string, unknown> | undefined) ?? undefined;
+  const extraData =
+    (account?.extraData as Record<string, unknown> | undefined) ?? undefined;
 
   const avatarUrl = useMemo(() => {
     return (
       getExtraString(extraData, "LargeProfilePicURL") ||
       getExtraString(extraData, "NFTProfilePictureUrl") ||
-      (account?.publicKey ? getProfileImageUrl(account.publicKey) : FALLBACK_PROFILE_IMAGE)
+      (account?.publicKey
+        ? getProfileImageUrl(account.publicKey)
+        : FALLBACK_PROFILE_IMAGE)
     );
   }, [account?.publicKey, extraData]);
 
@@ -54,6 +70,12 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
   const bannerUrl = useMemo(() => {
     return getExtraString(extraData, "FeaturedImageURL") || undefined;
   }, [extraData]);
+
+  useEffect(() => {
+    setHasBannerError(false);
+    setIsBannerLoading(true);
+    setIsBannerLoaded(false);
+  }, [bannerUrl]);
 
   const displayName =
     getExtraString(extraData, "DisplayName") ||
@@ -86,50 +108,85 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
   };
 
   return (
-    <View {...(Platform.OS === 'web' ? { accessibilityRole: 'main' as any } : {})} className="w-full">
+    <View
+      {...(Platform.OS === "web" ? { accessibilityRole: "main" as any } : {})}
+      className="w-full"
+    >
       {/* Banner */}
-      <View 
-        className="w-full relative overflow-hidden"
-        style={{ height: 150 }}
-      >
-        {bannerUrl ? (
-          <TouchableOpacity onPress={handleBannerPress} activeOpacity={0.9} className="w-full h-full">
+      <View className="w-full relative overflow-hidden" style={{ height: 150 }}>
+        {bannerUrl && !hasBannerError ? (
+          <TouchableOpacity
+            onPress={handleBannerPress}
+            activeOpacity={0.9}
+            className="w-full h-full"
+          >
             <Image
               source={{ uri: bannerUrl }}
               className="w-full h-full"
               contentFit="cover"
               placeholder={BANNER_BLURHASH}
               transition={300}
+              cachePolicy="memory-disk"
+              recyclingKey={bannerUrl}
+              style={[
+                {
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  left: 0,
+                },
+                Platform.OS === "web"
+                  ? { display: isBannerLoaded ? "flex" : "none" }
+                  : { opacity: isBannerLoaded ? 1 : 0 },
+              ]}
+              onLoadStart={() => {
+                setIsBannerLoading(true);
+                setIsBannerLoaded(false);
+              }}
+              onLoad={() => setIsBannerLoaded(true)}
+              onLoadEnd={() => setIsBannerLoading(false)}
+              onError={() => {
+                setHasBannerError(true);
+                setIsBannerLoading(false);
+                setIsBannerLoaded(false);
+              }}
             />
+            {isBannerLoading && (
+              <LinearGradient
+                colors={
+                  isDark ? ["#1e293b", "#0f172a"] : ["#e2e8f0", "#cbd5e1"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                className="absolute inset-0"
+              />
+            )}
           </TouchableOpacity>
         ) : (
           <LinearGradient
-            colors={
-              isDark
-                ? ["#1e293b", "#0f172a"]
-                : ["#e2e8f0", "#cbd5e1"]
-            }
+            colors={isDark ? ["#1e293b", "#0f172a"] : ["#e2e8f0", "#cbd5e1"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             className="w-full h-full"
           />
         )}
-        
+
         {/* Back Button Overlay - Bluesky style */}
         {showBackButton && onBackPress && (
           <TouchableOpacity
             onPress={onBackPress}
             activeOpacity={0.7}
             style={{
-              position: 'absolute',
-              top: Platform.OS === 'ios' ? 50 : 16,
+              position: "absolute",
+              top: Platform.OS === "ios" ? 50 : 16,
               left: 16,
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              alignItems: 'center',
-              justifyContent: 'center',
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <Feather name="arrow-left" size={20} color="#ffffff" />
@@ -160,26 +217,32 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
               contentFit="cover"
               placeholder={DEFAULT_BLURHASH}
               transition={300}
-              onError={() => setHasAvatarError(true)}
+              cachePolicy="memory-disk"
+              recyclingKey={avatarUrl}
+              onLoadStart={() => setIsAvatarLoading(true)}
+              onLoadEnd={() => setIsAvatarLoading(false)}
+              onError={() => {
+                setHasAvatarError(true);
+                setIsAvatarLoading(false);
+              }}
             />
           ) : (
-            <View
-              className="w-full h-full items-center justify-center bg-slate-200 dark:bg-slate-800"
-            >
-              <Text
-                className="text-4xl font-bold text-slate-500 dark:text-slate-400"
-              >
+            <View className="w-full h-full items-center justify-center bg-slate-200 dark:bg-slate-800">
+              <Text className="text-4xl font-bold text-slate-500 dark:text-slate-400">
                 {(displayName || "?").charAt(0).toUpperCase()}
               </Text>
             </View>
+          )}
+          {isAvatarLoading && (
+            <View className="absolute inset-0 rounded-full bg-slate-200 dark:bg-slate-800" />
           )}
         </TouchableOpacity>
 
         {/* Name and Username */}
         <View className="mb-2">
           <View className="flex-row items-center gap-2 mb-0.5">
-            <Text 
-              className="text-2xl font-bold text-slate-900 dark:text-white" 
+            <Text
+              className="text-2xl font-bold text-slate-900 dark:text-white"
               numberOfLines={1}
             >
               {displayName}
@@ -195,9 +258,12 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
               </View>
             )}
           </View>
-          
+
           {username ? (
-            <Text className="text-base text-slate-500 dark:text-slate-400" numberOfLines={1}>
+            <Text
+              className="text-base text-slate-500 dark:text-slate-400"
+              numberOfLines={1}
+            >
               @{username}
             </Text>
           ) : null}
