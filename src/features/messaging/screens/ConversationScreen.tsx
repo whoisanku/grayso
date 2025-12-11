@@ -1116,7 +1116,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                   // Add Member Header
                   <View 
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
-                    style={{ paddingTop: insets.top + 16, paddingBottom: 16 }}
+                    style={{ 
+                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16), 
+                      paddingBottom: 16 
+                    }}
                   >
                     <TouchableOpacity
                       onPress={() => setShowAddMemberModal(false)}
@@ -1138,7 +1141,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                   // Group Members Header
                   <View 
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
-                    style={{ paddingTop: insets.top + 16, paddingBottom: 16 }}
+                    style={{ 
+                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16), 
+                      paddingBottom: 16 
+                    }}
                   >
                     <Text className="text-xl font-bold text-[#111] dark:text-white">
                       Group Members
@@ -1550,7 +1556,7 @@ export function ConversationScreen({ navigation, route }: Props) {
             }
 
             return (
-              <View style={{ flex: 1, backgroundColor: Platform.OS === "web" ? (isDark ? "rgba(10, 15, 26, 0.85)" : "rgba(255, 255, 255, 0.85)") : "transparent" }}>
+              <View style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
                 <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
                   {membersModalContent}
                 </SafeAreaView>
