@@ -1098,8 +1098,8 @@ export function ConversationScreen({ navigation, route }: Props) {
         <Modal
           visible={showMembersModal}
           animationType={isWebDesktop ? "fade" : "slide"}
-          presentationStyle={isWebDesktop ? "overFullScreen" : "pageSheet"}
-          transparent={isWebDesktop}
+          presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
+          transparent={Platform.OS === "web"}
           onRequestClose={() => {
             if (showAddMemberModal) {
               setShowAddMemberModal(false);
@@ -1550,9 +1550,11 @@ export function ConversationScreen({ navigation, route }: Props) {
             }
 
             return (
-              <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-                {membersModalContent}
-              </SafeAreaView>
+              <View style={{ flex: 1, backgroundColor: Platform.OS === "web" ? (isDark ? "rgba(10, 15, 26, 0.85)" : "rgba(255, 255, 255, 0.85)") : "transparent" }}>
+                <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+                  {membersModalContent}
+                </SafeAreaView>
+              </View>
             );
           })()}
         </Modal>
