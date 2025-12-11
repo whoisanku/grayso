@@ -51,9 +51,10 @@ import { useAccentColor } from "../../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "../../alf/breakpoints";
-import { SwipeableChatItem } from "../components/SwipeableChatItem";
+import { ConversationListItem } from "../components/ConversationListItem";
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "../../services/spam";
+import { MockConversation } from "../types";
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -70,27 +71,6 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
   MessagesTabNavigationProp,
   ComposerNavigationProp
 >;
-
-// UI-only mock data
-type MockConversation = {
-  id: string;
-  name: string;
-  preview: string;
-  time: string;
-  avatarUri?: string | null;
-  isGroup: boolean;
-  stackedAvatarUris?: string[];
-  chatType: ChatType;
-  threadPublicKey: string;
-  threadIdentifier?: string;
-  threadAccessGroupKeyName?: string;
-  userAccessGroupKeyName?: string;
-  partyGroupOwnerPublicKeyBase58Check?: string;
-  lastTimestampNanos?: number;
-  recipientInfo?: any; // Using any for now to match the data structure
-  isLoadingMembers?: boolean;
-  hasGroupImage?: boolean;
-};
 
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 const formatTimestamp = (timestampMs: number) => {
@@ -600,6 +580,65 @@ export default function HomeScreen() {
     [currentUser?.PublicKeyBase58Check, reload]
   );
 
+  const checkIsSwiping = useCallback((id: string) => {
+    return !!isSwipingRef.current[id];
+  }, []);
+
+  const handleSwipeBegin = useCallback((id: string) => {
+    isSwipingRef.current[id] = true;
+  }, []);
+
+  const handleSwipeEnd = useCallback((id: string) => {
+    // Small delay to ensure swipe action completes before allowing clicks
+    setTimeout(() => {
+      isSwipingRef.current[id] = false;
+    }, 50);
+  }, []);
+
+  const handleLongPress = useCallback((item: MockConversation) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setSelectedItem(item);
+    setShowActionModal(true);
+  }, []);
+
+  const handleSwipeAction = useCallback((item: MockConversation) => {
+    handleMoveSpam(item, activeMailbox === 'inbox');
+  }, [handleMoveSpam, activeMailbox]);
+
+  const renderItem = useCallback(({ item }: { item: MockConversation }) => (
+    <ConversationListItem
+      item={item}
+      isLoading={loadingItems.has(item.id)}
+      activeMailbox={activeMailbox}
+      accentColor={accentColor}
+      accentSoft={accentSoft}
+      accentStrong={accentStrong}
+      isDark={isDark}
+      isDesktopWeb={isDesktopWeb || false}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      onSwipeAction={handleSwipeAction}
+      onSwipeBegin={handleSwipeBegin}
+      onSwipeEnd={handleSwipeEnd}
+      checkIsSwiping={checkIsSwiping}
+    />
+  ), [
+    activeMailbox,
+    accentColor,
+    accentSoft,
+    accentStrong,
+    isDark,
+    isDesktopWeb,
+    loadingItems,
+    handlePress,
+    handleLongPress,
+    handleSwipeAction,
+    handleSwipeBegin,
+    handleSwipeEnd,
+    checkIsSwiping
+  ]);
 
 
   if (isLoading && items.length === 0) {
@@ -894,142 +933,7 @@ export default function HomeScreen() {
                   colors={[accentColor]}
                 />
               }
-              renderItem={({ item }) => (
-                <SwipeableChatItem
-                  onSwipeAction={() => handleMoveSpam(item, activeMailbox === 'inbox')}
-                  isLoading={loadingItems.has(item.id)}
-                  actionType={activeMailbox === 'inbox' ? 'spam' : 'inbox'}
-                  accentColor={accentColor}
-                  isDark={isDark}
-                  onSwipeBegin={() => {
-                    isSwipingRef.current[item.id] = true;
-                  }}
-                  onSwipeEnd={() => {
-                    // Small delay to ensure swipe action completes before allowing clicks
-                    setTimeout(() => {
-                      isSwipingRef.current[item.id] = false;
-                    }, 50);
-                  }}
-                >
-                  <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
-                    <TouchableOpacity
-                      className="flex-1 flex-row items-center"
-                      activeOpacity={0.7}
-                      onPress={() => {
-                        console.log('[HomeScreen] TouchableOpacity onPress, item:', item.id, 'isSwiping:', isSwipingRef.current[item.id]);
-                        // Prevent opening chat if currently swiping (important for desktop)
-                        if (!isSwipingRef.current[item.id]) {
-                          handlePress(item);
-                        } else {
-                          console.log('[HomeScreen] Blocked - swipe in progress');
-                        }
-                      }}
-                      onLongPress={() => {
-                        if (Platform.OS !== 'web') {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        }
-                        setSelectedItem(item);
-                        setShowActionModal(true);
-                      }}
-                      style={isDesktopWeb ? { borderRadius: 14 } : undefined}
-                    >
-                      <View className="mr-3">
-                        {item.isGroup && item.hasGroupImage && item.avatarUri ? (
-                          <Image
-                            source={{ uri: item.avatarUri }}
-                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                          />
-                        ) : item.isGroup && item.stackedAvatarUris && item.stackedAvatarUris.length > 0 ? (
-                          <View className="h-14 w-14 relative">
-                            {item.stackedAvatarUris.map((uri, index) => (
-                              <Image
-                                key={index}
-                                source={{ uri }}
-                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                                style={{
-                                  top: index === 0 ? 0 : index === 1 ? 14 : 4,
-                                  left: index === 0 ? 0 : index === 1 ? 14 : 24,
-                                  zIndex: 3 - index,
-                                }}
-                              />
-                            ))}
-                          </View>
-                        ) : item.isGroup && item.isLoadingMembers ? (
-                          <View className="h-14 w-14 relative">
-                            {[0, 1, 2].map((i) => (
-                              <View
-                                key={`placeholder-${i}`}
-                                className="absolute h-10 w-10 rounded-full border-2 border-white bg-gray-200 dark:border-slate-800 dark:bg-slate-700"
-                                style={{
-                                  top: i === 0 ? 0 : i === 1 ? 14 : 4,
-                                  left: i === 0 ? 0 : i === 1 ? 14 : 24,
-                                  zIndex: 3 - i,
-                                }}
-                              />
-                            ))}
-                          </View>
-                        ) : item.avatarUri ? (
-                          <Image
-                            source={{ uri: item.avatarUri }}
-                            className="h-14 w-14 rounded-full bg-gray-200 dark:bg-slate-700"
-                          />
-                        ) : (
-                          <View
-                            className="h-14 w-14 items-center justify-center rounded-full"
-                            style={{ backgroundColor: accentSoft }}
-                          >
-                            <Text
-                              className="text-xl font-bold"
-                              style={{ color: accentStrong }}
-                            >
-                              {item.name.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <View className="flex-1 min-w-0">
-                        <View className="flex-row items-center justify-between mb-1">
-                          <Text
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                            className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
-                          >
-                            {item.name}
-                          </Text>
-                          {item.time ? (
-                            <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
-                              {item.time}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <View className="flex-row items-center">
-                          {item.isGroup ? (
-                            <View
-                              style={{
-                                width: 22,
-                                height: 22,
-                                borderRadius: 11,
-                                backgroundColor: accentSoft,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginRight: 8,
-                              }}
-                            >
-                              <Feather name="users" size={12} color={accentStrong} />
-                            </View>
-                          ) : null}
-                          <Text
-                            numberOfLines={1}
-                            className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
-                          >
-                            {item.preview}
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                </SwipeableChatItem>
-              )}
+              renderItem={renderItem}
               ListEmptyComponent={() => (
                 <View className="items-center rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 dark:border-slate-700 dark:bg-slate-900">
                   <Feather name="inbox" size={40} color={isDark ? "#64748b" : "#9ca3af"} />

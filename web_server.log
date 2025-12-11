@@ -1,0 +1,38 @@
+yarn run v1.22.22
+$ npx expo start --web
+npm warn Unknown env config "version-commit-hooks". This will stop working in the next major version of npm.
+npm warn Unknown env config "version-tag-prefix". This will stop working in the next major version of npm.
+npm warn Unknown env config "version-git-message". This will stop working in the next major version of npm.
+npm warn Unknown env config "argv". This will stop working in the next major version of npm.
+npm warn Unknown env config "version-git-tag". This will stop working in the next major version of npm.
+Starting project at /app
+Starting Metro Bundler
+The following packages should be updated for best compatibility with the installed expo version:
+  @expo/ui@0.2.0-beta.7 - expected version: ~0.2.0-beta.9
+  @shopify/flash-list@2.2.0 - expected version: 2.0.2
+  expo@54.0.25 - expected version: ~54.0.27
+  expo-auth-session@7.0.9 - expected version: ~7.0.10
+  expo-blur@15.0.7 - expected version: ~15.0.8
+  expo-clipboard@8.0.7 - expected version: ~8.0.8
+  expo-crypto@15.0.7 - expected version: ~15.0.8
+  expo-haptics@15.0.7 - expected version: ~15.0.8
+  expo-image-picker@17.0.8 - expected version: ~17.0.9
+  expo-status-bar@3.0.8 - expected version: ~3.0.9
+  expo-web-browser@15.0.9 - expected version: ~15.0.10
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web ./index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Web ./index.tsx ▓▓░░░░░░░░░░░░░░ 12.7% ( 89/250)
+ WARN  Attempted to import the module "/app/node_modules/@noble/hashes/crypto.js" which is not listed in the "exports" of "/app/node_modules/@noble/hashes" under the requested subpath "./crypto.js". Falling back to file-based resolution. Consider updating the call site or asking the package maintainer(s) to expose this API.
+Web ./index.tsx ▓▓▓▓░░░░░░░░░░░░ 30.8% (312/584)
+Web ./index.tsx ▓▓▓▓▓▓▓░░░░░░░░░ 47.0% (617/931)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 76.0% (1021/1171)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 81.9% (1342/1571)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.9% (1672/1735)
+Web Bundled 22266ms index.tsx (1778 modules)
+ LOG  [web] Logs will appear in the browser console
+Done in 132.45s.
