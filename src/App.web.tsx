@@ -1,7 +1,12 @@
 import CryptoPolyfill from "./components/CryptoPolyfill";
 import "react-native-gesture-handler";
-import React, { useEffect } from "react";
-import { NavigationContainer, DarkTheme, DefaultTheme, LinkingOptions } from "@react-navigation/native";
+import React from "react";
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+  LinkingOptions,
+} from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { StatusBar } from "expo-status-bar";
@@ -27,32 +32,27 @@ configure({
 
 // Web URL linking configuration - allows navigation via URLs like /profile, /settings
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: [window.location.origin, 'grayso://'],
+  prefixes: [window.location.origin, "grayso://"],
   config: {
     screens: {
       Main: {
         screens: {
-          Messages: '',
-          Profile: 'profile',
+          Messages: "",
+          Profile: "profile",
         },
       },
-      Settings: 'settings',
-      Composer: 'compose',
-      Conversation: 'conversation/:threadPublicKey',
-      NewChat: 'new-chat',
-      Login: 'login',
-      UserProfile: 'profile/:username',
+      Settings: "settings",
+      Composer: "compose",
+      Conversation: "conversation/:threadPublicKey",
+      NewChat: "new-chat",
+      Login: "login",
+      UserProfile: "profile/:username",
     },
   },
 };
 
 export default function App() {
   const { colorScheme } = useColorScheme();
-
-  // Set document title
-  useEffect(() => {
-    document.title = "Grayso";
-  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -62,15 +62,15 @@ export default function App() {
             <CryptoPolyfill />
             <SafeAreaProvider>
               <GestureHandlerRootView style={{ flex: 1 }}>
-                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-                  <NavigationContainer
-                    linking={linking}
-                    theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                    documentTitle={{ formatter: () => "Grayso" }}
-                  >
-                    <RootNavigator />
-                  </NavigationContainer>
-                  <AppToast />
+                <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                <NavigationContainer
+                  linking={linking}
+                  theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                  documentTitle={{ formatter: () => "Grayso" }}
+                >
+                  <RootNavigator />
+                </NavigationContainer>
+                <AppToast />
               </GestureHandlerRootView>
             </SafeAreaProvider>
           </DeSoIdentityProvider>
@@ -79,4 +79,3 @@ export default function App() {
     </QueryClientProvider>
   );
 }
-

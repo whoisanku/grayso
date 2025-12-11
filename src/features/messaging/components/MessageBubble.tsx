@@ -12,6 +12,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { DecryptedMessageEntryResponse, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { getProfileDisplayName, getProfileImageUrl, FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
@@ -102,7 +103,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     const messageText =
         (isEditedMessage && editedMessageText ? editedMessageText : baseMessageText) ||
         baseMessageText;
-    const rawMessageText = messageText?.trim();
+    const normalizedMessageText = messageText?.trim();
     const timestamp = item.MessageInfo?.TimestampNanos;
 
     const senderProfile = profiles[senderPk];
@@ -119,6 +120,8 @@ export const MessageBubble = React.memo(function MessageBubble({
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
 
     const hasMedia = Boolean(decryptedImageURLs || decryptedVideoURLs);
+    const isMediaOnly = hasMedia && (!normalizedMessageText || normalizedMessageText.length === 0);
+
 
     // Reply logic
     const repliedToMessageId = item.MessageInfo?.ExtraData?.RepliedToMessageId;
@@ -438,8 +441,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 style={[
                                     bubbleExtraStyle,
                                     { 
-                                        paddingHorizontal: 16,
-                                        paddingVertical: 12,
+                                        paddingHorizontal: isMediaOnly ? 0 : 16,
+                                        paddingVertical: isMediaOnly ? 0 : 12,
                                         maxWidth: Platform.OS === 'web' ? 320 : '80%',
                                         overflow: 'hidden',
                                         backgroundColor: isMine 
@@ -472,43 +475,81 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     />
                                 </View>
                                 {/* WhatsApp-style: text + inline timestamp using nested Text */}
-                                <Text
-                                    className="text-base leading-[22px]"
-                                    style={{ 
-                                        flexShrink: 1, 
-                                        color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
-                                        marginTop: 4, // Spacing between full-bleed media and text
-                                    }}
-                                >
-                                    {messageText}
-                                    {/* Invisible spacer to ensure minimum gap before timestamp */}
-                                    <Text style={{ fontSize: 10, opacity: 0 }}>
-                                        {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                {(!isMediaOnly) && (
+                                    <Text
+                                        className="text-base leading-[22px]"
+                                        style={{ 
+                                            flexShrink: 1, 
+                                            color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
+                                            marginTop: hasMedia ? 4 : 0, 
+                                            paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
+                                            marginBottom: isMediaOnly ? 12 : 0,
+                                        }}
+                                    >
+                                        {messageText}
+                                        {/* Invisible spacer to ensure minimum gap before timestamp */}
+                                        <Text style={{ fontSize: 10, opacity: 0 }}>
+                                            {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                        </Text>
                                     </Text>
-                                </Text>
+                                )}
+                                
                                 {/* Actual timestamp overlaid at bottom-right */}
-                                <Text
-                                    style={{
-                                        position: 'absolute',
-                                        bottom: 12,
-                                        right: 12,
-                                        fontSize: 10,
-                                        color: hasError
-                                            ? "#ef4444"
-                                            : isMine
-                                                ? onAccent
-                                                : (isDark ? "#94a3b8" : "#94a3b8"),
-                                    }}
-                                >
-                                    {hasError ? "Failed" : (
-                                        <>
-                                            {isEditedMessage ? (
-                                                <Text style={{ fontStyle: "italic" }}>edited </Text>
-                                            ) : null}
-                                            {timestamp ? formatTimestamp(timestamp) : ""}
-                                        </>
-                                    )}
-                                </Text>
+                                {isMediaOnly ? (
+                                    // Media Only: Overlay with gradient
+                                    <View style={{ position: 'absolute', bottom: 0, right: 0, left: 0, height: 40, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+                                        <LinearGradient
+                                            colors={['transparent', 'rgba(0,0,0,0.6)']}
+                                            style={{ position: 'absolute', inset: 0 }}
+                                            pointerEvents="none"
+                                        />
+                                        <Text
+                                            style={{
+                                                fontSize: 10,
+                                                color: "#ffffff",
+                                                fontWeight: '500',
+                                                marginRight: 12,
+                                                marginBottom: 8,
+                                                textShadowColor: 'rgba(0,0,0,0.5)',
+                                                textShadowOffset: { width: 0, height: 1 },
+                                                textShadowRadius: 2,
+                                            }}
+                                        >
+                                            {hasError ? "Failed" : (
+                                                <>
+                                                    {isEditedMessage ? (
+                                                        <Text style={{ fontStyle: "italic" }}>edited </Text>
+                                                    ) : null}
+                                                    {timestamp ? formatTimestamp(timestamp) : ""}
+                                                </>
+                                            )}
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    // Normal Text: Standard position
+                                    <Text
+                                        style={{
+                                            position: 'absolute',
+                                            bottom: 12,
+                                            right: 12,
+                                            fontSize: 10,
+                                            color: hasError
+                                                ? "#ef4444"
+                                                : isMine
+                                                    ? onAccent
+                                                    : (isDark ? "#94a3b8" : "#94a3b8"),
+                                        }}
+                                    >
+                                        {hasError ? "Failed" : (
+                                            <>
+                                                {isEditedMessage ? (
+                                                    <Text style={{ fontStyle: "italic" }}>edited </Text>
+                                                ) : null}
+                                                {timestamp ? formatTimestamp(timestamp) : ""}
+                                            </>
+                                        )}
+                                    </Text>
+                                )}
                             </Reanimated.View>
                         </View>
                     </GestureDetector>

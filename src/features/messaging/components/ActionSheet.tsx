@@ -47,7 +47,9 @@ export function ActionSheetCard({
           color={isDark ? "#e2e8f0" : "#0f172a"}
         />
         <Text
-          className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}
+          className={`ml-3 text-base ${
+            isDark ? "text-slate-100" : "text-slate-900"
+          }`}
         >
           Reply
         </Text>
@@ -63,7 +65,9 @@ export function ActionSheetCard({
             color={isDark ? "#e2e8f0" : "#0f172a"}
           />
           <Text
-            className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}
+            className={`ml-3 text-base ${
+              isDark ? "text-slate-100" : "text-slate-900"
+            }`}
           >
             Edit message
           </Text>
@@ -75,7 +79,9 @@ export function ActionSheetCard({
       >
         <Feather name="copy" size={18} color={isDark ? "#e2e8f0" : "#0f172a"} />
         <Text
-          className={`ml-3 text-base ${isDark ? "text-slate-100" : "text-slate-900"}`}
+          className={`ml-3 text-base ${
+            isDark ? "text-slate-100" : "text-slate-900"
+          }`}
         >
           Copy
         </Text>
@@ -197,8 +203,8 @@ export function SelectedBubblePreview({
             color: isMine
               ? "rgba(255, 255, 255, 0.8)"
               : isDark
-                ? "#94a3b8"
-                : "#4b5563",
+              ? "#94a3b8"
+              : "#4b5563",
           }}
           numberOfLines={2}
         >
@@ -226,13 +232,13 @@ export function SelectedBubblePreview({
           borderColor: isMine
             ? "transparent"
             : isDark
-              ? "rgba(255,255,255,0.08)"
-              : "rgba(0,0,0,0.06)",
+            ? "rgba(255,255,255,0.08)"
+            : "rgba(0,0,0,0.06)",
           backgroundColor: isMine
             ? accentColor
             : isDark
-              ? "#1e2738"
-              : "#f8fafc",
+            ? "#1e2738"
+            : "#f8fafc",
           shadowColor: "#000",
           shadowOpacity: isDark ? 0.4 : 0.15,
           shadowRadius: 20,
@@ -245,15 +251,25 @@ export function SelectedBubblePreview({
         {renderReplyPreview()}
 
         {/* Render media using same components as MessageBubble */}
-        <View style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}>
+        <View
+          style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}
+        >
           <FileAndMessageBubble
-            decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
+            decryptedImageURLs={
+              typeof decryptedImageURLs === "string"
+                ? decryptedImageURLs
+                : undefined
+            }
             extraData={extra}
             isDark={isDark}
             onImagePress={() => {}} // No-op in preview
           />
           <VideoMessageBubble
-            decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
+            decryptedVideoURLs={
+              typeof decryptedVideoURLs === "string"
+                ? decryptedVideoURLs
+                : undefined
+            }
             extraData={extra}
             isDark={isDark}
           />
@@ -274,11 +290,13 @@ export function SelectedBubblePreview({
             {text}
             {/* Invisible spacer to ensure minimum gap before timestamp */}
             <Text style={{ fontSize: 10, opacity: 0 }}>
-              {"  "}{isEdited ? "edited " : ""}{timestamp ? formatTimestamp(timestamp) : ""}
+              {"  "}
+              {isEdited ? "edited " : ""}
+              {timestamp ? formatTimestamp(timestamp) : ""}
             </Text>
           </Text>
         )}
-        
+
         {/* Absolute positioned timestamp - matches MessageBubble.tsx */}
         <Text
           style={{

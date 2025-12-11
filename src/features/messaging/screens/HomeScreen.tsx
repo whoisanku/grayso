@@ -1,4 +1,10 @@
-import React, { useContext, useMemo, useCallback, useEffect, useState } from "react";
+import React, {
+  useContext,
+  useMemo,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import {
   Text,
   TouchableOpacity,
@@ -13,12 +19,14 @@ import {
 } from "react-native";
 import { UserAvatar } from "@/components/UserAvatar";
 import { FlashList } from "@shopify/flash-list";
-import * as Haptics from 'expo-haptics';
+import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
+import { MenuProvider } from "react-native-popup-menu";
 import {
-  MenuProvider,
-} from "react-native-popup-menu";
-import { ChatType, buildProfilePictureUrl, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
+  ChatType,
+  buildProfilePictureUrl,
+  PublicKeyToProfileEntryResponseMap,
+} from "deso-protocol";
 import {
   CompositeNavigationProp,
   useNavigation,
@@ -39,7 +47,10 @@ import {
 } from "@/utils/deso";
 
 import { useConversations } from "@/features/messaging/hooks/useConversations";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "@/constants/events";
 import { getBorderColor } from "@/theme/borders";
 import { LiquidGlassView } from "../../../utils/liquidGlass";
@@ -49,11 +60,17 @@ import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
-import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
+import {
+  CENTER_CONTENT_MAX_WIDTH,
+  useLayoutBreakpoints,
+} from "@/alf/breakpoints";
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { getConversationsQueryKey, fetchConversations } from "@/state/queries/messages/list";
+import {
+  getConversationsQueryKey,
+  fetchConversations,
+} from "@/state/queries/messages/list";
 import type { GroupMember } from "@/services/desoGraphql";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
@@ -142,7 +159,8 @@ export function HomeScreen() {
   const queryClient = useQueryClient();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const rootNavigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -164,13 +182,17 @@ export function HomeScreen() {
   >({});
 
   // Track optimistic mailbox overrides: ID -> 'inbox' | 'spam'
-  const [optimisticOverrides, setOptimisticOverrides] = useState<Record<string, "inbox" | "spam">>({});
+  const [optimisticOverrides, setOptimisticOverrides] = useState<
+    Record<string, "inbox" | "spam">
+  >({});
   // Track loading state for specific items
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
 
   // Long-press modal state
   const [showActionModal, setShowActionModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<MockConversation | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MockConversation | null>(
+    null
+  );
 
   // Helper to open drawer (controlled by HomeTabs)
   const openDrawer = useCallback(() => {
@@ -209,14 +231,12 @@ export function HomeScreen() {
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
       OUTGOING_MESSAGE_EVENT,
-      (
-        payload: {
-          conversationId: string;
-          messageText: string;
-          timestampNanos: number;
-          extraData?: Record<string, any>;
-        }
-      ) => {
+      (payload: {
+        conversationId: string;
+        messageText: string;
+        timestampNanos: number;
+        extraData?: Record<string, any>;
+      }) => {
         setOptimisticPreviews((prev) => ({
           ...prev,
           [payload.conversationId]: {
@@ -261,32 +281,36 @@ export function HomeScreen() {
     return () => clearTimeout(timeoutId);
   }, [newChatSearchQuery, currentUser?.PublicKeyBase58Check]);
 
-
-
   // Handle selecting a profile for new DM
-  const handleSelectNewChatProfile = useCallback((profile: UserSearchResult) => {
-    const userPublicKey = currentUser?.PublicKeyBase58Check;
-    if (!userPublicKey) return;
+  const handleSelectNewChatProfile = useCallback(
+    (profile: UserSearchResult) => {
+      const userPublicKey = currentUser?.PublicKeyBase58Check;
+      if (!userPublicKey) return;
 
-    setShowNewChatModal(false);
-    setNewChatSearchQuery("");
-    setNewChatResults([]);
-    setHasSearchedNewChat(false);
+      setShowNewChatModal(false);
+      setNewChatSearchQuery("");
+      setNewChatResults([]);
+      setHasSearchedNewChat(false);
 
-    rootNavigation.navigate("Conversation", {
-      threadPublicKey: profile.publicKey,
-      chatType: "DM" as ChatType,
-      userPublicKey,
-      userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
-      recipientInfo: {
-        username: profile.username,
-        publicKey: profile.publicKey,
-      },
-    });
-  }, [currentUser?.PublicKeyBase58Check, rootNavigation]);
+      rootNavigation.navigate("Conversation", {
+        threadPublicKey: profile.publicKey,
+        chatType: "DM" as ChatType,
+        userPublicKey,
+        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
+        recipientInfo: {
+          username: profile.username,
+          publicKey: profile.publicKey,
+        },
+      });
+    },
+    [currentUser?.PublicKeyBase58Check, rootNavigation]
+  );
 
   const buildItemsFromConversations = useCallback(
-    (source: ConversationMap, profileMap: PublicKeyToProfileEntryResponseMap) => {
+    (
+      source: ConversationMap,
+      profileMap: PublicKeyToProfileEntryResponseMap
+    ) => {
       const userPk = currentUser?.PublicKeyBase58Check;
       if (!userPk) return [];
 
@@ -304,7 +328,8 @@ export function HomeScreen() {
           info.TimestampNanos ? info.TimestampNanos / 1e6 : 0
         );
         const senderPk = last?.SenderInfo?.OwnerPublicKeyBase58Check || "";
-        const recipientPk = last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
+        const recipientPk =
+          last?.RecipientInfo?.OwnerPublicKeyBase58Check || "";
         const senderName =
           senderPk === userPk
             ? "You"
@@ -313,14 +338,16 @@ export function HomeScreen() {
         const otherPk = isGroup
           ? recipientPk
           : senderPk === userPk
-            ? recipientPk
-            : senderPk;
+          ? recipientPk
+          : senderPk;
         const name = isGroup
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
           : profileMap?.[otherPk]?.Username || formatPublicKey(otherPk);
 
         // Check for media in extraData
-        const messageExtraData = last?.MessageInfo?.ExtraData as Record<string, any> | undefined;
+        const messageExtraData = last?.MessageInfo?.ExtraData as
+          | Record<string, any>
+          | undefined;
         const mediaPreview = getMediaPreviewText(messageExtraData, senderName);
 
         // Generate preview text
@@ -328,19 +355,24 @@ export function HomeScreen() {
           ? mediaPreview
           : `${senderName}: ${last?.DecryptedMessage || "..."}`;
 
-
         // For group chats, check if there's a custom group image in RecipientInfo ExtraData
         let avatarUri: string;
         let hasGroupImage = false;
-        
+
         if (isGroup) {
           // Extract group image from message ExtraData or RecipientInfo
-          const recipientExtraData = (last?.RecipientInfo as any)?.ExtraData as Record<string, any> | undefined;
-          const messageExtraData2 = last?.MessageInfo?.ExtraData as Record<string, any> | undefined;
-          const groupImageURL = recipientExtraData?.GroupImageURL || messageExtraData2?.GroupImageURL;
-          
+          const recipientExtraData = (last?.RecipientInfo as any)?.ExtraData as
+            | Record<string, any>
+            | undefined;
+          const messageExtraData2 = last?.MessageInfo?.ExtraData as
+            | Record<string, any>
+            | undefined;
+          const groupImageURL =
+            recipientExtraData?.GroupImageURL ||
+            messageExtraData2?.GroupImageURL;
+
           // If there's a custom group image, use it
-          if (groupImageURL && typeof groupImageURL === 'string') {
+          if (groupImageURL && typeof groupImageURL === "string") {
             avatarUri = groupImageURL;
             hasGroupImage = true;
           } else {
@@ -354,7 +386,9 @@ export function HomeScreen() {
         }
 
         // Extract thread identifier from message ExtraData
-        const threadIdentifier = (last?.MessageInfo?.ExtraData as Record<string, any> | undefined)?.threadIdentifier || "";
+        const threadIdentifier =
+          (last?.MessageInfo?.ExtraData as Record<string, any> | undefined)
+            ?.threadIdentifier || "";
 
         return {
           id: conversationKey,
@@ -404,7 +438,10 @@ export function HomeScreen() {
 
       let updatedItem = { ...item };
       const optimistic = optimisticPreviews[item.id];
-      if (optimistic && optimistic.timestampNanos > (item.lastTimestampNanos ?? 0)) {
+      if (
+        optimistic &&
+        optimistic.timestampNanos > (item.lastTimestampNanos ?? 0)
+      ) {
         const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
         const hasImages = optimistic.extraData?.decryptedImageURLs;
         const hasVideos = optimistic.extraData?.decryptedVideoURLs;
@@ -414,7 +451,11 @@ export function HomeScreen() {
         if (optimistic.messageText.trim()) {
           previewText = previewText
             ? `${previewText}: ${optimistic.messageText.trim()}`
-            : `You: ${optimistic.messageText.trim() === "🚀" ? "🚀" : optimistic.messageText}`;
+            : `You: ${
+                optimistic.messageText.trim() === "🚀"
+                  ? "🚀"
+                  : optimistic.messageText
+              }`;
         }
         updatedItem = {
           ...updatedItem,
@@ -434,32 +475,47 @@ export function HomeScreen() {
       }
     });
 
-    return visible.sort((a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0));
-  }, [activeMailbox, inboxItems, spamItems, optimisticPreviews, optimisticOverrides]);
+    return visible.sort(
+      (a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0)
+    );
+  }, [
+    activeMailbox,
+    inboxItems,
+    spamItems,
+    optimisticPreviews,
+    optimisticOverrides,
+  ]);
 
-  const isLoadingMailbox = activeMailbox === "spam" ? isLoadingSpam : isLoadingInbox;
-  const isFetchingMailbox = activeMailbox === "spam" ? isFetchingSpam : isFetchingInbox;
-  const isFetchingNextMailbox = activeMailbox === "spam" ? isFetchingNextSpam : isFetchingNextInbox;
+  const isLoadingMailbox =
+    activeMailbox === "spam" ? isLoadingSpam : isLoadingInbox;
+  const isFetchingMailbox =
+    activeMailbox === "spam" ? isFetchingSpam : isFetchingInbox;
+  const isFetchingNextMailbox =
+    activeMailbox === "spam" ? isFetchingNextSpam : isFetchingNextInbox;
   const isRefreshingMailbox = isFetchingMailbox && !isFetchingNextMailbox;
   const hasMoreMailbox = activeMailbox === "spam" ? hasMoreSpam : hasMoreInbox;
-  const loadMoreMailbox = activeMailbox === "spam" ? loadMoreSpam : loadMoreInbox;
+  const loadMoreMailbox =
+    activeMailbox === "spam" ? loadMoreSpam : loadMoreInbox;
   const reloadMailbox = activeMailbox === "spam" ? reloadSpam : reloadInbox;
   const errorMailbox = activeMailbox === "spam" ? errorSpam : errorInbox;
 
-
   const handlePress = useCallback(
     (item: MockConversation) => {
-      console.log('[HomeScreen] handlePress called for item:', item.id, item.name);
-      
+      console.log(
+        "[HomeScreen] handlePress called for item:",
+        item.id,
+        item.name
+      );
+
       if (!currentUser?.PublicKeyBase58Check) {
-        console.log('[HomeScreen] No currentUser, aborting navigation');
+        console.log("[HomeScreen] No currentUser, aborting navigation");
         return;
       }
 
-      console.log('[HomeScreen] Navigating to conversation:', {
+      console.log("[HomeScreen] Navigating to conversation:", {
         threadPublicKey: item.threadPublicKey || item.id,
         chatType: item.chatType,
-        name: item.name
+        name: item.name,
       });
 
       navigation.navigate("Conversation", {
@@ -476,8 +532,8 @@ export function HomeScreen() {
         initialGroupMembers:
           item.isGroup && item.recipientInfo
             ? groupMembers[
-            `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
-            ]
+                `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
+              ]
             : undefined,
         initialProfile: profiles[item.threadPublicKey], // Pass profile to avoid loading delay
       });
@@ -498,23 +554,34 @@ export function HomeScreen() {
       if (!currentUser?.PublicKeyBase58Check) return;
 
       type ConversationsPage = Awaited<ReturnType<typeof fetchConversations>>;
-      const fromKey = getConversationsQueryKey(currentUser.PublicKeyBase58Check, fromMailbox);
-      const toKey = getConversationsQueryKey(currentUser.PublicKeyBase58Check, toMailbox);
+      const fromKey = getConversationsQueryKey(
+        currentUser.PublicKeyBase58Check,
+        fromMailbox
+      );
+      const toKey = getConversationsQueryKey(
+        currentUser.PublicKeyBase58Check,
+        toMailbox
+      );
 
-      const fromData = queryClient.getQueryData<InfiniteData<ConversationsPage>>(fromKey);
+      const fromData =
+        queryClient.getQueryData<InfiniteData<ConversationsPage>>(fromKey);
       if (!fromData) return;
 
       let movedConversation: ConversationMap[string] | undefined;
       let movedProfiles: PublicKeyToProfileEntryResponseMap = {};
       let movedGroupMembers: Record<string, GroupMember[]> = {};
-      let movedGroupExtraData: Record<string, Record<string, string> | null> = {};
+      let movedGroupExtraData: Record<string, Record<string, string> | null> =
+        {};
 
       const updatedFromPages = fromData.pages.map((page) => {
         if (page.conversations[conversationId]) {
           movedConversation = page.conversations[conversationId];
           movedProfiles = { ...movedProfiles, ...page.profiles };
           movedGroupMembers = { ...movedGroupMembers, ...page.groupMembers };
-          movedGroupExtraData = { ...movedGroupExtraData, ...page.groupExtraData };
+          movedGroupExtraData = {
+            ...movedGroupExtraData,
+            ...page.groupExtraData,
+          };
           const nextPage = {
             ...page,
             conversations: { ...page.conversations },
@@ -531,7 +598,8 @@ export function HomeScreen() {
           pages: updatedFromPages,
         });
 
-        const toData = queryClient.getQueryData<InfiniteData<ConversationsPage>>(toKey);
+        const toData =
+          queryClient.getQueryData<InfiniteData<ConversationsPage>>(toKey);
         if (toData) {
           const updatedToPages = toData.pages.length
             ? toData.pages.map((page, index) => {
@@ -559,15 +627,15 @@ export function HomeScreen() {
                 return page;
               })
             : [
-              {
-                conversations: { [conversationId]: movedConversation },
-                profiles: movedProfiles,
-                groupMembers: movedGroupMembers,
-                groupExtraData: movedGroupExtraData,
-                hasMore: false,
-                nextOffset: null,
-              } as ConversationsPage,
-            ];
+                {
+                  conversations: { [conversationId]: movedConversation },
+                  profiles: movedProfiles,
+                  groupMembers: movedGroupMembers,
+                  groupExtraData: movedGroupExtraData,
+                  hasMore: false,
+                  nextOffset: null,
+                } as ConversationsPage,
+              ];
 
           queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
             ...toData,
@@ -599,7 +667,10 @@ export function HomeScreen() {
       if (!currentUser?.PublicKeyBase58Check) return;
       const threadId = item.threadIdentifier;
       if (!threadId) {
-        console.error("Cannot move spam/inbox without threadIdentifier", item.id);
+        console.error(
+          "Cannot move spam/inbox without threadIdentifier",
+          item.id
+        );
         return;
       }
 
@@ -653,8 +724,6 @@ export function HomeScreen() {
     [currentUser?.PublicKeyBase58Check, moveConversationInCache]
   );
 
-
-
   const items = enhancedItems; // for empty state usage
 
   if (isLoadingMailbox && items.length === 0) {
@@ -669,7 +738,11 @@ export function HomeScreen() {
                 className="mr-3"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                  <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                  <Feather
+                    name="menu"
+                    size={20}
+                    color={isDark ? "#f8fafc" : "#0f172a"}
+                  />
                 </View>
               </TouchableOpacity>
             )}
@@ -687,7 +760,12 @@ export function HomeScreen() {
               className="mr-1"
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
+                <UserGroupIcon
+                  width={20}
+                  height={20}
+                  stroke={isDark ? "#f8fafc" : "#0f172a"}
+                  strokeWidth={2}
+                />
               </View>
             </TouchableOpacity>
 
@@ -697,18 +775,32 @@ export function HomeScreen() {
               activeOpacity={0.7}
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                <Feather
+                  name="plus"
+                  size={20}
+                  color={isDark ? "#f8fafc" : "#0f172a"}
+                />
               </View>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* WhatsApp-style filter chips */}
-        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8, alignItems: 'center' }}>
-          {([
-            { key: "inbox", label: "Inbox" },
-            { key: "spam", label: "Spam" },
-          ] as const).map((filter) => {
+        <View
+          style={{
+            flexDirection: "row",
+            paddingHorizontal: 16,
+            paddingBottom: 12,
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          {(
+            [
+              { key: "inbox", label: "Inbox" },
+              { key: "spam", label: "Spam" },
+            ] as const
+          ).map((filter) => {
             const isActive = activeMailbox === filter.key;
 
             return (
@@ -722,20 +814,24 @@ export function HomeScreen() {
                   borderRadius: 16,
                   backgroundColor: isActive
                     ? accentColor
-                    : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                    : isDark
+                    ? "rgba(30, 41, 59, 0.6)"
+                    : "rgba(241, 245, 249, 0.9)",
                   borderWidth: 1,
                   borderColor: isActive
                     ? accentStrong
-                    : getBorderColor(isDark, 'subtle'),
+                    : getBorderColor(isDark, "subtle"),
                 }}
               >
                 <Text
                   style={{
                     fontSize: 13,
-                    fontWeight: '500',
+                    fontWeight: "500",
                     color: isActive
-                      ? '#ffffff'
-                      : (isDark ? '#94a3b8' : '#64748b'),
+                      ? "#ffffff"
+                      : isDark
+                      ? "#94a3b8"
+                      : "#64748b",
                   }}
                 >
                   {filter.label}
@@ -785,11 +881,13 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {(!isLoadingMailbox && isRefreshingMailbox) && (
+          {!isLoadingMailbox && isRefreshingMailbox && (
             <View
               style={{
                 width: "100%",
-                backgroundColor: isDark ? "rgba(51, 65, 85, 0.55)" : "rgba(226, 232, 240, 0.98)",
+                backgroundColor: isDark
+                  ? "rgba(51, 65, 85, 0.55)"
+                  : "rgba(226, 232, 240, 0.98)",
                 paddingHorizontal: 16,
                 paddingVertical: 12,
               }}
@@ -831,15 +929,23 @@ export function HomeScreen() {
                         width: 40,
                         height: 40,
                         borderRadius: 20,
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                     >
-                      <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                      <Feather
+                        name="menu"
+                        size={20}
+                        color={isDark ? "#f8fafc" : "#0f172a"}
+                      />
                     </LiquidGlassView>
                   ) : (
                     <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                      <Feather name="menu" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                      <Feather
+                        name="menu"
+                        size={20}
+                        color={isDark ? "#f8fafc" : "#0f172a"}
+                      />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -864,15 +970,25 @@ export function HomeScreen() {
                       width: 40,
                       height: 40,
                       borderRadius: 20,
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
+                    <UserGroupIcon
+                      width={20}
+                      height={20}
+                      stroke={isDark ? "#f8fafc" : "#0f172a"}
+                      strokeWidth={2}
+                    />
                   </LiquidGlassView>
                 ) : (
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                    <UserGroupIcon width={20} height={20} stroke={isDark ? "#f8fafc" : "#0f172a"} strokeWidth={2} />
+                    <UserGroupIcon
+                      width={20}
+                      height={20}
+                      stroke={isDark ? "#f8fafc" : "#0f172a"}
+                      strokeWidth={2}
+                    />
                   </View>
                 )}
               </TouchableOpacity>
@@ -889,15 +1005,23 @@ export function HomeScreen() {
                       width: 40,
                       height: 40,
                       borderRadius: 20,
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                    <Feather
+                      name="plus"
+                      size={20}
+                      color={isDark ? "#f8fafc" : "#0f172a"}
+                    />
                   </LiquidGlassView>
                 ) : (
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                    <Feather name="plus" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+                    <Feather
+                      name="plus"
+                      size={20}
+                      color={isDark ? "#f8fafc" : "#0f172a"}
+                    />
                   </View>
                 )}
               </TouchableOpacity>
@@ -909,17 +1033,19 @@ export function HomeScreen() {
             // @ts-ignore - data attribute for CSS scroll lock
             dataSet={{ scrollLock: "true" }}
             style={{
-              flexDirection: 'row',
+              flexDirection: "row",
               paddingHorizontal: 16,
               paddingBottom: 12,
               gap: 8,
-              alignItems: 'center',
+              alignItems: "center",
             }}
           >
-            {([
-              { key: "inbox", label: "Inbox" },
-              { key: "spam", label: "Spam" },
-            ] as const).map((filter) => {
+            {(
+              [
+                { key: "inbox", label: "Inbox" },
+                { key: "spam", label: "Spam" },
+              ] as const
+            ).map((filter) => {
               const isActive = activeMailbox === filter.key;
 
               return (
@@ -933,20 +1059,24 @@ export function HomeScreen() {
                     borderRadius: 16,
                     backgroundColor: isActive
                       ? accentColor
-                      : (isDark ? 'rgba(30, 41, 59, 0.6)' : 'rgba(241, 245, 249, 0.9)'),
+                      : isDark
+                      ? "rgba(30, 41, 59, 0.6)"
+                      : "rgba(241, 245, 249, 0.9)",
                     borderWidth: 1,
                     borderColor: isActive
                       ? accentStrong
-                      : getBorderColor(isDark, 'subtle'),
+                      : getBorderColor(isDark, "subtle"),
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 13,
-                      fontWeight: '500',
+                      fontWeight: "500",
                       color: isActive
-                        ? '#ffffff'
-                        : (isDark ? '#94a3b8' : '#64748b'),
+                        ? "#ffffff"
+                        : isDark
+                        ? "#94a3b8"
+                        : "#64748b",
                     }}
                   >
                     {filter.label}
@@ -956,7 +1086,7 @@ export function HomeScreen() {
             })}
           </View>
 
-          <View 
+          <View
             // @ts-ignore - data attribute for CSS virtualized list
             dataSet={{ virtualizedList: "true" }}
             className="flex-1"
@@ -974,11 +1104,11 @@ export function HomeScreen() {
                   : "px-0"
               }
               contentContainerStyle={
-                isDesktopWeb 
-                  ? { paddingHorizontal: 0 } 
-                  : items.length === 0 
-                    ? { paddingBottom: 80 } 
-                    : { paddingBottom: 70 }
+                isDesktopWeb
+                  ? { paddingHorizontal: 0 }
+                  : items.length === 0
+                  ? { paddingBottom: 80 }
+                  : { paddingBottom: 70 }
               }
               refreshControl={
                 <RefreshControl
@@ -1008,7 +1138,7 @@ export function HomeScreen() {
                     activeOpacity={0.7}
                     onPress={() => handlePress(item)}
                     onLongPress={() => {
-                      if (Platform.OS !== 'web') {
+                      if (Platform.OS !== "web") {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       }
                       setSelectedItem(item);
@@ -1016,47 +1146,53 @@ export function HomeScreen() {
                     }}
                     style={isDesktopWeb ? { borderRadius: 14 } : undefined}
                   >
-                      <View className="mr-3">
-                        <UserAvatar
-                          uri={item.avatarUri}
-                          name={item.name}
-                          size={56} // 14 * 4 = 56px
-                          isGroup={item.isGroup}
-                          recyclingKey={item.id}
-                        />
-                      </View>
-                      <View className="flex-1 min-w-0">
-                        <View className="flex-row items-center justify-between mb-1">
-                          <Text
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                            className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
-                          >
-                            {item.name}
+                    <View className="mr-3">
+                      <UserAvatar
+                        uri={item.avatarUri}
+                        name={item.name}
+                        size={56} // 14 * 4 = 56px
+                        isGroup={item.isGroup}
+                        recyclingKey={item.id}
+                      />
+                    </View>
+                    <View className="flex-1 min-w-0">
+                      <View className="flex-row items-center justify-between mb-1">
+                        <Text
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                          className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
+                        >
+                          {item.name}
+                        </Text>
+                        {item.time ? (
+                          <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
+                            {item.time}
                           </Text>
-                          {item.time ? (
-                            <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
-                              {item.time}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <View className="flex-row items-center">
-                          <Text
-                            numberOfLines={1}
-                            className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
-                          >
-                            {item.preview}
-                          </Text>
-                        </View>
+                        ) : null}
                       </View>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                      <View className="flex-row items-center">
+                        <Text
+                          numberOfLines={1}
+                          className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+                        >
+                          {item.preview}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              )}
               ListEmptyComponent={() => (
                 <View className="flex-1 items-center justify-center px-6 py-20">
-                  <Feather name="inbox" size={48} color={isDark ? "#64748b" : "#94a3af"} />
+                  <Feather
+                    name="inbox"
+                    size={48}
+                    color={isDark ? "#64748b" : "#94a3af"}
+                  />
                   <Text className="mt-6 text-lg font-semibold text-slate-900 dark:text-slate-100">
-                    {activeMailbox === "spam" ? "No spam here" : "Your inbox is quiet"}
+                    {activeMailbox === "spam"
+                      ? "No spam here"
+                      : "Your inbox is quiet"}
                   </Text>
                   <Text className="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
                     {activeMailbox === "spam"
@@ -1103,7 +1239,7 @@ export function HomeScreen() {
             rootNavigation.navigate("Conversation", {
               threadPublicKey: ownerPublicKey,
               chatType: "GROUPCHAT" as any,
-              userPublicKey: currentUser?.PublicKeyBase58Check || '',
+              userPublicKey: currentUser?.PublicKeyBase58Check || "",
               threadAccessGroupKeyName: groupName,
               userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
               partyGroupOwnerPublicKeyBase58Check: ownerPublicKey,
@@ -1126,45 +1262,63 @@ export function HomeScreen() {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
-              alignItems: 'center',
-              justifyContent: 'center',
+              backgroundColor: isDark
+                ? "rgba(51, 65, 85, 0.6)"
+                : "rgba(241, 245, 249, 1)",
+              alignItems: "center",
+              justifyContent: "center",
             } as const;
 
             const modalContent = (
               <>
                 {/* Header */}
                 <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-                  <Text className="text-xl font-bold text-[#111] dark:text-white">New Message</Text>
+                  <Text className="text-xl font-bold text-[#111] dark:text-white">
+                    New Message
+                  </Text>
                   <TouchableOpacity
                     onPress={() => setShowNewChatModal(false)}
                     activeOpacity={0.8}
                     style={closeButtonStyle}
                   >
-                    <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+                    <Feather
+                      name="x"
+                      size={20}
+                      color={isDark ? "#94a3b8" : "#64748b"}
+                    />
                   </TouchableOpacity>
                 </View>
 
                 {/* Search Input */}
                 <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(241, 245, 249, 1)',
-                    borderRadius: 14,
-                    paddingHorizontal: 16,
-                    height: 50,
-                    borderWidth: 1,
-                    borderColor: getBorderColor(isDark, 'subtle'),
-                  }}>
-                    <Feather name="search" size={18} color={isDark ? "#64748b" : "#94a3b8"} />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: isDark
+                        ? "rgba(51, 65, 85, 0.4)"
+                        : "rgba(241, 245, 249, 1)",
+                      borderRadius: 14,
+                      paddingHorizontal: 16,
+                      height: 50,
+                      borderWidth: 1,
+                      borderColor: getBorderColor(isDark, "subtle"),
+                    }}
+                  >
+                    <Feather
+                      name="search"
+                      size={18}
+                      color={isDark ? "#64748b" : "#94a3b8"}
+                    />
                     <TextInput
                       style={{
                         flex: 1,
                         marginLeft: 12,
                         fontSize: 16,
-                        color: isDark ? '#ffffff' : '#0f172a',
-                        ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                        color: isDark ? "#ffffff" : "#0f172a",
+                        ...(Platform.OS === "web" && {
+                          outlineStyle: "none" as any,
+                        }),
                       }}
                       placeholder="Search username..."
                       placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
@@ -1184,21 +1338,27 @@ export function HomeScreen() {
                   </View>
                 ) : hasSearchedNewChat && newChatResults.length === 0 ? (
                   <View className="flex-1 items-center justify-center px-8">
-                    <Feather name="user-x" size={48} color={isDark ? "#334155" : "#cbd5e1"} />
+                    <Feather
+                      name="user-x"
+                      size={48}
+                      color={isDark ? "#334155" : "#cbd5e1"}
+                    />
                     <Text className="mt-4 text-center text-base text-slate-500 dark:text-slate-400">
                       No users found
                     </Text>
                   </View>
                 ) : !hasSearchedNewChat ? (
                   <View className="flex-1 items-center justify-center px-8">
-                    <View style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 32,
-                      backgroundColor: accentSoft,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
+                    <View
+                      style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 32,
+                        backgroundColor: accentSoft,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
                       <Feather name="search" size={28} color={accentStrong} />
                     </View>
                     <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
@@ -1217,8 +1377,8 @@ export function HomeScreen() {
                     renderItem={({ item }) => (
                       <TouchableOpacity
                         style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
+                          flexDirection: "row",
+                          alignItems: "center",
                           paddingHorizontal: 20,
                           paddingVertical: 12,
                         }}
@@ -1232,11 +1392,14 @@ export function HomeScreen() {
                           className="bg-slate-200 dark:bg-slate-700"
                         />
                         <View style={{ marginLeft: 14, flex: 1 }}>
-                          <Text style={{
-                            fontSize: 16,
-                            fontWeight: '600',
-                            color: isDark ? '#ffffff' : '#0f172a',
-                          }} numberOfLines={1}>
+                          <Text
+                            style={{
+                              fontSize: 16,
+                              fontWeight: "600",
+                              color: isDark ? "#ffffff" : "#0f172a",
+                            }}
+                            numberOfLines={1}
+                          >
                             {item.username || "Anonymous"}
                           </Text>
                         </View>
@@ -1249,18 +1412,27 @@ export function HomeScreen() {
 
             if (isDesktopWeb) {
               return (
-                <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}>
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: isDark
+                      ? "rgba(10, 15, 26, 0.85)"
+                      : "rgba(255, 255, 255, 0.85)",
+                  }}
+                >
                   <DesktopLeftNav />
-                  <View style={{ flex: 1, alignItems: 'center' }}>
-                    <View style={{
-                      flex: 1,
-                      width: '100%',
-                      maxWidth: CENTER_CONTENT_MAX_WIDTH,
-                      backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-                      borderLeftWidth: 1,
-                      borderRightWidth: 1,
-                      borderColor: getBorderColor(isDark, 'contrast_low'),
-                    }}>
+                  <View style={{ flex: 1, alignItems: "center" }}>
+                    <View
+                      style={{
+                        flex: 1,
+                        width: "100%",
+                        maxWidth: CENTER_CONTENT_MAX_WIDTH,
+                        backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+                        borderLeftWidth: 1,
+                        borderRightWidth: 1,
+                        borderColor: getBorderColor(isDark, "contrast_low"),
+                      }}
+                    >
                       <SafeAreaView style={{ flex: 1 }}>
                         {modalContent}
                       </SafeAreaView>
@@ -1288,14 +1460,14 @@ export function HomeScreen() {
           }}
           onAction={() => {
             if (selectedItem) {
-              handleMoveSpam(selectedItem, activeMailbox === 'inbox');
+              handleMoveSpam(selectedItem, activeMailbox === "inbox");
             }
           }}
-          actionType={activeMailbox === 'inbox' ? 'spam' : 'inbox'}
+          actionType={activeMailbox === "inbox" ? "spam" : "inbox"}
           isDark={isDark}
           accentColor={accentColor}
           isLoading={selectedItem ? loadingItems.has(selectedItem.id) : false}
-          chatName={selectedItem?.name || ''}
+          chatName={selectedItem?.name || ""}
           chatAvatar={selectedItem?.avatarUri || undefined}
         />
       </SafeAreaView>

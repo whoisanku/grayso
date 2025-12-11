@@ -1,7 +1,11 @@
 import CryptoPolyfill from "./components/CryptoPolyfill";
 import "react-native-gesture-handler";
 import React from "react";
-import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+} from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { StatusBar } from "expo-status-bar";
@@ -55,8 +59,12 @@ export default function App() {
             <SafeAreaProvider>
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-                  <NavigationContainer theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+                  <StatusBar
+                    style={colorScheme === "dark" ? "light" : "dark"}
+                  />
+                  <NavigationContainer
+                    theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                  >
                     <RootNavigator />
                   </NavigationContainer>
                 </KeyboardProvider>

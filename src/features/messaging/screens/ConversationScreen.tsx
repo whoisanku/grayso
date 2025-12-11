@@ -370,7 +370,9 @@ export function ConversationScreen({ navigation, route }: Props) {
   // --- UI State & Refs ---
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [actualBubbleHeight, setActualBubbleHeight] = useState<number | undefined>(undefined);
+  const [actualBubbleHeight, setActualBubbleHeight] = useState<
+    number | undefined
+  >(undefined);
   const scrollToBottomAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
@@ -450,12 +452,15 @@ export function ConversationScreen({ navigation, route }: Props) {
   // Supabase is only used for broadcast notifications, not message storage
   const displayMessages = messages;
 
-  const handleAvatarPress = useCallback((publicKey: string, username?: string) => {
-    navigation.navigate('UserProfile', {
-      username: username || undefined,
-      publicKey: publicKey,
-    });
-  }, [navigation]);
+  const handleAvatarPress = useCallback(
+    (publicKey: string, username?: string) => {
+      navigation.navigate("UserProfile", {
+        username: username || undefined,
+        publicKey: publicKey,
+      });
+    },
+    [navigation]
+  );
 
   const renderItem = useCallback(
     ({
@@ -605,7 +610,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                 setShowMembersModal(true);
               } else {
                 // Navigate to DM partner's profile
-                navigation.navigate('UserProfile', {
+                navigation.navigate("UserProfile", {
                   username: headerProfile?.Username || undefined,
                   publicKey: counterPartyPublicKey,
                 });
@@ -622,7 +627,9 @@ export function ConversationScreen({ navigation, route }: Props) {
                     [0, 1, 2].map((i) => (
                       <View
                         key={`placeholder-${i}`}
-                        className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""}`}
+                        className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                          i > 0 ? "-ml-[15px]" : ""
+                        }`}
                         style={{ zIndex: 3 - i }}
                       />
                     ))
@@ -635,7 +642,9 @@ export function ConversationScreen({ navigation, route }: Props) {
                       return (
                         <View
                           key={member.publicKey}
-                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""}`}
+                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                            index > 0 ? "-ml-[15px]" : ""
+                          }`}
                           style={{ zIndex: 3 - index }}
                         >
                           <UserAvatar
@@ -685,7 +694,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                 // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
                 ListFooterComponent={topListHeader}
                 ListHeaderComponent={footer}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={Platform.OS === "web"}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
                   paddingTop: 12,
@@ -809,7 +818,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       }}
                     >
                       <Feather
-                        name="chevron-down"
+                        name="chevron-up"
                         size={24}
                         color={isDark ? "#fff" : "#1f2937"}
                       />
@@ -828,7 +837,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       }}
                     >
                       <Feather
-                        name="chevron-down"
+                        name="chevron-up"
                         size={24}
                         color={isDark ? "#fff" : "#4b5563"}
                       />
@@ -1106,7 +1115,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                             <TouchableOpacity
                               onPress={() => {
                                 setShowAddMemberModal(false);
-                                navigation.navigate('UserProfile', {
+                                navigation.navigate("UserProfile", {
                                   username: user.username || undefined,
                                   publicKey: user.publicKey,
                                 });
@@ -1267,23 +1276,23 @@ export function ConversationScreen({ navigation, route }: Props) {
 
                       return (
                         <View className="flex-row items-center px-5 py-3 border-b border-gray-100 dark:border-slate-800">
-                            <TouchableOpacity
-                              onPress={() => {
-                                setShowMembersModal(false);
-                                navigation.navigate('UserProfile', {
-                                  username: member.username || undefined,
-                                  publicKey: member.publicKey,
-                                });
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <UserAvatar
-                                uri={memberImageUrl}
-                                name={member.username || ""}
-                                size={48}
-                                className="bg-gray-200 dark:bg-slate-700"
-                              />
-                            </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setShowMembersModal(false);
+                              navigation.navigate("UserProfile", {
+                                username: member.username || undefined,
+                                publicKey: member.publicKey,
+                              });
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <UserAvatar
+                              uri={memberImageUrl}
+                              name={member.username || ""}
+                              size={48}
+                              className="bg-gray-200 dark:bg-slate-700"
+                            />
+                          </TouchableOpacity>
                           <View className="ml-3 flex-1">
                             <View
                               style={{

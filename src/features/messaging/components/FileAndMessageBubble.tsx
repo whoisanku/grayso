@@ -1,8 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, Image, ActivityIndicator, Text, Dimensions, DimensionValue, Platform } from 'react-native';
-import { TouchableOpacity } from 'react-native-gesture-handler';
-import { Feather } from '@expo/vector-icons';
+import { View, ActivityIndicator, Text, Dimensions, Platform } from 'react-native';
 import { cx } from '@/lib/styles';
+import { MessageImage } from './MessageImage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // On web, limit bubble width to prevent oversized images. On mobile, use 72% of screen.
@@ -16,112 +15,6 @@ type FileAndMessageBubbleProps = {
     isDark: boolean;
     onImagePress?: (images: string[], index: number) => void;
 };
-
-type ImageItemProps = {
-    url: string;
-    aspectRatio: number;
-    width: DimensionValue;
-    height: DimensionValue;
-    isDark: boolean;
-    borderRadius?: {
-        topLeft?: number;
-        topRight?: number;
-        bottomLeft?: number;
-        bottomRight?: number;
-    };
-    onPress?: () => void;
-    overlay?: React.ReactNode;
-};
-
-const ImageItem = React.memo(({ 
-    url, 
-    aspectRatio, 
-    width, 
-    height, 
-    isDark, 
-    borderRadius,
-    onPress,
-    overlay,
-}: ImageItemProps) => {
-    const [isLoading, setIsLoading] = useState(true);
-    const [hasError, setHasError] = useState(false);
-
-    const handleLoad = useCallback(() => {
-        setIsLoading(false);
-        setHasError(false);
-    }, []);
-
-    const handleError = useCallback(() => {
-        setIsLoading(false);
-        setHasError(true);
-        console.warn('[ImageItem] Failed to load image:', url);
-    }, [url]);
-
-    const handleRetry = useCallback(() => {
-        setIsLoading(true);
-        setHasError(false);
-    }, []);
-
-    const borderStyle = {
-        borderTopLeftRadius: borderRadius?.topLeft ?? 8,
-        borderTopRightRadius: borderRadius?.topRight ?? 8,
-        borderBottomLeftRadius: borderRadius?.bottomLeft ?? 8,
-        borderBottomRightRadius: borderRadius?.bottomRight ?? 8,
-    };
-
-    if (hasError) {
-        return (
-            <TouchableOpacity 
-                onPress={handleRetry}
-                className={`items-center justify-center overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}
-                style={[
-                    borderStyle,
-                    {
-                        width,
-                        height,
-                    }
-                ]}
-            >
-                <Feather name="image" size={24} color={isDark ? '#475569' : '#94a3b8'} />
-                <Text className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Tap to retry
-                </Text>
-            </TouchableOpacity>
-        );
-    }
-
-    return (
-        <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={onPress}
-            disabled={!onPress}
-            className={`items-center justify-center overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}
-            style={[
-                borderStyle,
-                {
-                    width,
-                    height,
-                }
-            ]}
-        >
-            {isLoading && (
-                <View className="absolute inset-0 z-10 items-center justify-center">
-                    <ActivityIndicator size="small" color={isDark ? '#64748b' : '#94a3b8'} />
-                </View>
-            )}
-            <Image
-                source={{ uri: url }}
-                style={[borderStyle, { width: '100%', height: '100%' }]}
-                resizeMode="cover"
-                onLoad={handleLoad}
-                onError={handleError}
-            />
-            {overlay}
-        </TouchableOpacity>
-    );
-});
-
-ImageItem.displayName = 'ImageItem';
 
 export const FileAndMessageBubble = React.memo(({ 
     decryptedImageURLs, 
@@ -173,40 +66,33 @@ export const FileAndMessageBubble = React.memo(({
             onImagePress?.(imageUrls, index);
         };
 
-        // Get aspect ratios for images
-        const getAspectRatio = (index: number): number => {
+        // Get dimensions from metadata
+        const getDimensions = (index: number) => {
             const widthKey = `image.${index}.width`;
             const heightKey = `image.${index}.height`;
-            const rawWidth = metadata[widthKey];
-            const rawHeight = metadata[heightKey];
-            const imgWidth = rawWidth ? parseInt(String(rawWidth), 10) : undefined;
-            const imgHeight = rawHeight ? parseInt(String(rawHeight), 10) : undefined;
-            return (imgWidth && imgHeight) ? imgWidth / imgHeight : 1;
+            const rawWidth = metadata[widthKey] ? parseInt(String(metadata[widthKey]), 10) : undefined;
+            const rawHeight = metadata[heightKey] ? parseInt(String(metadata[heightKey]), 10) : undefined;
+            return { width: rawWidth, height: rawHeight };
         };
 
         const imageCount = imageUrls.length;
         const GRID_GAP = 3;
-        const CORNER_RADIUS = 0;
+        const CORNER_RADIUS = 0; // Images in grid are often square/tight. 
+        // Bubbles usually handle outer radius, but if internal images touch edge, they need radius.
+        // For now let's keep it simple.
 
-        // Single image - constrained width and height
+        // Single image - use aspect ratio logic via MessageImage
         if (imageCount === 1) {
-            const aspectRatio = getAspectRatio(0);
-            const imageWidth = MAX_BUBBLE_WIDTH;
-            const imageHeight = Math.min(imageWidth / aspectRatio, 250);
+            const { width, height } = getDimensions(0);
             return (
-                <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
-                    <ImageItem
-                        url={imageUrls[0]}
-                        aspectRatio={aspectRatio}
-                        width={imageWidth}
-                        height={imageHeight}
-                        isDark={isDark}
-                        borderRadius={{ 
-                            topLeft: CORNER_RADIUS, 
-                            topRight: CORNER_RADIUS, 
-                            bottomLeft: CORNER_RADIUS, 
-                            bottomRight: CORNER_RADIUS 
-                        }}
+                <View className="mb-2" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                    <MessageImage
+                        uri={imageUrls[0]}
+                        width={width}
+                        height={height}
+                        maxWidth={MAX_BUBBLE_WIDTH}
+                        maxHeight={280}
+                        borderRadius={12} // Bubble radius
                         onPress={() => handleImagePress(0)}
                     />
                 </View>
@@ -217,24 +103,18 @@ export const FileAndMessageBubble = React.memo(({
         if (imageCount === 2) {
             const itemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
             return (
-                <View className="mb-2 flex-row overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
-                    <ImageItem
-                        url={imageUrls[0]}
-                        aspectRatio={1}
-                        width={itemWidth}
-                        height={itemWidth}
-                        isDark={isDark}
-                        borderRadius={{ topLeft: CORNER_RADIUS, bottomLeft: CORNER_RADIUS }}
+                <View className="mb-2 flex-row overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                    <MessageImage
+                        uri={imageUrls[0]}
+                        style={{ width: itemWidth, height: itemWidth }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(0)}
                     />
                     <View style={{ width: GRID_GAP }} />
-                    <ImageItem
-                        url={imageUrls[1]}
-                        aspectRatio={1}
-                        width={itemWidth}
-                        height={itemWidth}
-                        isDark={isDark}
-                        borderRadius={{ topRight: CORNER_RADIUS, bottomRight: CORNER_RADIUS }}
+                    <MessageImage
+                        uri={imageUrls[1]}
+                        style={{ width: itemWidth, height: itemWidth }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(1)}
                     />
                 </View>
@@ -244,36 +124,29 @@ export const FileAndMessageBubble = React.memo(({
         // Three images - 1 large top, 2 small bottom
         if (imageCount === 3) {
             const bottomItemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
+            const topHeight = MAX_BUBBLE_WIDTH * 0.56;
+            
             return (
-                <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
-                    <ImageItem
-                        url={imageUrls[0]}
-                        aspectRatio={16/9}
-                        width="100%"
-                        height={MAX_BUBBLE_WIDTH * 0.56}
-                        isDark={isDark}
-                        borderRadius={{ topLeft: CORNER_RADIUS, topRight: CORNER_RADIUS }}
+                <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                    <MessageImage
+                        uri={imageUrls[0]}
+                        style={{ width: '100%', height: topHeight }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(0)}
                     />
                     <View style={{ height: GRID_GAP }} />
                     <View className="flex-row">
-                        <ImageItem
-                            url={imageUrls[1]}
-                            aspectRatio={1}
-                            width={bottomItemWidth}
-                            height={bottomItemWidth * 0.75}
-                            isDark={isDark}
-                            borderRadius={{ bottomLeft: CORNER_RADIUS }}
+                        <MessageImage
+                            uri={imageUrls[1]}
+                            style={{ width: bottomItemWidth, height: bottomItemWidth * 0.75 }}
+                            borderRadius={0}
                             onPress={() => handleImagePress(1)}
                         />
                         <View style={{ width: GRID_GAP }} />
-                        <ImageItem
-                            url={imageUrls[2]}
-                            aspectRatio={1}
-                            width={bottomItemWidth}
-                            height={bottomItemWidth * 0.75}
-                            isDark={isDark}
-                            borderRadius={{ bottomRight: CORNER_RADIUS }}
+                         <MessageImage
+                            uri={imageUrls[2]}
+                            style={{ width: bottomItemWidth, height: bottomItemWidth * 0.75 }}
+                            borderRadius={0}
                             onPress={() => handleImagePress(2)}
                         />
                     </View>
@@ -286,56 +159,46 @@ export const FileAndMessageBubble = React.memo(({
         const extraCount = imageCount - 4;
 
         return (
-            <View className="mb-2 overflow-hidden" style={{ maxWidth: MAX_BUBBLE_WIDTH, position: 'relative' }}>
+            <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
                 {/* Top row */}
                 <View className="flex-row">
-                    <ImageItem
-                        url={imageUrls[0]}
-                        aspectRatio={1}
-                        width={gridItemSize}
-                        height={gridItemSize}
-                        isDark={isDark}
-                        borderRadius={{ topLeft: CORNER_RADIUS }}
+                    <MessageImage
+                        uri={imageUrls[0]}
+                        style={{ width: gridItemSize, height: gridItemSize }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(0)}
                     />
                     <View style={{ width: GRID_GAP }} />
-                    <ImageItem
-                        url={imageUrls[1]}
-                        aspectRatio={1}
-                        width={gridItemSize}
-                        height={gridItemSize}
-                        isDark={isDark}
-                        borderRadius={{ topRight: CORNER_RADIUS }}
+                    <MessageImage
+                        uri={imageUrls[1]}
+                        style={{ width: gridItemSize, height: gridItemSize }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(1)}
                     />
                 </View>
                 <View style={{ height: GRID_GAP }} />
                 {/* Bottom row */}
                 <View className="flex-row">
-                    <ImageItem
-                        url={imageUrls[2]}
-                        aspectRatio={1}
-                        width={gridItemSize}
-                        height={gridItemSize}
-                        isDark={isDark}
-                        borderRadius={{ bottomLeft: CORNER_RADIUS }}
+                     <MessageImage
+                        uri={imageUrls[2]}
+                        style={{ width: gridItemSize, height: gridItemSize }}
+                        borderRadius={0}
                         onPress={() => handleImagePress(2)}
                     />
                     <View style={{ width: GRID_GAP }} />
-                    <ImageItem
-                        url={imageUrls[3]}
-                        aspectRatio={1}
-                        width={gridItemSize}
-                        height={gridItemSize}
-                        isDark={isDark}
-                        borderRadius={{ bottomRight: CORNER_RADIUS }}
-                        onPress={() => handleImagePress(3)}
-                        overlay={extraCount > 0 ? (
-                            <View className="absolute inset-0 items-center justify-center bg-black/55">
+                    <View style={{ position: 'relative', width: gridItemSize, height: gridItemSize }}>
+                         <MessageImage
+                            uri={imageUrls[3]}
+                            style={{ width: gridItemSize, height: gridItemSize }}
+                            borderRadius={0}
+                            onPress={() => handleImagePress(3)}
+                        />
+                        {extraCount > 0 && (
+                            <View className="absolute inset-0 items-center justify-center bg-black/55" pointerEvents="none">
                                 <Text className="text-2xl font-bold text-white">+{extraCount}</Text>
                             </View>
-                        ) : undefined}
-                    />
+                        )}
+                    </View>
                 </View>
             </View>
         );
