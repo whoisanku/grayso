@@ -1114,7 +1114,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                 {/* Conditional header based on which view is active */}
                 {showAddMemberModal ? (
                   // Add Member Header
-                  <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+                  <View 
+                    className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
+                    style={{ paddingTop: insets.top + 16, paddingBottom: 16 }}
+                  >
                     <TouchableOpacity
                       onPress={() => setShowAddMemberModal(false)}
                       activeOpacity={0.85}
@@ -1133,7 +1136,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                   </View>
                 ) : (
                   // Group Members Header
-                  <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
+                  <View 
+                    className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
+                    style={{ paddingTop: insets.top + 16, paddingBottom: 16 }}
+                  >
                     <Text className="text-xl font-bold text-[#111] dark:text-white">
                       Group Members
                     </Text>
