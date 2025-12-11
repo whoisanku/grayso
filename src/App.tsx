@@ -1,3 +1,3 @@
 // Platform-specific App entry point
 // This file re-exports the platform-specific App component
-export { default } from './App.native';
+export { default } from './AppTest';

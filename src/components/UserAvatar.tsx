@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { View, Text, ViewStyle, ImageStyle } from "react-native";
 import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
@@ -30,6 +30,11 @@ export function UserAvatar({
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const [hasError, setHasError] = useState(false);
+
+  // Reset error state when URI changes
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
 
   // If we have a URI and haven't encountered an error, show the image
   if (uri && !hasError) {

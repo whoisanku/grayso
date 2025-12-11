@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { View, Text, Platform, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -34,6 +34,7 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
   const [galleryVisible, setGalleryVisible] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
+  const [hasAvatarError, setHasAvatarError] = useState(false);
 
   const extraData = (account?.extraData as Record<string, unknown> | undefined) ?? undefined;
 
@@ -44,6 +45,11 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
       (account?.publicKey ? getProfileImageUrl(account.publicKey) : FALLBACK_PROFILE_IMAGE)
     );
   }, [account?.publicKey, extraData]);
+
+  // Reset error state when avatar URL changes
+  useEffect(() => {
+    setHasAvatarError(false);
+  }, [avatarUrl]);
 
   const bannerUrl = useMemo(() => {
     return getExtraString(extraData, "FeaturedImageURL") || undefined;
@@ -138,7 +144,7 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
           activeOpacity={0.85}
           onPress={handleAvatarImagePress}
           onLongPress={onAvatarPress}
-          className="rounded-full -mt-12 mb-2"
+          className="rounded-full -mt-12 mb-2 items-center justify-center overflow-hidden"
           style={{
             width: 90,
             height: 90,
@@ -147,13 +153,26 @@ export function ProfileHeader({ account, onAvatarPress, showBackButton = false, 
             backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
           }}
         >
-          <Image
-            source={{ uri: avatarUrl }}
-            className="w-full h-full rounded-full"
-            contentFit="cover"
-            placeholder={DEFAULT_BLURHASH}
-            transition={300}
-          />
+          {!hasAvatarError ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              className="w-full h-full rounded-full"
+              contentFit="cover"
+              placeholder={DEFAULT_BLURHASH}
+              transition={300}
+              onError={() => setHasAvatarError(true)}
+            />
+          ) : (
+            <View
+              className="w-full h-full items-center justify-center bg-slate-200 dark:bg-slate-800"
+            >
+              <Text
+                className="text-4xl font-bold text-slate-500 dark:text-slate-400"
+              >
+                {(displayName || "?").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* Name and Username */}
