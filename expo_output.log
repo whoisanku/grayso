@@ -1,0 +1,30 @@
+Starting project at /app
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+The following packages should be updated for best compatibility with the installed expo version:
+  @expo/ui@0.2.0-beta.7 - expected version: ~0.2.0-beta.9
+  @shopify/flash-list@2.2.0 - expected version: 2.0.2
+  expo@54.0.25 - expected version: ~54.0.27
+  expo-auth-session@7.0.9 - expected version: ~7.0.10
+  expo-blur@15.0.7 - expected version: ~15.0.8
+  expo-clipboard@8.0.7 - expected version: ~8.0.8
+  expo-crypto@15.0.7 - expected version: ~15.0.8
+  expo-haptics@15.0.7 - expected version: ~15.0.8
+  expo-image-picker@17.0.8 - expected version: ~17.0.9
+  expo-status-bar@3.0.8 - expected version: ~3.0.9
+  expo-web-browser@15.0.9 - expected version: ~15.0.10
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web ./index.tsx ░░░░░░░░░░░░░░░░  0.0% (0/1)
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+| [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Web ./index.tsx ▓▓▓▓░░░░░░░░░░░░ 25.0% (168/375)
+ WARN  Attempted to import the module "/app/node_modules/@noble/hashes/crypto.js" which is not listed in the "exports" of "/app/node_modules/@noble/hashes" under the requested subpath "./crypto.js". Falling back to file-based resolution. Consider updating the call site or asking the package maintainer(s) to expose this API.
+Web ./index.tsx ▓▓▓▓▓▓░░░░░░░░░░ 42.2% (491/756)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓░░░░░░ 63.3% ( 860/1081)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 76.1% (1131/1300)
+Web ./index.tsx ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 81.1% (1533/1703)
+Web Bundled 20620ms index.tsx (1899 modules)
+ LOG  [web] Logs will appear in the browser console

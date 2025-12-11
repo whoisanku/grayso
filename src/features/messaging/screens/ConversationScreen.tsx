@@ -466,6 +466,18 @@ export function ConversationScreen({ navigation, route }: Props) {
   // --- UI State & Refs ---
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const scrollBarStyle = useMemo(
+    () =>
+      Platform.OS === "web"
+        ? ({
+            scrollbarWidth: "thin",
+            scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${
+              isDark ? "#0a0f1a" : "#ffffff"
+            }`,
+          } as any)
+        : undefined,
+    [isDark]
+  );
   const [actualBubbleHeight, setActualBubbleHeight] = useState<
     number | undefined
   >(undefined);
@@ -773,7 +785,7 @@ export function ConversationScreen({ navigation, route }: Props) {
         {/* Main content - limited width on web for better readability */}
         <View
           style={[
-            { flex: 1 },
+            { flex: 1, minHeight: 0 },
             Platform.OS === "web" && {
               maxWidth: 600,
               width: "100%",
@@ -781,7 +793,7 @@ export function ConversationScreen({ navigation, route }: Props) {
             },
           ]}
         >
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minHeight: 0 }}>
             {isLoading && messages.length === 0 ? (
               <View className="flex-1 items-center justify-center">
                 <ActivityIndicator size="large" color={accentColor} />
@@ -797,6 +809,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                 ListFooterComponent={topListHeader}
                 ListHeaderComponent={footer}
                 showsVerticalScrollIndicator={Platform.OS === "web"}
+                style={scrollBarStyle}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
                   paddingTop: 12,
@@ -920,7 +933,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       }}
                     >
                       <Feather
-                        name="chevron-up"
+                        name="chevron-down"
                         size={24}
                         color={isDark ? "#fff" : "#1f2937"}
                       />
@@ -939,7 +952,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       }}
                     >
                       <Feather
-                        name="chevron-up"
+                        name="chevron-down"
                         size={24}
                         color={isDark ? "#fff" : "#4b5563"}
                       />

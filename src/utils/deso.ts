@@ -5,10 +5,10 @@ import {
 import type { ProfileEntryResponse } from "deso-protocol";
 
 export const FALLBACK_PROFILE_IMAGE =
-  "https://images.deso.org/placeholder-profile-pic.png";
+  "https://node.deso.org/assets/img/default_profile_pic.png";
 
 export const FALLBACK_GROUP_IMAGE =
-  "https://images.deso.org/placeholder-profile-pic.png";
+  "https://node.deso.org/assets/img/default_profile_pic.png";
 
 export const formatPublicKey = (value: string) => {
   if (!value) {
