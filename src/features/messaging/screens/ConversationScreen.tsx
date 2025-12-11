@@ -36,7 +36,12 @@ import {
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { DeSoIdentityContext } from "react-deso-protocol";
 
-import { ChatType, DecryptedMessageEntryResponse } from "deso-protocol";
+import {
+  ChatType,
+  DecryptedMessageEntryResponse,
+  type ProfileEntryResponse,
+  type PublicKeyToProfileEntryResponseMap,
+} from "deso-protocol";
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
   SCROLL_TO_BOTTOM_THRESHOLD,
@@ -81,6 +86,17 @@ const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
+function looksLikePublicKeyTitle(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  // Common "formatted public key" variants seen in the UI.
+  if (v.includes("…") || v.includes("...")) {
+    return v.startsWith("BC1") || v.startsWith("tBC1");
+  }
+  // Raw DeSo public keys are long and start with BC1 (or testnet tBC1).
+  return /^t?BC1[1-9A-HJ-NP-Za-km-z]{20,}$/.test(v);
+}
+
 export function ConversationScreen({ navigation, route }: Props) {
   const { currentUser } = useContext(DeSoIdentityContext);
 
@@ -99,7 +115,8 @@ export function ConversationScreen({ navigation, route }: Props) {
   } = route.params;
 
   // Fallback to currentUser's public key if not provided in params
-  const userPublicKey = paramUserPublicKey || currentUser?.PublicKeyBase58Check || "";
+  const userPublicKey =
+    paramUserPublicKey || currentUser?.PublicKeyBase58Check || "";
 
   // Handle chatType string vs enum from params/query params
   const chatType = useMemo(() => {
@@ -239,6 +256,65 @@ export function ConversationScreen({ navigation, route }: Props) {
     initialGroupMembers,
     userPublicKey,
   });
+
+  // Ensure we always have fast display names (avoid showing public keys)
+  // by merging in any usernames we already know (from navigation params and group members).
+  const profilesForUi: PublicKeyToProfileEntryResponseMap = useMemo(() => {
+    const next: PublicKeyToProfileEntryResponseMap = { ...profiles };
+
+    const setUsername = (
+      pk: string | undefined,
+      username: string | null | undefined
+    ) => {
+      const u = username?.trim();
+      if (!pk || !u) return;
+      const existing = next[pk];
+      if (existing?.Username?.trim()) return;
+      next[pk] = {
+        ...(existing ?? ({} as ProfileEntryResponse)),
+        Username: u,
+      } as ProfileEntryResponse;
+    };
+
+    // Current user (useful for reply previews etc.)
+    setUsername(userPublicKey, currentUser?.ProfileEntryResponse?.Username);
+
+    // Direct chat: param-level username is the fastest.
+    const paramUsername = (
+      recipientInfo as { username?: string | null } | undefined
+    )?.username;
+    setUsername(counterPartyPublicKey, paramUsername);
+
+    // Prefer a fully-populated initialProfile if it contains a username.
+    if (initialProfile?.Username?.trim() && counterPartyPublicKey) {
+      const existing = next[counterPartyPublicKey];
+      if (!existing?.Username?.trim()) {
+        next[counterPartyPublicKey] = initialProfile;
+      }
+    }
+
+    // Group chats: seed from the group members list (GraphQL) and any initial members.
+    if (isGroupChat) {
+      for (const m of groupMembers ?? []) {
+        setUsername(m.publicKey, m.username);
+      }
+      for (const m of initialGroupMembers ?? []) {
+        setUsername(m.publicKey, m.username);
+      }
+    }
+
+    return next;
+  }, [
+    profiles,
+    userPublicKey,
+    currentUser?.ProfileEntryResponse?.Username,
+    recipientInfo,
+    counterPartyPublicKey,
+    initialProfile,
+    isGroupChat,
+    groupMembers,
+    initialGroupMembers,
+  ]);
 
   // Add Member Modal State
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -441,9 +517,9 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   // --- Render Helpers ---
 
-  const headerProfile = profiles[counterPartyPublicKey];
+  const headerProfile = profilesForUi[counterPartyPublicKey];
   const headerDisplayName = useMemo(() => {
-    if (title?.trim()) return title.trim();
+    if (title?.trim() && !looksLikePublicKeyTitle(title)) return title.trim();
     if (isGroupChat)
       return (
         recipientInfo?.AccessGroupKeyName || headerProfile?.Username || "Group"
@@ -500,7 +576,7 @@ export function ConversationScreen({ navigation, route }: Props) {
           previousMessage={previousMessage}
           nextMessage={nextMessage}
           previousTimestamp={previousTimestamp}
-          profiles={profiles}
+          profiles={profilesForUi}
           isGroupChat={isGroupChat}
           onReply={handleReply}
           onLongPress={handleMessageLongPress}
@@ -519,7 +595,7 @@ export function ConversationScreen({ navigation, route }: Props) {
       isDark,
       isGroupChat,
       messageIdMap,
-      profiles,
+      profilesForUi,
       bubbleLayoutsRef,
       messages,
       handleAvatarPress,
@@ -898,7 +974,7 @@ export function ConversationScreen({ navigation, route }: Props) {
             }
             replyToMessage={replyToMessage}
             onCancelReply={() => setReplyToMessage(null)}
-            profiles={profiles}
+            profiles={profilesForUi}
             editingMessage={editingMessage}
             editDraft={editDraft}
             onEditDraftChange={setEditDraft}
@@ -952,7 +1028,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       >
                         <SelectedBubblePreview
                           message={selectedMessage}
-                          profiles={profiles}
+                          profiles={profilesForUi}
                           isDark={isDark}
                           messageIdMap={messageIdMap}
                           layout={{
@@ -963,6 +1039,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                             const { height } = event.nativeEvent.layout;
                             setActualBubbleHeight(height);
                           }}
+                          isGroupChat={isGroupChat}
                         />
                       </Reanimated.View>
 

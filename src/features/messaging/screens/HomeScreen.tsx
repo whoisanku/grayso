@@ -130,6 +130,15 @@ const formatTimestamp = (timestampMs: number) => {
   });
 };
 
+function looksLikePublicKeyTitle(value: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  if (v.includes("…") || v.includes("...")) {
+    return v.startsWith("BC1") || v.startsWith("tBC1");
+  }
+  return /^t?BC1[1-9A-HJ-NP-Za-km-z]{20,}$/.test(v);
+}
+
 // Helper function to generate preview text for media messages
 const getMediaPreviewText = (
   extraData: Record<string, any> | undefined,
@@ -518,8 +527,15 @@ export function HomeScreen() {
         name: item.name,
       });
 
+      const threadPk = item.threadPublicKey || item.id;
+      const safeTitle =
+        item.name?.trim() && !looksLikePublicKeyTitle(item.name)
+          ? item.name.trim()
+          : undefined;
+      const profileKey = item.partyGroupOwnerPublicKeyBase58Check ?? threadPk;
+
       navigation.navigate("Conversation", {
-        threadPublicKey: item.threadPublicKey || item.id,
+        threadPublicKey: threadPk,
         chatType: item.chatType,
         userPublicKey: currentUser.PublicKeyBase58Check,
         threadAccessGroupKeyName: item.threadAccessGroupKeyName,
@@ -527,7 +543,7 @@ export function HomeScreen() {
         partyGroupOwnerPublicKeyBase58Check:
           item.partyGroupOwnerPublicKeyBase58Check,
         lastTimestampNanos: item.lastTimestampNanos,
-        title: item.name,
+        title: safeTitle,
         recipientInfo: item.recipientInfo,
         initialGroupMembers:
           item.isGroup && item.recipientInfo
@@ -535,7 +551,7 @@ export function HomeScreen() {
                 `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
               ]
             : undefined,
-        initialProfile: profiles[item.threadPublicKey], // Pass profile to avoid loading delay
+        initialProfile: profiles[profileKey], // Pass profile to avoid loading delay
       });
     },
     [currentUser?.PublicKeyBase58Check, navigation, profiles, groupMembers]
