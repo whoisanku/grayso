@@ -59,10 +59,12 @@ const ACCESS_GROUPS_QUERY = `
     $filter: AccessGroupFilter
     $first: Int
     $after: Cursor
+    $membersFirst: Int
+    $membersAfter: Cursor
   ) {
     accessGroups(filter: $filter, first: $first, after: $after) {
       nodes {
-        accessGroupMembers {
+        accessGroupMembers(first: $membersFirst, after: $membersAfter) {
           nodes {
             member {
               username
@@ -498,7 +500,7 @@ export async function fetchGroupMessagesViaGraphql({
 export async function fetchAccessGroupMembers({
   accessGroupKeyName,
   accessGroupOwnerPublicKey,
-  limit = 50,
+  limit = 100,
   afterCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
   DEFAULT_GRAPHQL_URL,
@@ -520,10 +522,12 @@ export async function fetchAccessGroupMembers({
 
   const variables: Record<string, unknown> = {
     filter,
+    first: 1, // We only need one access group
+    membersFirst: limit, // Set the limit for members
   };
 
-  if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
-    variables.first = 1;
+  if (afterCursor) {
+    variables.membersAfter = afterCursor;
   }
 
   const body = {
@@ -581,25 +585,39 @@ export async function fetchAccessGroupMembers({
   const membersConnection = firstAccessGroup.accessGroupMembers;
   const memberNodes = membersConnection.nodes ?? [];
 
-  const members = memberNodes
+  let members = memberNodes
     .map((node) => node.member)
     .filter((member): member is GroupMember => Boolean(member?.publicKey));
 
+  // Fetch all pages if there are more members
+  let currentCursor = membersConnection.pageInfo?.endCursor;
+  let hasMore = membersConnection.pageInfo?.hasNextPage ?? false;
+
+  while (hasMore && currentCursor) {
+    const nextPage = await fetchAccessGroupMembers({
+      accessGroupKeyName,
+      accessGroupOwnerPublicKey,
+      limit,
+      afterCursor: currentCursor,
+      graphqlEndpoint,
+    });
+
+    members = [...members, ...nextPage.members];
+    currentCursor = nextPage.pageInfo.endCursor;
+    hasMore = nextPage.pageInfo.hasNextPage;
+  }
+
   if (typeof __DEV__ !== "undefined" && __DEV__) {
-    // console.log("[fetchAccessGroupMembers] fetched members", {
-    //   count: members.length,
-    //   members,
-    // });
+    console.log("[fetchAccessGroupMembers] fetched members", {
+      count: members.length,
+    });
   }
 
   return {
     members,
     pageInfo: {
-      hasNextPage: Boolean(membersConnection.pageInfo?.hasNextPage),
-      endCursor:
-        typeof membersConnection.pageInfo?.endCursor === "string"
-          ? membersConnection.pageInfo.endCursor
-          : null,
+      hasNextPage: false, // We've fetched all pages
+      endCursor: null,
     },
     extraData: firstAccessGroup.extraData || null,
   };

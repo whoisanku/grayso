@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { GroupMember } from "@/lib/deso/graphql";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "@/constants/messaging";
@@ -43,15 +43,27 @@ export const useGroupMembers = ({
     queryKey: getGroupMembersQueryKey(threadAccessGroupKeyName, ownerKey),
     queryFn: () => fetchGroupMembers(threadAccessGroupKeyName, ownerKey),
     enabled: isGroupChat && !!ownerKey,
-    initialData: initialGroupMembers,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 30, // 30 seconds - reduced to ensure fresh data
   });
 
   const safeGroupMembers = useMemo(() => {
-    if (Array.isArray(groupMembers)) return groupMembers;
-    if (Array.isArray(initialGroupMembers)) return initialGroupMembers;
-    return [];
+    const result = Array.isArray(groupMembers) 
+      ? groupMembers 
+      : Array.isArray(initialGroupMembers) 
+        ? initialGroupMembers 
+        : [];
+    
+    console.log("[useGroupMembers] Current member count:", result.length);
+    return result;
   }, [groupMembers, initialGroupMembers]);
+
+  // Force refetch when modal opens to ensure fresh data
+  useEffect(() => {
+    if (showMembersModal && isGroupChat && ownerKey) {
+      console.log("[useGroupMembers] Modal opened - forcing refetch");
+      loadGroupMembers();
+    }
+  }, [showMembersModal, isGroupChat, ownerKey, loadGroupMembers]);
 
   const addMembers = useCallback(
     async (memberKeys: string[]) => {

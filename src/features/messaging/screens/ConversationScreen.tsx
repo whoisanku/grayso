@@ -668,9 +668,9 @@ export function ConversationScreen({ navigation, route }: Props) {
         <View
           // @ts-ignore - data attribute for CSS scroll lock
           dataSet={{ scrollLock: "true" }}
-          className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]"
+          className="flex-row items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]"
         >
-          <View className="flex-row items-center flex-1">
+          <View className="flex-row items-center flex-1 min-w-0">
             <TouchableOpacity
               onPress={() => {
                 if (navigation.canGoBack()) {
@@ -707,7 +707,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                 />
               )}
             </TouchableOpacity>
-            <View className="flex-1">
+            <View className="flex-1 min-w-0">
               <Text
                 numberOfLines={1}
                 ellipsizeMode="tail"
@@ -731,45 +731,56 @@ export function ConversationScreen({ navigation, route }: Props) {
               }
             }}
             activeOpacity={0.6}
-            className="flex-row items-center ml-2"
+            className="ml-2"
+            style={{ flexShrink: 0 }}
           >
             {isGroupChat ? (
-              <View className="flex-row">
-                {loadingMembers ||
-                (groupMembers.length === 0 && !headerAvatarUri)
-                  ? // Loading placeholders
-                    [0, 1, 2].map((i) => (
-                      <View
-                        key={`placeholder-${i}`}
-                        className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                          i > 0 ? "-ml-[15px]" : ""
-                        }`}
-                        style={{ zIndex: 3 - i }}
-                      />
-                    ))
-                  : groupMembers.slice(0, 3).map((member, index) => {
-                      const uri = member.profilePic
-                        ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
-                        : getProfileImageUrl(member.publicKey) ||
-                          FALLBACK_PROFILE_IMAGE;
-
-                      return (
+              <View className="flex-row items-center">
+                <View className="flex-row">
+                  {loadingMembers ||
+                  (groupMembers.length === 0 && !headerAvatarUri)
+                    ? // Loading placeholders
+                      [0, 1, 2].map((i) => (
                         <View
-                          key={member.publicKey}
+                          key={`placeholder-${i}`}
                           className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                            index > 0 ? "-ml-[15px]" : ""
+                            i > 0 ? "-ml-[15px]" : ""
                           }`}
-                          style={{ zIndex: 3 - index }}
-                        >
-                          <UserAvatar
-                            uri={uri}
-                            name={member.username || ""}
-                            size={36}
-                            className="h-full w-full rounded-full"
-                          />
-                        </View>
-                      );
-                    })}
+                          style={{ zIndex: 3 - i }}
+                        />
+                      ))
+                    : groupMembers.slice(0, 3).map((member, index) => {
+                        const uri = getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
+
+                        return (
+                          <View
+                            key={member.publicKey}
+                            className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                              index > 0 ? "-ml-[15px]" : ""
+                            }`}
+                            style={{ zIndex: 3 - index }}
+                          >
+                            <UserAvatar
+                              uri={uri}
+                              name={member.username || ""}
+                              size={36}
+                              className="h-full w-full rounded-full"
+                            />
+                          </View>
+                        );
+                      })}
+                </View>
+                {/* Show member count badge if more than 3 members */}
+                {!loadingMembers && groupMembers.length > 3 && (
+                  <View
+                    className="-ml-[10px] h-9 px-2.5 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 items-center justify-center"
+                    style={{ zIndex: -1 }}
+                  >
+                    <Text className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      +{groupMembers.length - 3}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <UserAvatar
@@ -1383,9 +1394,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                     })}
                     keyExtractor={(item) => item.publicKey}
                     renderItem={({ item: member }) => {
-                      const memberImageUrl = member.profilePic
-                        ? `https://node.deso.org/api/v0/get-single-profile-picture/${member.publicKey}?fallback=${member.profilePic}`
-                        : getProfileImageUrl(member.publicKey);
+                      const memberImageUrl = getProfileImageUrl(member.publicKey);
                       const isMe = member.publicKey === userPublicKey;
                       const isMemberOwner =
                         member.publicKey === recipientOwnerKey;
