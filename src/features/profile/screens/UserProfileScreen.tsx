@@ -1,5 +1,12 @@
 import React, { useMemo, useState, useCallback } from "react";
-import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Platform } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Platform,
+} from "react-native";
 import { useColorScheme } from "nativewind";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "@/navigation/types";
@@ -11,7 +18,12 @@ import { Toast } from "@/components/ui/Toast";
 import { FollowListModal } from "../components/FollowListModal";
 import { DesktopLeftNav } from "@/features/messaging/components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "@/features/messaging/components/desktop/DesktopRightNav";
-import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
+import {
+  CENTER_CONTENT_MAX_WIDTH,
+  useLayoutBreakpoints,
+} from "@/alf/breakpoints";
+import { MobileNav } from "@/navigation/MobileNav";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = NativeStackScreenProps<RootStackParamList, "UserProfile">;
 
@@ -21,9 +33,12 @@ export function UserProfileScreen({ route, navigation }: Props) {
   const isDark = colorScheme === "dark";
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
+  const insets = useSafeAreaInsets();
 
   const [isModalVisible, setModalVisible] = useState(false);
-  const [listTab, setListTab] = useState<"followers" | "following">("followers");
+  const [listTab, setListTab] = useState<"followers" | "following">(
+    "followers"
+  );
 
   // Use publicKey from route params directly
   const publicKey = routePublicKey;
@@ -73,30 +88,40 @@ export function UserProfileScreen({ route, navigation }: Props) {
   return (
     <>
       {isWebDesktop ? (
-        <View style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
+        <View
+          style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}
+        >
           <DesktopLeftNav />
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <View style={{
-              flex: 1,
-              width: '100%',
-              maxWidth: CENTER_CONTENT_MAX_WIDTH,
-              backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-              borderLeftWidth: 1,
-              borderRightWidth: 1,
-              borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
-            }}>
+          <View style={{ flex: 1, alignItems: "center" }}>
+            <View
+              style={{
+                flex: 1,
+                width: "100%",
+                maxWidth: CENTER_CONTENT_MAX_WIDTH,
+                backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+                borderLeftWidth: 1,
+                borderRightWidth: 1,
+                borderColor: isDark
+                  ? "rgba(148, 163, 184, 0.15)"
+                  : "rgba(148, 163, 184, 0.25)",
+              }}
+            >
               {renderContent()}
             </View>
           </View>
           <DesktopRightNav />
         </View>
       ) : (
-        <ScreenWrapper
-          backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
-          edges={['top', 'left', 'right']}
-        >
-          {renderContent()}
-        </ScreenWrapper>
+        <View style={{ flex: 1 }}>
+          <ScreenWrapper
+            backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
+            edges={["top", "left", "right"]}
+          >
+            {renderContent()}
+          </ScreenWrapper>
+          {/* Mobile bottom navigation (matches home tabs) */}
+          <MobileNav activeTab="Profile" />
+        </View>
       )}
 
       <FollowListModal
@@ -112,9 +137,12 @@ export function UserProfileScreen({ route, navigation }: Props) {
     if (!publicKey && !username) {
       return (
         <View style={{ flex: 1 }} className="items-center justify-center px-6">
-          <Text className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Profile not found</Text>
+          <Text className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+            Profile not found
+          </Text>
           <Text className="text-base text-center text-slate-500 dark:text-slate-400">
-            Unable to load this profile. The username or public key may be invalid.
+            Unable to load this profile. The username or public key may be
+            invalid.
           </Text>
         </View>
       );
@@ -122,7 +150,9 @@ export function UserProfileScreen({ route, navigation }: Props) {
 
     return (
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{
+          paddingBottom: 32 + 70 + Math.max(insets.bottom, 15),
+        }}
         refreshControl={
           Platform.OS !== "web" ? (
             <RefreshControl
@@ -136,12 +166,19 @@ export function UserProfileScreen({ route, navigation }: Props) {
       >
         {isLoading ? (
           <View className="flex-1 items-center justify-center py-16 px-4">
-            <ActivityIndicator size="small" color={isDark ? "#60a5fa" : "#3b82f6"} />
-            <Text className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading profile…</Text>
+            <ActivityIndicator
+              size="small"
+              color={isDark ? "#60a5fa" : "#3b82f6"}
+            />
+            <Text className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+              Loading profile…
+            </Text>
           </View>
         ) : error ? (
           <View className="rounded-2xl p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 mx-4">
-            <Text className="text-base font-semibold text-red-700 dark:text-red-300 mb-1">Unable to load profile</Text>
+            <Text className="text-base font-semibold text-red-700 dark:text-red-300 mb-1">
+              Unable to load profile
+            </Text>
             <Text className="text-sm text-red-600 dark:text-red-200 mb-3">
               {(error as Error)?.message || "Something went wrong."}
             </Text>
@@ -165,14 +202,15 @@ export function UserProfileScreen({ route, navigation }: Props) {
               Profile unavailable
             </Text>
             <Text className="text-sm text-slate-600 dark:text-slate-300">
-              We couldn't find profile details for this account yet. Pull to refresh or try again later.
+              We couldn't find profile details for this account yet. Pull to
+              refresh or try again later.
             </Text>
           </View>
         ) : (
           <>
             {/* Profile Header (includes bio) */}
-            <ProfileHeader 
-              account={account} 
+            <ProfileHeader
+              account={account}
               onAvatarPress={handleFollowersPress}
               showBackButton={true}
               onBackPress={() => navigation.goBack()}
@@ -180,8 +218,8 @@ export function UserProfileScreen({ route, navigation }: Props) {
 
             {/* Stats */}
             <View className="px-4 mt-3">
-              <ProfileStats 
-                followers={followerCount} 
+              <ProfileStats
+                followers={followerCount}
                 following={followingCount}
                 posts={0}
                 onFollowersPress={handleFollowersPress}
@@ -192,8 +230,13 @@ export function UserProfileScreen({ route, navigation }: Props) {
         )}
         {isFetching && !isLoading ? (
           <View className="flex-row items-center gap-2 mt-6">
-            <ActivityIndicator size="small" color={isDark ? "#94a3b8" : "#475569"} />
-            <Text className="text-sm text-slate-500 dark:text-slate-400">Updating…</Text>
+            <ActivityIndicator
+              size="small"
+              color={isDark ? "#94a3b8" : "#475569"}
+            />
+            <Text className="text-sm text-slate-500 dark:text-slate-400">
+              Updating…
+            </Text>
           </View>
         ) : null}
       </ScrollView>
