@@ -23,10 +23,21 @@ export function RootNavigator() {
   const [showSplash, setShowSplash] = useState(true);
   const [hasShownLoginToast, setHasShownLoginToast] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
+  const isInitialLoadRef = React.useRef(true);
 
   useEffect(() => {
     // Once we know the auth state (isLoading becomes false), fade out splash
     if (!isLoading && showSplash) {
+      // Mark initial load as complete
+      // If we have a user now, it means we restored a session (don't show toast)
+      if (isInitialLoadRef.current) {
+        if (currentUser) {
+          // If we have a user on first load, mark toast as "shown" (skipped)
+          setHasShownLoginToast(true);
+        }
+        isInitialLoadRef.current = false;
+      }
+
       // Small delay to ensure smooth transition
       const timer = setTimeout(() => {
         Animated.timing(fadeAnim, {
@@ -39,11 +50,11 @@ export function RootNavigator() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, showSplash, fadeAnim]);
+  }, [isLoading, showSplash, fadeAnim, currentUser]);
 
-  // Show login success toast when user logs in
+  // Show login success toast when user logs in (only for subsequent logins, not initial restore)
   useEffect(() => {
-    if (currentUser && !isLoading && !showSplash && !hasShownLoginToast) {
+    if (currentUser && !isLoading && !showSplash && !hasShownLoginToast && !isInitialLoadRef.current) {
       setHasShownLoginToast(true);
       Toast.show({
         type: 'success',

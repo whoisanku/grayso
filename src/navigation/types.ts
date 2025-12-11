@@ -3,8 +3,8 @@ import type { RouteProp, NavigatorScreenParams } from "@react-navigation/native"
 
 export type ConversationRouteParams = {
   threadPublicKey: string;
-  chatType: ChatType;
-  userPublicKey: string;
+  chatType?: ChatType;
+  userPublicKey?: string;
   threadAccessGroupKeyName?: string;
   userAccessGroupKeyName?: string;
   partyGroupOwnerPublicKeyBase58Check?: string;

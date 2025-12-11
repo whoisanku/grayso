@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -33,6 +34,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { DeSoIdentityContext } from "react-deso-protocol";
 
 import { ChatType, DecryptedMessageEntryResponse } from "deso-protocol";
 import {
@@ -80,10 +82,12 @@ const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
 
 export function ConversationScreen({ navigation, route }: Props) {
+  const { currentUser } = useContext(DeSoIdentityContext);
+
   const {
     threadPublicKey,
-    chatType,
-    userPublicKey,
+    chatType: paramChatType,
+    userPublicKey: paramUserPublicKey,
     threadAccessGroupKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
     userAccessGroupKeyName = DEFAULT_KEY_MESSAGING_GROUP_NAME,
     partyGroupOwnerPublicKeyBase58Check,
@@ -93,6 +97,20 @@ export function ConversationScreen({ navigation, route }: Props) {
     initialGroupMembers,
     initialProfile,
   } = route.params;
+
+  // Fallback to currentUser's public key if not provided in params
+  const userPublicKey = paramUserPublicKey || currentUser?.PublicKeyBase58Check || "";
+
+  // Handle chatType string vs enum from params/query params
+  const chatType = useMemo(() => {
+    if (!paramChatType) return ChatType.DM; // Default to DM
+    if (typeof paramChatType === "string") {
+      return (paramChatType as string).toUpperCase() === "GROUPCHAT"
+        ? ChatType.GROUPCHAT
+        : ChatType.DM;
+    }
+    return paramChatType;
+  }, [paramChatType]);
 
   const isGroupChat = chatType === ChatType.GROUPCHAT;
   const counterPartyPublicKey =
@@ -105,6 +123,8 @@ export function ConversationScreen({ navigation, route }: Props) {
   // For group chats: publicKey-accessGroupKeyName
   // For DMs: sorted public keys + DM suffix for consistent channel
   const conversationId = useMemo(() => {
+    if (!userPublicKey) return "";
+
     if (isGroupChat) {
       // Use accessGroupKeyName for group chats (matches HomeScreen ID format)
       return `${counterPartyPublicKey}-${threadAccessGroupKeyName}`;
@@ -564,7 +584,13 @@ export function ConversationScreen({ navigation, route }: Props) {
         >
           <View className="flex-row items-center flex-1">
             <TouchableOpacity
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate("Main");
+                }
+              }}
               className="mr-3"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
