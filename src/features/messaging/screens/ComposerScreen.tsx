@@ -265,15 +265,19 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const ToolbarButton = ({ 
     icon, 
     onPress, 
-    disabled = false 
+    disabled = false,
+    label,
   }: { 
     icon: keyof typeof Feather.glyphMap; 
     onPress: () => void; 
     disabled?: boolean;
+    label: string;
   }) => (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={{
         width: 44,
         height: 44,
@@ -301,10 +305,16 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     const toolbarContent = (
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
-          <ToolbarButton icon="image" onPress={pickImage} />
-          <ToolbarButton icon="camera" onPress={takePhoto} />
+          <ToolbarButton icon="image" onPress={pickImage} label="Choose photo from library" />
+          <ToolbarButton icon="camera" onPress={takePhoto} label="Take a photo" />
         </View>
-        <CircularProgressIndicator current={text.length} max={MAX_LENGTH} size={26} />
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${MAX_LENGTH - text.length} characters remaining`}
+          accessibilityValue={{ min: 0, max: MAX_LENGTH, now: text.length }}
+        >
+          <CircularProgressIndicator current={text.length} max={MAX_LENGTH} size={26} />
+        </View>
       </View>
     );
 
@@ -357,12 +367,15 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
       <View className="flex-1">
         {/* Custom Header */}
         <View
+          accessibilityRole="header"
           className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#0a0f1a]"
         >
           <TouchableOpacity
             onPress={onCancel}
             className="py-2"
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel post"
           >
             <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
           </TouchableOpacity>
@@ -372,6 +385,9 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
             disabled={!canPost || isPosting}
             className="rounded-full px-5 py-2"
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isPosting ? "Posting..." : "Submit post"}
+            accessibilityState={{ disabled: !canPost || isPosting }}
             style={
               canPost
                 ? {
@@ -422,6 +438,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
                   multiline
                   placeholder="What's happening?"
                   placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                  accessibilityLabel="Post content"
+                  accessibilityHint="Type your message here"
                   value={text}
                   onChangeText={setText}
                   maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
@@ -473,6 +491,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
                     <TouchableOpacity
                       onPress={() => removeImage(index)}
                       className="absolute right-2 top-2 rounded-full p-2"
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove image"
                       style={{
                         backgroundColor: "rgba(0,0,0,0.6)",
                       }}
