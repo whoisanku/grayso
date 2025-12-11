@@ -23,6 +23,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
+import { FlashList } from "@shopify/flash-list";
 import { UserAvatar } from "@/components/UserAvatar";
 
 import Reanimated from "react-native-reanimated";
@@ -583,22 +584,24 @@ export function ConversationScreen({ navigation, route }: Props) {
       const previousTimestamp = previousMessage?.MessageInfo?.TimestampNanos;
 
       return (
-        <MessageBubble
-          item={item}
-          previousMessage={previousMessage}
-          nextMessage={nextMessage}
-          previousTimestamp={previousTimestamp}
-          profiles={profilesForUi}
-          isGroupChat={isGroupChat}
-          onReply={handleReply}
-          onLongPress={handleMessageLongPress}
-          onBubbleMeasure={(id, layout) => {
-            bubbleLayoutsRef.current.set(id, layout);
-          }}
-          messageIdMap={messageIdMap}
-          isDark={isDark}
-          onAvatarPress={handleAvatarPress}
-        />
+        <View style={{ transform: [{ scaleY: -1 }] }}>
+          <MessageBubble
+            item={item}
+            previousMessage={previousMessage}
+            nextMessage={nextMessage}
+            previousTimestamp={previousTimestamp}
+            profiles={profilesForUi}
+            isGroupChat={isGroupChat}
+            onReply={handleReply}
+            onLongPress={handleMessageLongPress}
+            onBubbleMeasure={(id, layout) => {
+              bubbleLayoutsRef.current.set(id, layout);
+            }}
+            messageIdMap={messageIdMap}
+            isDark={isDark}
+            onAvatarPress={handleAvatarPress}
+          />
+        </View>
       );
     },
     [
@@ -637,7 +640,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     if (!hasMore) return null;
 
     return (
-      <View style={{ paddingVertical: 16, alignItems: "center" }}>
+      <View style={{ paddingVertical: 16, alignItems: "center", transform: [{ scaleY: -1 }] }}>
         <ActivityIndicator
           size="small"
           color={isDark ? "#94a3b8" : "#64748b"}
@@ -649,7 +652,7 @@ export function ConversationScreen({ navigation, route }: Props) {
   const footer = useMemo(() => {
     if (!error) return null;
     return (
-      <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+      <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3" style={{ transform: [{ scaleY: -1 }] }}>
         <Text className="text-sm font-medium text-red-900">{error}</Text>
       </View>
     );
@@ -810,17 +813,16 @@ export function ConversationScreen({ navigation, route }: Props) {
                 <ActivityIndicator size="large" color={accentColor} />
               </View>
             ) : (
-              <FlatList<DecryptedMessageEntryResponse>
+              <FlashList<DecryptedMessageEntryResponse>
                 ref={flatListRef}
                 data={displayMessages}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                inverted={true}
                 // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
                 ListFooterComponent={topListHeader}
                 ListHeaderComponent={footer}
                 showsVerticalScrollIndicator={Platform.OS === "web"}
-                style={scrollBarStyle}
+                style={[scrollBarStyle, { transform: [{ scaleY: -1 }] }]}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
                   paddingTop: 12,
@@ -833,8 +835,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                 }}
                 onEndReachedThreshold={0.3}
                 onScroll={(e) => {
-                  const { contentOffset, contentSize, layoutMeasurement } =
-                    e.nativeEvent;
+                  const { contentOffset } = e.nativeEvent;
                   const rawOffsetY = contentOffset.y;
 
                   // Track current scroll offset
@@ -854,12 +855,6 @@ export function ConversationScreen({ navigation, route }: Props) {
                 scrollEventThrottle={16}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
-                // Performance optimizations - especially important for web
-                windowSize={Platform.OS === "web" ? 21 : 11}
-                maxToRenderPerBatch={Platform.OS === "web" ? 5 : 10}
-                initialNumToRender={Platform.OS === "web" ? 15 : 20}
-                removeClippedSubviews={Platform.OS !== "web"}
-                updateCellsBatchingPeriod={Platform.OS === "web" ? 100 : 50}
                 ListEmptyComponent={() => (
                   <View
                     className="items-center justify-center px-6 py-10"
@@ -1227,7 +1222,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       </View>
                     </View>
 
-                    <FlatList
+                    <FlashList
                       data={searchResults}
                       extraData={addingMemberKey}
                       keyExtractor={(item) => item.publicKey}
@@ -1397,7 +1392,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                   </>
                 ) : (
                   // Group Members Content
-                  <FlatList
+                  <FlashList
                     data={[...groupMembers].sort((a, b) => {
                       // Put admin (owner) at the top
                       if (a.publicKey === recipientOwnerKey) return -1;

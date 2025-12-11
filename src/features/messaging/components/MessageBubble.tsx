@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useMemo } from "react";
+import React, { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { View, Text, Image, Keyboard, Platform, TouchableOpacity } from "react-native";
 import Reanimated, {
     useSharedValue,
@@ -190,6 +190,15 @@ export const MessageBubble = React.memo(function MessageBubble({
     const MAX_SWIPE = 80; // max translation
     const translateX = useSharedValue(0);
     const hasTriggeredHaptic = useSharedValue(false);
+
+    // Reset state when message changes (FlashList recycling)
+    useEffect(() => {
+        translateX.value = 0;
+        hasTriggeredHaptic.value = false;
+        setGalleryVisible(false);
+        setGalleryImages([]);
+        setGalleryInitialIndex(0);
+    }, [messageId, translateX, hasTriggeredHaptic]);
 
     const triggerHaptic = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
