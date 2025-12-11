@@ -1557,7 +1557,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
             return (
               <View style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
-                <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
+                <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
                   {membersModalContent}
                 </SafeAreaView>
               </View>
