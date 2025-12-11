@@ -1110,7 +1110,7 @@ export function ConversationScreen({ navigation, route }: Props) {
         >
           {(() => {
             const membersModalContent = (
-              <>
+              <View style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
                 {/* Conditional header based on which view is active */}
                 {showAddMemberModal ? (
                   // Add Member Header
@@ -1516,7 +1516,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                     }
                   />
                 )}
-              </>
+              </View>
             );
 
             if (isWebDesktop) {
