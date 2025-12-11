@@ -114,7 +114,9 @@ export const MessageBubble = React.memo(function MessageBubble({
     if (isGroupChat && senderProfile?.ExtraData?.LargeProfilePicURL) {
         avatarUri = `https://node.deso.org/api/v0/get-single-profile-picture/${senderPk}?fallback=${senderProfile.ExtraData.LargeProfilePicURL}`;
     } else {
-        avatarUri = getProfileImageUrl(senderPk, { groupChat: isGroupChat }) ?? FALLBACK_PROFILE_IMAGE;
+        // Fix: Don't pass groupChat: true here, as that generates a group avatar (initials)
+        // We want the user's personal profile picture
+        avatarUri = getProfileImageUrl(senderPk) ?? FALLBACK_PROFILE_IMAGE;
     }
     const hasAvatar = Boolean(avatarUri);
     const showDayDivider = shouldShowDayDivider(timestamp, previousTimestamp);
@@ -419,7 +421,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                             {/* Only show profile pic for received messages in GROUP chats */}
                             {!isMine && isGroupChat ? (
                                 <View className="mr-2" style={{ width: 32 }}>
-                                    {isLastInGroup && hasAvatar ? (
+                                    {isFirstInGroup && hasAvatar ? (
                                         <TouchableOpacity
                                             onPress={() => onAvatarPress?.(senderPk, senderProfile?.Username)}
                                             activeOpacity={0.7}
@@ -429,7 +431,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                                                 className="h-8 w-8 rounded-full bg-gray-200"
                                             />
                                         </TouchableOpacity>
-                                    ) : isLastInGroup ? (
+                                    ) : isFirstInGroup ? (
                                         <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
                                             <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
                                         </View>
@@ -454,14 +456,19 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 {/* Only show sender name in GROUP chats */}
                                 {!isMine && isGroupChat && isFirstInGroup && (
                                     <Text
-                                        className="mb-1 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                                        className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                                        style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
                                         numberOfLines={1}
                                     >
                                         {displayName}
                                     </Text>
                                 )}
                                 {renderReplyPreview()}
-                                <View style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}>
+                                <View style={{
+                                    marginHorizontal: isMediaOnly ? 0 : -16,
+                                    marginTop: isMediaOnly ? 0 : -12,
+                                    marginBottom: isMediaOnly ? 0 : 4
+                                }}>
                                     <FileAndMessageBubble
                                         decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
                                         extraData={extraData}

@@ -963,6 +963,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                             const { height } = event.nativeEvent.layout;
                             setActualBubbleHeight(height);
                           }}
+                          isGroupChat={isGroupChat}
                         />
                       </Reanimated.View>
 

@@ -128,6 +128,7 @@ type SelectedBubblePreviewProps = {
   messageIdMap?: Map<string, DecryptedMessageEntryResponse>;
   layout?: { width: number; height: number };
   onLayout?: (event: any) => void; // Callback to measure actual bubble height
+  isGroupChat?: boolean;
 };
 
 export function SelectedBubblePreview({
@@ -137,6 +138,7 @@ export function SelectedBubblePreview({
   messageIdMap,
   layout,
   onLayout,
+  isGroupChat,
 }: SelectedBubblePreviewProps) {
   const isMine = Boolean(message.IsSender);
   const text = getDisplayedMessageText(message) || "Message";
@@ -151,6 +153,12 @@ export function SelectedBubblePreview({
   // Media handling - components handle the rendering
   const decryptedImageURLs = extra?.decryptedImageURLs;
   const decryptedVideoURLs = extra?.decryptedVideoURLs;
+  const hasMedia = Boolean(decryptedImageURLs || decryptedVideoURLs);
+  const isMediaOnly = hasMedia && (!text || text.trim().length === 0);
+
+  const senderPk = message.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+  const senderProfile = profiles[senderPk];
+  const displayName = getProfileDisplayName(senderProfile, senderPk);
 
   // Reply logic
   const repliedToMessageId = extra?.RepliedToMessageId;
@@ -245,14 +253,31 @@ export function SelectedBubblePreview({
           shadowOffset: { width: 0, height: 8 },
           elevation: 12,
           justifyContent: "flex-start",
+          paddingHorizontal: isMediaOnly ? 0 : 16,
+          paddingVertical: isMediaOnly ? 0 : 12,
+          overflow: "hidden",
         }}
       >
-        {/* Username removed - only show message text like iMessage */}
+        {/* Only show sender name in GROUP chats */}
+        {!isMine && isGroupChat && (
+          <Text
+            className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+            style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+        )}
+
         {renderReplyPreview()}
 
         {/* Render media using same components as MessageBubble */}
         <View
-          style={{ marginHorizontal: -16, marginTop: -12, marginBottom: 4 }}
+          style={{
+            marginHorizontal: isMediaOnly ? 0 : -16,
+            marginTop: isMediaOnly ? 0 : -12,
+            marginBottom: isMediaOnly ? 0 : 4
+          }}
         >
           <FileAndMessageBubble
             decryptedImageURLs={
@@ -276,7 +301,7 @@ export function SelectedBubblePreview({
         </View>
 
         {/* WhatsApp-style: text + inline timestamp using nested Text */}
-        {text && text.trim().length > 0 && (
+        {(!isMediaOnly) && text && text.trim().length > 0 && (
           <Text
             className="text-[16px] leading-[22px]"
             style={
@@ -284,6 +309,8 @@ export function SelectedBubblePreview({
                 flexShrink: 1,
                 color: isMine ? onAccent : isDark ? "#e2e8f0" : "#0f172a",
                 marginTop: 4, // Spacing after media
+                paddingHorizontal: isMediaOnly ? 12 : 0,
+                marginBottom: isMediaOnly ? 12 : 0,
               } as any
             }
           >
@@ -298,20 +325,43 @@ export function SelectedBubblePreview({
         )}
 
         {/* Absolute positioned timestamp - matches MessageBubble.tsx */}
-        <Text
-          style={{
-            position: "absolute",
-            bottom: 12,
-            right: 12,
-            fontSize: 10,
-            color: isMine ? onAccent : isDark ? "#94a3b8" : "#94a3b8",
-          }}
-        >
-          {isEdited ? (
-            <Text style={{ fontStyle: "italic" }}>edited </Text>
-          ) : null}
-          {timestamp ? formatTimestamp(timestamp) : ""}
-        </Text>
+        {isMediaOnly ? (
+            // Media Only: Overlay with gradient
+            <View style={{ position: 'absolute', bottom: 0, right: 0, left: 0, height: 40, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+                <Text
+                    style={{
+                        fontSize: 10,
+                        color: "#ffffff",
+                        fontWeight: '500',
+                        marginRight: 12,
+                        marginBottom: 8,
+                        textShadowColor: 'rgba(0,0,0,0.5)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 2,
+                    }}
+                >
+                    {isEdited ? (
+                        <Text style={{ fontStyle: "italic" }}>edited </Text>
+                    ) : null}
+                    {timestamp ? formatTimestamp(timestamp) : ""}
+                </Text>
+            </View>
+        ) : (
+            <Text
+              style={{
+                position: "absolute",
+                bottom: 12,
+                right: 12,
+                fontSize: 10,
+                color: isMine ? onAccent : isDark ? "#94a3b8" : "#94a3b8",
+              }}
+            >
+              {isEdited ? (
+                <Text style={{ fontStyle: "italic" }}>edited </Text>
+              ) : null}
+              {timestamp ? formatTimestamp(timestamp) : ""}
+            </Text>
+        )}
       </View>
     </View>
   );
