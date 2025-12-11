@@ -1,1 +1,5 @@
 ## 2025-12-11 - Icon-only buttons missing accessibility labels\n**Learning:** The `ToolbarButton` component and other icon-based touchables were implemented without `accessibilityLabel` props, making them invisible to screen readers.\n**Action:** Always add an optional `label` prop to reusable icon-button components and enforce its usage via strict types or linting if possible.
+
+## 2025-12-11 - HitSlop on small absolute buttons
+**Learning:** Small absolute positioned buttons (like remove 'x' on images) often lack `hitSlop`, making them hard to press.
+**Action:** Always add `hitSlop` to small (<30dp) touchables.

@@ -669,6 +669,8 @@ export function ConversationScreen({ navigation, route }: Props) {
               }}
               className="mr-3"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
             >
               {LiquidGlassView ? (
                 <LiquidGlassView
@@ -719,6 +721,10 @@ export function ConversationScreen({ navigation, route }: Props) {
               }
             }}
             activeOpacity={0.6}
+            accessibilityLabel={
+              isGroupChat ? "Group members and settings" : "View profile"
+            }
+            accessibilityRole="button"
             className="flex-row items-center ml-2"
           >
             {isGroupChat ? (
@@ -907,6 +913,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                     }
                   }}
                   activeOpacity={0.8}
+                  accessibilityLabel="Scroll to bottom"
+                  accessibilityRole="button"
                 >
                   {LiquidGlassView ? (
                     <LiquidGlassView
@@ -1094,6 +1102,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                     <TouchableOpacity
                       onPress={() => setShowAddMemberModal(false)}
                       activeOpacity={0.85}
+                      accessibilityLabel="Back to members list"
+                      accessibilityRole="button"
                       style={modalIconButtonStyle}
                     >
                       <Feather
@@ -1118,6 +1128,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                         <TouchableOpacity
                           onPress={() => setShowAddMemberModal(true)}
                           activeOpacity={0.8}
+                          accessibilityLabel="Add new member"
+                          accessibilityRole="button"
                           style={[modalIconButtonStyle, { marginRight: 12 }]}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
@@ -1131,6 +1143,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                       <TouchableOpacity
                         onPress={() => setShowMembersModal(false)}
                         activeOpacity={0.8}
+                        accessibilityLabel="Close group members"
+                        accessibilityRole="button"
                         style={modalIconButtonStyle}
                       >
                         <Feather
@@ -1246,6 +1260,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                             <TouchableOpacity
                               onPress={() => handleAddMember(user)}
                               disabled={!!addingMemberKey}
+                              accessibilityLabel={`Add ${user.username || "user"}`}
+                              accessibilityRole="button"
                               style={{
                                 width: 36,
                                 height: 36,
@@ -1442,6 +1458,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                               }
                               className="rounded-full"
                               activeOpacity={0.8}
+                              accessibilityLabel={`Remove ${member.username || "member"}`}
+                              accessibilityRole="button"
                               style={{
                                 backgroundColor: accentSoft,
                                 width: 36,

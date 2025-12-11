@@ -532,6 +532,8 @@ export const Composer = React.memo(function Composer({
           onPress={handleCancelReply}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Cancel reply"
+          accessibilityRole="button"
           style={{
             width: 36,
             height: 36,
@@ -609,6 +611,8 @@ export const Composer = React.memo(function Composer({
           onPress={handleCancelEdit}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="Cancel editing"
+          accessibilityRole="button"
           style={{
             width: 36,
             height: 36,
@@ -940,6 +944,9 @@ export const Composer = React.memo(function Composer({
               <TouchableOpacity
                 onPress={() => handleRemoveImage(index)}
                 activeOpacity={0.8}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Remove image"
+                accessibilityRole="button"
                 style={{
                   position: "absolute",
                   top: -6,
@@ -981,6 +988,8 @@ export const Composer = React.memo(function Composer({
             onPress={handlePickImages}
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Add image"
+            accessibilityRole="button"
             style={{ alignSelf: "center", marginRight: 8 }}
           >
             <View
@@ -1057,6 +1066,9 @@ export const Composer = React.memo(function Composer({
             onPress={handleSendOrSave}
             disabled={isDisabled}
             activeOpacity={0.85}
+            accessibilityLabel={isEditMode ? "Save changes" : "Send message"}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isDisabled }}
             style={{ marginLeft: 8 }}
           >
             <View
