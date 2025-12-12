@@ -71,9 +71,16 @@ import {
   getConversationsQueryKey,
   fetchConversations,
 } from "@/state/queries/messages/list";
-import type { GroupMember } from "@/services/desoGraphql";
+import type { GroupMember } from "@/lib/deso/graphql";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
+
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
 
 // Navigation types
 type MessagesTabNavigationProp = BottomTabNavigationProp<
@@ -510,18 +517,18 @@ export function HomeScreen() {
 
   const handlePress = useCallback(
     (item: MockConversation) => {
-      console.log(
+      devLog(
         "[HomeScreen] handlePress called for item:",
         item.id,
         item.name
       );
 
       if (!currentUser?.PublicKeyBase58Check) {
-        console.log("[HomeScreen] No currentUser, aborting navigation");
+        devLog("[HomeScreen] No currentUser, aborting navigation");
         return;
       }
 
-      console.log("[HomeScreen] Navigating to conversation:", {
+      devLog("[HomeScreen] Navigating to conversation:", {
         threadPublicKey: item.threadPublicKey || item.id,
         chatType: item.chatType,
         name: item.name,
@@ -1107,13 +1114,13 @@ export function HomeScreen() {
             dataSet={{ virtualizedList: "true" }}
             className="flex-1"
           >
-            <FlashList
-              data={enhancedItems}
-              keyExtractor={(item) => item.id}
-              extraData={optimisticOverrides} // Force re-render when items move between mailboxes
-              className="flex-1"
-              showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => null}
+	            <FlashList
+	              data={enhancedItems}
+	              keyExtractor={(item) => item.id}
+	              extraData={optimisticOverrides} // Force re-render when items move between mailboxes
+	              className="flex-1"
+	              showsVerticalScrollIndicator={false}
+	              ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0
                   ? "flex-grow items-center justify-center px-4"
@@ -1385,12 +1392,12 @@ export function HomeScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <FlashList
-                    data={newChatResults}
-                    keyExtractor={(item) => item.publicKey}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    renderItem={({ item }) => (
+	                  <FlashList
+	                    data={newChatResults}
+	                    keyExtractor={(item) => item.publicKey}
+	                    keyboardShouldPersistTaps="handled"
+	                    showsVerticalScrollIndicator={false}
+	                    renderItem={({ item }) => (
                       <TouchableOpacity
                         style={{
                           flexDirection: "row",

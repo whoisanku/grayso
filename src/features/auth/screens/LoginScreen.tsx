@@ -16,16 +16,19 @@ import {
   useLayoutBreakpoints,
 } from "../../../alf/breakpoints";
 import { Toast } from "../../../components/ui/Toast";
+import { useAuthTransition } from "@/state/auth/AuthTransitionProvider";
 
 export function LoginScreen() {
   const { isDark } = useAccentColor();
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { startAuthTransition, endAuthTransition } = useAuthTransition();
 
   const handleLogin = async () => {
     try {
       setIsLoggingIn(true);
+      startAuthTransition("login");
       await identity.login();
       // Success handled by DeSoIdentityProvider
     } catch (error: any) {
@@ -47,6 +50,7 @@ export function LoginScreen() {
       }
     } finally {
       setIsLoggingIn(false);
+      endAuthTransition();
     }
   };
 

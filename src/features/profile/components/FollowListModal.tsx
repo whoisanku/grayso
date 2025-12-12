@@ -236,7 +236,7 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
       );
     }
 
-    return (
+      return (
       <FlashList
         data={data}
         renderItem={({ item }) => (

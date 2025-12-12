@@ -34,7 +34,10 @@ export async function clearAllStorage(): Promise<void> {
       await AsyncStorage.clear();
     }
 
-    console.log('[Auth] Storage cleared successfully');
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[Auth] Storage cleared successfully');
+    }
   } catch (error) {
     console.error('[Auth] Failed to clear storage:', error);
     throw error;

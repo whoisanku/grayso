@@ -1,6 +1,7 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Dimensions, Image } from "react-native";
+import { View, Text, TouchableOpacity, Dimensions, Image, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   DecryptedMessageEntryResponse,
   PublicKeyToProfileEntryResponseMap,
@@ -129,6 +130,9 @@ type SelectedBubblePreviewProps = {
   layout?: { width: number; height: number };
   onLayout?: (event: any) => void; // Callback to measure actual bubble height
   isGroupChat?: boolean;
+  showTail?: boolean;
+  isLastInGroup?: boolean; // NEW: For dynamic border radius
+  isFirstInGroup?: boolean; // NEW: For dynamic border radius
 };
 
 export function SelectedBubblePreview({
@@ -139,6 +143,9 @@ export function SelectedBubblePreview({
   layout,
   onLayout,
   isGroupChat,
+  showTail = true,
+  isLastInGroup = true, // Default to last (single message)
+  isFirstInGroup = true, // Default to first (single message)
 }: SelectedBubblePreviewProps) {
   const isMine = Boolean(message.IsSender);
   const text = getDisplayedMessageText(message) || "Message";
@@ -149,6 +156,32 @@ export function SelectedBubblePreview({
     isEditedValue(extra?.edited) || Boolean(extra?.editedMessage);
   const timestamp = message.MessageInfo?.TimestampNanos;
   const { accentColor, accentSoft, onAccent } = useAccentColor();
+  const bubbleBackgroundColor = isMine
+    ? accentColor
+    : isDark
+    ? "#1e2738"
+    : "#f8fafc";
+  const bubbleBorderColor = isDark
+    ? "rgba(255,255,255,0.08)"
+    : "rgba(0,0,0,0.06)";
+
+  // Dynamic border radius matching MessageBubble.tsx
+  const isOnlyMessage = isFirstInGroup && isLastInGroup;
+  const R = 22; // Large radius
+  const r = 4;  // Small radius
+
+  let borderRadiusStyle: any;
+  if (isOnlyMessage) {
+    borderRadiusStyle = { borderRadius: R };
+  } else if (isMine) {
+    if (isFirstInGroup) borderRadiusStyle = { borderTopLeftRadius: R, borderTopRightRadius: R, borderBottomLeftRadius: R, borderBottomRightRadius: r };
+    else if (isLastInGroup) borderRadiusStyle = { borderTopLeftRadius: R, borderTopRightRadius: r, borderBottomLeftRadius: R, borderBottomRightRadius: R };
+    else borderRadiusStyle = { borderTopLeftRadius: R, borderTopRightRadius: r, borderBottomLeftRadius: R, borderBottomRightRadius: r };
+  } else {
+    if (isFirstInGroup) borderRadiusStyle = { borderTopLeftRadius: R, borderTopRightRadius: R, borderBottomLeftRadius: r, borderBottomRightRadius: R };
+    else if (isLastInGroup) borderRadiusStyle = { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: R, borderBottomRightRadius: R };
+    else borderRadiusStyle = { borderTopLeftRadius: r, borderTopRightRadius: R, borderBottomLeftRadius: r, borderBottomRightRadius: R };
+  }
 
   // Media handling - components handle the rendering
   const decryptedImageURLs = extra?.decryptedImageURLs;
@@ -230,34 +263,29 @@ export function SelectedBubblePreview({
         maxWidth: layout?.width,
       }}
     >
-      <View
-        className="px-4 py-3"
-        onLayout={onLayout} // Measure actual bubble height
-        style={{
-          width: layout?.width,
-          borderRadius: 22,
-          borderWidth: isMine ? 0 : 0.5,
-          borderColor: isMine
-            ? "transparent"
-            : isDark
-            ? "rgba(255,255,255,0.08)"
-            : "rgba(0,0,0,0.06)",
-          backgroundColor: isMine
-            ? accentColor
-            : isDark
-            ? "#1e2738"
-            : "#f8fafc",
-          shadowColor: "#000",
-          shadowOpacity: isDark ? 0.4 : 0.15,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 12,
-          justifyContent: "flex-start",
-          paddingHorizontal: isMediaOnly ? 0 : 16,
-          paddingVertical: isMediaOnly ? 0 : 12,
-          overflow: "hidden",
-        }}
-      >
+      <View style={{ position: "relative" }}>
+        <View
+          onLayout={onLayout} // Measure actual bubble height
+          style={[
+            {
+              width: layout?.width,
+              maxWidth: Platform.OS === 'web' ? 320 : '80%', // Match MessageBubble
+              borderWidth: isMine ? 0 : 0.5,
+              borderColor: isMine ? "transparent" : bubbleBorderColor,
+              backgroundColor: bubbleBackgroundColor,
+              shadowColor: "#000",
+              shadowOpacity: isDark ? 0.2 : 0.05, // Match MessageBubble
+              shadowRadius: 2, // Match MessageBubble
+              shadowOffset: { width: 0, height: 1 }, // Match MessageBubble
+              elevation: 2,
+              justifyContent: "flex-start",
+              paddingHorizontal: isMediaOnly ? 0 : 16,
+              paddingVertical: isMediaOnly ? 0 : 12,
+              overflow: "hidden",
+            },
+            borderRadiusStyle, // Apply dynamic border radius
+          ]}
+        >
         {/* Only show sender name in GROUP chats */}
         {!isMine && isGroupChat && (
           <Text
@@ -271,14 +299,8 @@ export function SelectedBubblePreview({
 
         {renderReplyPreview()}
 
-        {/* Render media using same components as MessageBubble */}
-        <View
-          style={{
-            marginHorizontal: isMediaOnly ? 0 : -16,
-            marginTop: isMediaOnly ? 0 : -12,
-            marginBottom: isMediaOnly ? 0 : 4
-          }}
-        >
+        {/* Render media + text in a single vertical stack so spacing is consistent */}
+        <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
           <FileAndMessageBubble
             decryptedImageURLs={
               typeof decryptedImageURLs === "string"
@@ -288,6 +310,7 @@ export function SelectedBubblePreview({
             extraData={extra}
             isDark={isDark}
             onImagePress={() => {}} // No-op in preview
+            compact={isMediaOnly}
           />
           <VideoMessageBubble
             decryptedVideoURLs={
@@ -297,55 +320,69 @@ export function SelectedBubblePreview({
             }
             extraData={extra}
             isDark={isDark}
+            compact={isMediaOnly}
           />
-        </View>
 
-        {/* WhatsApp-style: text + inline timestamp using nested Text */}
-        {(!isMediaOnly) && text && text.trim().length > 0 && (
-          <Text
-            className="text-[16px] leading-[22px]"
-            style={
-              {
-                flexShrink: 1,
-                color: isMine ? onAccent : isDark ? "#e2e8f0" : "#0f172a",
-                marginTop: 4, // Spacing after media
-                paddingHorizontal: isMediaOnly ? 12 : 0,
-                marginBottom: isMediaOnly ? 12 : 0,
-              } as any
-            }
-          >
-            {text}
-            {/* Invisible spacer to ensure minimum gap before timestamp */}
-            <Text style={{ fontSize: 10, opacity: 0 }}>
-              {"  "}
-              {isEdited ? "edited " : ""}
-              {timestamp ? formatTimestamp(timestamp) : ""}
+          {/* WhatsApp-style: text + inline timestamp using nested Text */}
+          {(!isMediaOnly) && text && text.trim().length > 0 && (
+            <Text
+              className="text-[16px] leading-[22px]"
+              style={
+                {
+                  flexShrink: 1,
+                  color: isMine ? onAccent : isDark ? "#e2e8f0" : "#0f172a",
+                  paddingHorizontal: isMediaOnly ? 12 : 0,
+                  marginBottom: isMediaOnly ? 12 : 0,
+                } as any
+              }
+            >
+              {text}
+              {/* Invisible spacer to ensure minimum gap before timestamp */}
+              <Text style={{ fontSize: 10, opacity: 0 }}>
+                {"  "}
+                {isEdited ? "edited " : ""}
+                {timestamp ? formatTimestamp(timestamp) : ""}
+              </Text>
             </Text>
-          </Text>
-        )}
+          )}
+        </View>
 
         {/* Absolute positioned timestamp - matches MessageBubble.tsx */}
         {isMediaOnly ? (
-            // Media Only: Overlay with gradient
-            <View style={{ position: 'absolute', bottom: 0, right: 0, left: 0, height: 40, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-                <Text
-                    style={{
-                        fontSize: 10,
-                        color: "#ffffff",
-                        fontWeight: '500',
-                        marginRight: 12,
-                        marginBottom: 8,
-                        textShadowColor: 'rgba(0,0,0,0.5)',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 2,
-                    }}
-                >
-                    {isEdited ? (
-                        <Text style={{ fontStyle: "italic" }}>edited </Text>
-                    ) : null}
-                    {timestamp ? formatTimestamp(timestamp) : ""}
-                </Text>
-            </View>
+          <View
+            style={{
+              position: "absolute",
+              bottom: 0,
+              right: 0,
+              left: 0,
+              height: 40,
+              justifyContent: "flex-end",
+              alignItems: "flex-end",
+            }}
+          >
+            <LinearGradient
+              colors={["transparent", "rgba(0,0,0,0.6)"]}
+              style={{ position: "absolute", inset: 0 }}
+              pointerEvents="none"
+            />
+            <Text
+              style={{
+                fontSize: 10,
+                color: "#ffffff",
+                fontWeight: "500",
+                marginRight: 12,
+                marginBottom: 8,
+                textShadowColor: "rgba(0,0,0,0.5)",
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+              }}
+            >
+              {isEdited ? (
+                <Text style={{ fontStyle: "italic" }}>edited </Text>
+              ) : null}
+              {timestamp ? formatTimestamp(timestamp) : ""}
+            </Text>
+          </View>
         ) : (
             <Text
               style={{
@@ -362,6 +399,7 @@ export function SelectedBubblePreview({
               {timestamp ? formatTimestamp(timestamp) : ""}
             </Text>
         )}
+        </View>
       </View>
     </View>
   );

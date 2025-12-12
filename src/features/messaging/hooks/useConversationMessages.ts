@@ -19,7 +19,7 @@ import {
     DEFAULT_KEY_MESSAGING_GROUP_NAME,
 } from "@/constants/messaging";
 import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from "../../../utils/messageUtils";
-import { DeviceEventEmitter } from "react-native";
+import { DeviceEventEmitter, Platform } from "react-native";
 import { OUTGOING_MESSAGE_EVENT } from "@/constants/events";
 import { StorageService } from "@/lib/storage";
 import { getSupabaseClient, isSupabaseConfigured, type MessageBroadcastPayload } from "../../../lib/supabaseClient";
@@ -75,6 +75,7 @@ export const useConversationMessages = ({
     const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
     const profileCacheRef = useRef<Map<string, string>>(new Map());
     const hydratedRef = useRef(false);
+    const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isGroupChat = chatType === ChatType.GROUPCHAT;
     const counterPartyPublicKey = partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
@@ -86,68 +87,68 @@ export const useConversationMessages = ({
             next: DecryptedMessageEntryResponse[]
         ) => {
             const map = new Map<string, DecryptedMessageEntryResponse>();
-            const contentMap = new Map<string, number>(); // Track content+sender to detect duplicates
+            const contentLastTsMap = new Map<string, number>(); // Track sender+trimmed-content within 60s
+            const exactRecentTsMap = new Map<string, number[]>(); // Track exact sender+content within 5s
+
+            const contentWindowNanos = 60000 * 1e6;
+            const exactWindowNanos = 5000 * 1e6;
+
+            const getTimestampKey = (message: DecryptedMessageEntryResponse) =>
+                message.MessageInfo?.TimestampNanosString ??
+                String(message.MessageInfo?.TimestampNanos ?? "");
+
+            const getSenderKey = (message: DecryptedMessageEntryResponse) =>
+                message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
 
             const getContentKey = (message: DecryptedMessageEntryResponse) => {
                 const content = message.DecryptedMessage?.trim() ?? "";
-                const sender = message.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+                const sender = getSenderKey(message);
                 return `${sender}:${content}`;
             };
 
-            next.forEach((message) => {
-                const timestamp =
-                    message.MessageInfo?.TimestampNanosString ??
-                    String(message.MessageInfo?.TimestampNanos ?? "");
-                const senderKey =
-                    message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
-                const uniqueKey = `${timestamp}-${senderKey}`;
+            const getExactContentKey = (message: DecryptedMessageEntryResponse) => {
+                const content = message.DecryptedMessage ?? "";
+                const sender = getSenderKey(message);
+                return `${sender}:${content}`;
+            };
 
-                const contentKey = getContentKey(message);
-                const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
-                const existingTimestamp = contentMap.get(contentKey);
-
-                if (!existingTimestamp || Math.abs(msgTimestamp - existingTimestamp) > 60000 * 1e6) {
-                    map.set(uniqueKey, message);
-                    contentMap.set(contentKey, msgTimestamp);
-                }
-            });
-
-            prev.forEach((message) => {
-                const timestamp =
-                    message.MessageInfo?.TimestampNanosString ??
-                    String(message.MessageInfo?.TimestampNanos ?? "");
-                const senderKey =
-                    message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
-                const uniqueKey = `${timestamp}-${senderKey}`;
+            const tryInsert = (message: DecryptedMessageEntryResponse, fromNext: boolean) => {
+                const timestampKey = getTimestampKey(message);
+                const senderKey = getSenderKey(message);
+                const uniqueKey = `${timestampKey}-${senderKey}`;
 
                 if (map.has(uniqueKey)) return;
 
-                const contentKey = getContentKey(message);
                 const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
-                const existingTimestamp = contentMap.get(contentKey);
+                const contentKey = getContentKey(message);
+                const lastContentTimestamp = contentLastTsMap.get(contentKey);
 
-                if (existingTimestamp && Math.abs(msgTimestamp - existingTimestamp) < 60000 * 1e6) {
+                if (lastContentTimestamp != null) {
+                    const diff = Math.abs(msgTimestamp - lastContentTimestamp);
+                    if (fromNext ? diff <= contentWindowNanos : diff < contentWindowNanos) {
+                        return;
+                    }
+                }
+
+                const exactKey = getExactContentKey(message);
+                const recentExact = exactRecentTsMap.get(exactKey) ?? [];
+                const prunedExact = recentExact.filter(
+                    (ts) => Math.abs(msgTimestamp - ts) < exactWindowNanos
+                );
+
+                if (prunedExact.length > 0) {
                     return;
                 }
 
-                const isDuplicate = Array.from(map.values()).some((existing) => {
-                    const timeDiff = Math.abs(
-                        (existing.MessageInfo?.TimestampNanos ?? 0) -
-                        (message.MessageInfo?.TimestampNanos ?? 0)
-                    );
-                    return (
-                        existing.DecryptedMessage === message.DecryptedMessage &&
-                        existing.SenderInfo?.OwnerPublicKeyBase58Check ===
-                        message.SenderInfo?.OwnerPublicKeyBase58Check &&
-                        timeDiff < 5000 * 1e6
-                    );
-                });
+                prunedExact.push(msgTimestamp);
+                exactRecentTsMap.set(exactKey, prunedExact);
 
-                if (!isDuplicate) {
-                    map.set(uniqueKey, message);
-                    contentMap.set(contentKey, msgTimestamp);
-                }
-            });
+                map.set(uniqueKey, message);
+                contentLastTsMap.set(contentKey, msgTimestamp);
+            };
+
+            next.forEach((message) => tryInsert(message, true));
+            prev.forEach((message) => tryInsert(message, false));
 
             const sorted = normalizeAndSortMessages(Array.from(map.values()));
             return sorted.reverse();
@@ -373,11 +374,27 @@ export const useConversationMessages = ({
         })();
     }, [conversationId, queryClient]);
 
-    // Persist messages to local storage
+    // Persist recent messages to local storage (debounced + capped)
     useEffect(() => {
-        if (messages.length > 0) {
-            StorageService.saveChatHistory(conversationId, messages);
+        if (!messages.length) return;
+
+        const maxCachedMessages = Platform.OS === "web" ? 200 : 400;
+        const debounceMs = Platform.OS === "web" ? 1500 : 800;
+        const recentMessages = messages.slice(0, maxCachedMessages);
+
+        if (persistTimeoutRef.current) {
+            clearTimeout(persistTimeoutRef.current);
         }
+
+        persistTimeoutRef.current = setTimeout(() => {
+            StorageService.saveChatHistory(conversationId, recentMessages);
+        }, debounceMs);
+
+        return () => {
+            if (persistTimeoutRef.current) {
+                clearTimeout(persistTimeoutRef.current);
+            }
+        };
     }, [conversationId, messages]);
 
     const setMessagesSafe = useCallback(

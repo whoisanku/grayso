@@ -10,6 +10,8 @@ export type VideoMessageBubbleProps = {
   decryptedVideoURLs?: string;
   extraData?: Record<string, any> | null;
   isDark: boolean;
+  compact?: boolean;
+  borderRadius?: number;
 };
 
 type NormalizedVideoSource = {
@@ -76,6 +78,8 @@ export const VideoMessageBubble = React.memo(({
   decryptedVideoURLs, 
   extraData, 
   isDark,
+  compact = false,
+  borderRadius = 12,
 }: VideoMessageBubbleProps) => {
   let videoUrls = parseVideoUrls(decryptedVideoURLs);
   const metadata: Record<string, any> = extraData ?? {};
@@ -103,8 +107,13 @@ export const VideoMessageBubble = React.memo(({
     return null;
   }
 
+  const effectiveMaxWidth = Math.max(
+    0,
+    MAX_VIDEO_WIDTH - (compact ? 0 : 32)
+  ); // account for parent bubble horizontal padding
+
   return (
-    <View className="mb-2">
+    <View>
       {videoUrls.map((url, index) => {
         const normalized = normalizeVideoSource(url);
         const widthKey = `video.${index}.width`;
@@ -123,36 +132,48 @@ export const VideoMessageBubble = React.memo(({
           }
           
           return (
-             <MessageVideo
-               key={fallback.id || `${index}`}
-               uri={fallback.streamUrl}
-               posterUri={fallback.posterUrl}
-               width={videoWidth}
-               height={videoHeight}
-               maxWidth={MAX_VIDEO_WIDTH}
-               maxHeight={MAX_VIDEO_HEIGHT}
-               borderRadius={12}
-               isDark={isDark}
-               className={index < videoUrls.length - 1 ? "mb-3" : ""}
-             />
-          );
-        }
+  	             <MessageVideo
+  	               key={fallback.id || `${index}`}
+  	               uri={fallback.streamUrl}
+  	               posterUri={fallback.posterUrl}
+  	               width={videoWidth}
+  	               height={videoHeight}
+	               maxWidth={effectiveMaxWidth}
+  	               maxHeight={MAX_VIDEO_HEIGHT}
+		             borderRadius={compact ? 0 : borderRadius}
+		             isDark={isDark}
+		             className={
+	               index < videoUrls.length - 1
+	                 ? compact
+	                   ? "mb-1"
+	                   : "mb-3"
+	                 : ""
+	             }
+	           />
+	          );
+	        }
 
-        return (
-           <MessageVideo
-             key={normalized.id || url}
-             uri={normalized.streamUrl}
-             posterUri={normalized.posterUrl}
-             width={videoWidth}
-             height={videoHeight}
-             maxWidth={MAX_VIDEO_WIDTH}
-             maxHeight={MAX_VIDEO_HEIGHT}
-             borderRadius={12}
-             isDark={isDark}
-             className={index < videoUrls.length - 1 ? "mb-3" : ""}
-           />
-        );
-      })}
+	        return (
+		           <MessageVideo
+		             key={normalized.id || url}
+		             uri={normalized.streamUrl}
+		             posterUri={normalized.posterUrl}
+	             width={videoWidth}
+	             height={videoHeight}
+	             maxWidth={effectiveMaxWidth}
+	             maxHeight={MAX_VIDEO_HEIGHT}
+		             borderRadius={compact ? 0 : borderRadius}
+		             isDark={isDark}
+		             className={
+	               index < videoUrls.length - 1
+	                 ? compact
+	                   ? "mb-1"
+	                   : "mb-3"
+	                 : ""
+	             }
+	           />
+	        );
+	      })}
     </View>
   );
 });

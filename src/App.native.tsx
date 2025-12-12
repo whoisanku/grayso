@@ -23,23 +23,31 @@ import { queryClient } from "./state/queryClient";
 import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 import { AppearanceProvider } from "./state/theme/useAppearance";
 import { AppToast } from "./components/ui/Toast";
+import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
 
 WebBrowser.maybeCompleteAuthSession();
+
+const devLog = (...args: unknown[]) => {
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
 
 const redirectUri = AuthSession.makeRedirectUri({ useProxy: true } as any);
 
 configure({
   redirectURI: redirectUri,
   identityPresenter: async (url) => {
-    console.log("Opening auth session with URL:", url);
+    devLog("Opening auth session with URL:", url);
     const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-    console.log("Auth session result:", result);
+    devLog("Auth session result:", result);
     if (result.type === "success") {
-      console.log("Handling redirect URI:", result.url);
+      devLog("Handling redirect URI:", result.url);
       await identity.handleRedirectURI(result.url);
-      console.log("Redirect URI handled successfully");
+      devLog("Redirect URI handled successfully");
     } else {
-      console.log("Auth session was not successful:", result.type);
+      devLog("Auth session was not successful:", result.type);
     }
   },
   storageProvider: AsyncStorage,
@@ -52,28 +60,30 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppearanceProvider>
-        <AppThemeProvider>
-          <DeSoIdentityProvider>
-            <CryptoPolyfill />
-            <SafeAreaProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                  <StatusBar
-                    style={colorScheme === "dark" ? "light" : "dark"}
-                  />
-                  <NavigationContainer
-                    theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                  >
-                    <RootNavigator />
-                  </NavigationContainer>
-                </KeyboardProvider>
-                <AppToast />
-              </GestureHandlerRootView>
-            </SafeAreaProvider>
-          </DeSoIdentityProvider>
-        </AppThemeProvider>
-      </AppearanceProvider>
+      <AuthTransitionProvider>
+        <AppearanceProvider>
+          <AppThemeProvider>
+            <DeSoIdentityProvider>
+              <CryptoPolyfill />
+              <SafeAreaProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+                    <StatusBar
+                      style={colorScheme === "dark" ? "light" : "dark"}
+                    />
+                    <NavigationContainer
+                      theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                    >
+                      <RootNavigator />
+                    </NavigationContainer>
+                  </KeyboardProvider>
+                  <AppToast />
+                </GestureHandlerRootView>
+              </SafeAreaProvider>
+            </DeSoIdentityProvider>
+          </AppThemeProvider>
+        </AppearanceProvider>
+      </AuthTransitionProvider>
     </QueryClientProvider>
   );
 }

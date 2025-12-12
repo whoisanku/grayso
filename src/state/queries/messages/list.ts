@@ -9,7 +9,7 @@ import {
   getConversationsFromFocusGraphql,
   getSpamConversationsFromFocusGraphql,
 } from "@/features/messaging/api/conversations";
-import { GroupMember } from "../../../services/desoGraphql";
+import type { GroupMember } from "@/lib/deso/graphql";
 
 export const getConversationsQueryKey = (
   userPublicKey?: string,

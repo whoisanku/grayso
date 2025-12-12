@@ -13,11 +13,14 @@ export type MessageImageProps = {
   onPress?: () => void;
   className?: string;
   style?: any; // Allow explicit style overrides
+  contentFit?: "cover" | "contain";
+  forceSquare?: boolean;
 };
 
 const DEFAULT_ASPECT_RATIO = 1;
 const MIN_ASPECT_RATIO = 0.5; // Don't let it get too tall
 const MAX_ASPECT_RATIO = 3;   // Don't let it get too wide/short
+const MIN_HEIGHT_RATIO = 0.55; // Keep thumbnails visually uniform
 
 export const MessageImage = React.memo(({
   uri,
@@ -28,7 +31,9 @@ export const MessageImage = React.memo(({
   borderRadius = 12,
   onPress,
   className,
-  style
+  style,
+  contentFit = "cover",
+  forceSquare = false,
 }: MessageImageProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
@@ -37,24 +42,15 @@ export const MessageImage = React.memo(({
     ? Math.min(MAX_ASPECT_RATIO, Math.max(MIN_ASPECT_RATIO, width / height))
     : DEFAULT_ASPECT_RATIO;
 
-  let finalWidth: number;
-  let finalHeight: number;
+  // Use a fixed width thumbnail for chat alignment.
+  const targetWidth = maxWidth;
+  const minHeight = Math.min(maxHeight, maxWidth * MIN_HEIGHT_RATIO);
+  const rawHeight = targetWidth / aspectRatio;
 
-  if (aspectRatio > 1) {
-    // Landscape
-    finalWidth = maxWidth;
-    finalHeight = maxWidth / aspectRatio;
-  } else {
-    // Portrait or Square
-    finalHeight = Math.min(maxHeight, maxWidth / aspectRatio);
-    finalWidth = finalHeight * aspectRatio;
-  }
-
-  // Ensure we don't exceed bounds (double check)
-  if (finalWidth > maxWidth) {
-    finalWidth = maxWidth;
-    finalHeight = finalWidth / aspectRatio;
-  }
+  const finalWidth = forceSquare ? targetWidth : targetWidth;
+  const finalHeight = forceSquare
+    ? Math.min(maxHeight, targetWidth)
+    : Math.min(maxHeight, Math.max(minHeight, rawHeight));
 
   // If style has explicit width/height, use them?
   // Actually, we pass the calculated dimensions to the style. 
@@ -80,7 +76,7 @@ export const MessageImage = React.memo(({
       <Image
         source={{ uri }}
         style={{ width: '100%', height: '100%' }}
-        contentFit="cover"
+        contentFit={contentFit}
         transition={200}
         cachePolicy="memory-disk"
         onLoad={() => setIsLoading(false)}

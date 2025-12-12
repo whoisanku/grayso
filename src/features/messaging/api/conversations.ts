@@ -22,14 +22,22 @@ import {
 } from "@/lib/deso/api";
 import {
   buildDefaultProfileEntry,
+  fetchAccessGroupMembers,
   fetchDmMessagesViaGraphql,
   fetchGroupMessagesViaGraphql,
+  GroupMember,
   normalizeTimestampToNanos,
 } from "@/lib/deso/graphql";
 import { fetchInboxMessageThreads } from "@/lib/focus/graphql";
-import { fetchAccessGroupMembers, GroupMember } from "@/services/desoGraphql";
 
 const USER_TO_SEND_MESSAGE_TO = ""; // Add a public key here
+
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
 
 export type Conversation = {
   firstMessagePublicKey: string;
@@ -448,7 +456,11 @@ export const getSpamConversationsFromFocusGraphql = async (
   groupMembers: Record<string, GroupMember[]>;
   groupExtraData: Record<string, Record<string, string> | null>;
 }> => {
-  console.log('[SPAM DEBUG] Fetching spam conversations', { userPublicKeyBase58Check, offset, first });
+  devLog("[SPAM DEBUG] Fetching spam conversations", {
+    userPublicKeyBase58Check,
+    offset,
+    first,
+  });
   
   const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
     userPublicKey: userPublicKeyBase58Check,
@@ -457,11 +469,11 @@ export const getSpamConversationsFromFocusGraphql = async (
     offset,
   });
 
-  console.log('[SPAM DEBUG] Received thread nodes:', threadNodes.length);
+  devLog("[SPAM DEBUG] Received thread nodes:", threadNodes.length);
   
   // Log isSpam values for all threads to understand what the API returns
   threadNodes.forEach((thread, index) => {
-    console.log(`[SPAM DEBUG] Thread ${index}:`, {
+    devLog(`[SPAM DEBUG] Thread ${index}:`, {
       threadIdentifier: thread.threadIdentifier,
       isSpam: thread.isSpam,
       isSpamType: typeof thread.isSpam,
@@ -483,7 +495,12 @@ export const getSpamConversationsFromFocusGraphql = async (
       // Spam filters OUT non-spam (thread.isSpam !== true)
       // This keeps only threads where isSpam is explicitly true
       if (!thread.isSpam) {
-        console.log('[SPAM DEBUG] Filtering out non-spam thread (isSpam =', thread.isSpam, '):', thread.threadIdentifier);
+        devLog(
+          "[SPAM DEBUG] Filtering out non-spam thread (isSpam =",
+          thread.isSpam,
+          "):",
+          thread.threadIdentifier
+        );
         return null;
       }
 
@@ -619,13 +636,13 @@ export const getSpamConversationsFromFocusGraphql = async (
         Boolean(message?.MessageInfo?.EncryptedText)
     );
 
-  console.log('[SPAM DEBUG] Raw messages after filtering:', rawMessages.length);
+  devLog("[SPAM DEBUG] Raw messages after filtering:", rawMessages.length);
   if (rawMessages.length > 0) {
-    console.log('[SPAM DEBUG] First raw message:', rawMessages[0]);
+    devLog("[SPAM DEBUG] First raw message:", rawMessages[0]);
   }
 
   if (rawMessages.length === 0) {
-    console.log('[SPAM DEBUG] No raw messages found, returning empty');
+    devLog("[SPAM DEBUG] No raw messages found, returning empty");
     return {
       conversations: {},
       publicKeyToProfileEntryResponseMap,
@@ -645,15 +662,18 @@ export const getSpamConversationsFromFocusGraphql = async (
       allAccessGroups
     );
 
-  console.log('[SPAM DEBUG] Decrypted messages:', decrypted.length);
+  devLog("[SPAM DEBUG] Decrypted messages:", decrypted.length);
   if (decrypted.length > 0) {
-    console.log('[SPAM DEBUG] First decrypted message:', decrypted[0]);
+    devLog("[SPAM DEBUG] First decrypted message:", decrypted[0]);
   }
 
   const conversations = buildConversationMapFromMessages(decrypted);
 
-  console.log('[SPAM DEBUG] Final conversations count:', Object.keys(conversations).length);
-  console.log('[SPAM DEBUG] Conversation keys:', Object.keys(conversations));
+  devLog(
+    "[SPAM DEBUG] Final conversations count:",
+    Object.keys(conversations).length
+  );
+  devLog("[SPAM DEBUG] Conversation keys:", Object.keys(conversations));
 
   return {
     conversations,
@@ -864,7 +884,7 @@ export const encryptAndSendNewMessage = async (
     return Promise.reject("sender must use default key for now");
   }
 
-  console.log("[encryptAndSendNewMessage] Inputs:", {
+  devLog("[encryptAndSendNewMessage] Inputs:", {
     messageToSend,
     senderPublicKeyBase58Check,
     RecipientPublicKeyBase58Check,
@@ -887,7 +907,7 @@ export const encryptAndSendNewMessage = async (
     return Promise.reject("SenderAccessGroupKeyName is undefined");
   }
 
-  console.log("[encryptAndSendNewMessage] checkPartyAccessGroups response:", response);
+  devLog("[encryptAndSendNewMessage] checkPartyAccessGroups response:", response);
 
   let message: string;
   let isUnencrypted = false;

@@ -1,13 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Animated, StyleSheet, Platform } from 'react-native';
 
 interface TypingIndicatorProps {
-  label?: string;
+  label?: string; // Kept for backwards compatibility but not used
   isDark?: boolean;
 }
 
 export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ 
-  label = 'Typing...', 
   isDark = true 
 }) => {
   const dot1 = useRef(new Animated.Value(0)).current;
@@ -20,41 +19,63 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
         Animated.sequence([
           Animated.delay(delay),
           Animated.timing(dot, {
-            toValue: -6,
-            duration: 300,
+            toValue: -4,
+            duration: 400,
             useNativeDriver: true,
           }),
           Animated.timing(dot, {
             toValue: 0,
-            duration: 300,
+            duration: 400,
             useNativeDriver: true,
           }),
-          Animated.delay(600 - delay), // Adjust to complete the cycle
+          Animated.delay(600 - delay),
         ])
       );
     };
 
-    const animation1 = createBounce(dot1, 0);
-    const animation2 = createBounce(dot2, 150);
-    const animation3 = createBounce(dot3, 300);
+    const animation = Animated.parallel([
+      createBounce(dot1, 0),
+      createBounce(dot2, 150),
+      createBounce(dot3, 300),
+    ]);
 
-    animation1.start();
-    animation2.start();
-    animation3.start();
+    animation.start();
 
-    return () => {
-      animation1.stop();
-      animation2.stop();
-      animation3.stop();
-    };
+    return () => animation.stop();
   }, [dot1, dot2, dot3]);
 
-  const dotColor = isDark ? '#94a3b8' : '#64748b'; // slate-400/500
-  const textColor = isDark ? '#94a3b8' : '#64748b';
-  const bgColor = isDark ? 'rgba(30, 41, 59, 0.8)' : 'rgba(241, 245, 249, 0.9)'; // slate-800/100
+  // Chat bubble styling matching MessageBubble for received messages
+  const bubbleBackgroundColor = isDark ? '#1e2738' : '#f8fafc';
+  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const dotColor = isDark ? '#94a3b8' : '#64748b';
 
   return (
-    <View style={[styles.container, { backgroundColor: bgColor }]}>
+    <View 
+      style={[
+        styles.bubble,
+        {
+          backgroundColor: bubbleBackgroundColor,
+          borderColor: borderColor,
+          // Match the dynamic border radius from MessageBubble (R=22)
+          borderRadius: 22,
+          // Add shadow like MessageBubble
+          ...Platform.select({
+            web: {
+              boxShadow: isDark 
+                ? '0 2px 8px rgba(0, 0, 0, 0.3)' 
+                : '0 1px 4px rgba(0, 0, 0, 0.08)',
+            } as any,
+            default: {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: isDark ? 0.2 : 0.05,
+              shadowRadius: 2,
+              elevation: 2,
+            },
+          }),
+        }
+      ]}
+    >
       <View style={styles.dotsContainer}>
         <Animated.View
           style={[
@@ -75,38 +96,31 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
           ]}
         />
       </View>
-      <Text style={[styles.label, { color: textColor }]}>{label}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
+  bubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     alignSelf: 'flex-start',
     marginLeft: 16,
     marginBottom: 8,
+    borderWidth: 0.5,
+    maxWidth: Platform.OS === 'web' ? 320 : '80%',
   },
   dotsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
-    height: 16,
+    justifyContent: 'center',
+    height: 18,
   },
   dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    marginHorizontal: 2,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: 0.2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 3,
   },
 });
 

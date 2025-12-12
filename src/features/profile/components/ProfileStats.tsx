@@ -1,6 +1,5 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import { useColorScheme } from "nativewind";
 
 const formatCount = (value?: number | null) => {
   if (value === null || value === undefined) return "0";
@@ -33,12 +32,8 @@ export function ProfileStats({
   onFollowersPress,
   onFollowingPress 
 }: StatProps) {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
-
   const followerCount = followers ?? 0;
   const followingCount = following ?? 0;
-  const postCount = posts ?? 0;
 
   return (
     <View 

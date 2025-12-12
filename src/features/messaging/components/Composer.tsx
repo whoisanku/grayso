@@ -77,6 +77,13 @@ export type ComposerProps = {
   isSendingEphemeral?: boolean;
 };
 
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
 const extractVideoId = (url: string): string | null => {
   try {
     const parsed = new URL(url);
@@ -395,7 +402,7 @@ export const Composer = React.memo(function Composer({
         // Broadcast message via Supabase for instant delivery when both users are online
         try {
           const broadcastChannel = `messages-${conversationId}`;
-          console.log("[Composer] Broadcasting to channel:", broadcastChannel);
+          devLog("[Composer] Broadcasting to channel:", broadcastChannel);
 
           await broadcastMessageUpdate(
             {
@@ -418,7 +425,7 @@ export const Composer = React.memo(function Composer({
             undefined, // default event
             { keepAlive: true } // Keep channel open for useConversationMessages
           );
-          console.log("[Composer] Message broadcast via Supabase successfully");
+          devLog("[Composer] Message broadcast via Supabase successfully");
         } catch (broadcastError) {
           console.warn(
             "[Composer] Supabase broadcast failed (message still sent to blockchain):",
@@ -774,7 +781,7 @@ export const Composer = React.memo(function Composer({
         // Broadcast message via Supabase for instant delivery when both users are online
         try {
           const broadcastChannel = `messages-${conversationId}`;
-          console.log("[Composer] Broadcasting to channel:", broadcastChannel);
+          devLog("[Composer] Broadcasting to channel:", broadcastChannel);
 
           await broadcastMessageUpdate(
             {
@@ -797,7 +804,7 @@ export const Composer = React.memo(function Composer({
             undefined,
             { keepAlive: true }
           );
-          console.log("[Composer] Message broadcast via Supabase successfully");
+          devLog("[Composer] Message broadcast via Supabase successfully");
         } catch (broadcastError) {
           console.warn(
             "[Composer] Supabase broadcast failed (message still sent to blockchain):",

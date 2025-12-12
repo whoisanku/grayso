@@ -22,6 +22,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Image } from "expo-image";
 import { UserAvatar } from "@/components/UserAvatar";
 
@@ -45,12 +46,14 @@ import {
 import {
   DEFAULT_KEY_MESSAGING_GROUP_NAME,
   SCROLL_TO_BOTTOM_THRESHOLD,
+  MESSAGE_GROUPING_WINDOW_NS,
 } from "@/constants/messaging";
 import {
   FALLBACK_PROFILE_IMAGE,
   getProfileDisplayName,
   getProfileImageUrl,
 } from "@/utils/deso";
+import { getMessageId } from "@/utils/messageUtils";
 import type { RootStackParamList } from "@/navigation/types";
 import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
 
@@ -82,6 +85,13 @@ import {
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
 
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
@@ -99,6 +109,9 @@ function looksLikePublicKeyTitle(value: string): boolean {
 
 export function ConversationScreen({ navigation, route }: Props) {
   const { currentUser } = useContext(DeSoIdentityContext);
+
+  const enableFlashListChat =
+    process.env.EXPO_PUBLIC_ENABLE_FLASHLIST_CHAT === "true";
 
   const {
     threadPublicKey,
@@ -237,6 +250,21 @@ export function ConversationScreen({ navigation, route }: Props) {
     recipientInfo,
     setMessages,
   });
+
+  const selectedShowTail = useMemo(() => {
+    if (!selectedMessage) return true;
+    const index = messages.indexOf(selectedMessage);
+    if (index < 0) return true;
+    const nextMessage = index > 0 ? messages[index - 1] : undefined;
+    const timestamp = selectedMessage.MessageInfo?.TimestampNanos;
+    const isNextSameSender = nextMessage?.IsSender === selectedMessage.IsSender;
+    const isNextClose =
+      nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
+        ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) <
+          MESSAGE_GROUPING_WINDOW_NS
+        : false;
+    return !isNextSameSender || !isNextClose;
+  }, [messages, selectedMessage]);
 
   const {
     groupMembers,
@@ -423,7 +451,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   // Debug logging
   useEffect(() => {
-    console.log("[ConversationScreen] Presence Debug:", {
+    devLog("[ConversationScreen] Presence Debug:", {
       isGroupChat,
       conversationId,
       userPublicKey,
@@ -456,7 +484,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     recipientPublicKey: counterPartyPublicKey,
     enabled: !isGroupChat, // Only for DMs
     onMessageReceived: (message) => {
-      console.log(
+      devLog(
         "[ConversationScreen] Ephemeral message received:",
         message.id
       );
@@ -616,16 +644,62 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   const keyExtractor = useCallback(
     (item: DecryptedMessageEntryResponse, index: number) => {
-      // Use timestamp + index to ensure uniqueness, even for messages with same timestamp
-      const timestamp =
-        item.MessageInfo?.TimestampNanosString ??
-        item.MessageInfo?.TimestampNanos?.toString() ??
-        "";
-      return timestamp
-        ? `${timestamp}-${index}`
-        : `message-${index}-${Date.now()}`;
+      const messageId = getMessageId(item);
+      const senderKey =
+        item.SenderInfo?.OwnerPublicKeyBase58Check ??
+        item.RecipientInfo?.OwnerPublicKeyBase58Check ??
+        "unknown-sender";
+
+      if (messageId) {
+        return `${messageId}-${senderKey}`;
+      }
+
+      return `message-${senderKey}-${index}`;
     },
     []
+  );
+
+  const flashListData = useMemo(
+    () => (enableFlashListChat ? [...displayMessages].reverse() : displayMessages),
+    [displayMessages, enableFlashListChat]
+  );
+
+  const handleListScroll = useCallback(
+    (e: any) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const rawOffsetY = contentOffset.y;
+
+      scrollOffsetRef.current = rawOffsetY;
+
+      if (enableFlashListChat) {
+        const distanceToBottom =
+          contentSize.height - layoutMeasurement.height - rawOffsetY;
+        if (distanceToBottom > SCROLL_TO_BOTTOM_THRESHOLD) {
+          if (!showScrollToBottom) {
+            scrollToBottomAnim.setValue(1);
+            setShowScrollToBottom(true);
+          }
+        } else {
+          if (showScrollToBottom) setShowScrollToBottom(false);
+        }
+        return;
+      }
+
+      if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
+        if (!showScrollToBottom) {
+          scrollToBottomAnim.setValue(1);
+          setShowScrollToBottom(true);
+        }
+      } else {
+        if (showScrollToBottom) setShowScrollToBottom(false);
+      }
+    },
+    [
+      enableFlashListChat,
+      scrollToBottomAnim,
+      showScrollToBottom,
+      setShowScrollToBottom,
+    ]
   );
 
   const isPaginating = useMemo(() => {
@@ -646,14 +720,23 @@ export function ConversationScreen({ navigation, route }: Props) {
     );
   }, [hasMore, isDark]);
 
-  const footer = useMemo(() => {
-    if (!error) return null;
-    return (
-      <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-        <Text className="text-sm font-medium text-red-900">{error}</Text>
-      </View>
-    );
-  }, [error]);
+  // Typing indicator and error footer (appears at visual BOTTOM for inverted list)
+  const bottomListFooter = useMemo(() => {
+    if (error) {
+      return (
+        <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <Text className="text-sm font-medium text-red-900">{error}</Text>
+        </View>
+      );
+    }
+    // Show typing indicator as part of message stream
+    if (isTyping) {
+      return <TypingIndicator label={typingLabel} isDark={isDark} />;
+    }
+    return null;
+  }, [error, isTyping, typingLabel, isDark]);
+
+
 
   return (
     <DesktopShell>
@@ -810,87 +893,134 @@ export function ConversationScreen({ navigation, route }: Props) {
                 <ActivityIndicator size="large" color={accentColor} />
               </View>
             ) : (
-              <FlatList<DecryptedMessageEntryResponse>
-                ref={flatListRef}
-                data={displayMessages}
-                keyExtractor={keyExtractor}
-                renderItem={renderItem}
-                inverted={true}
-                // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
-                ListFooterComponent={topListHeader}
-                ListHeaderComponent={footer}
-                showsVerticalScrollIndicator={Platform.OS === "web"}
-                style={scrollBarStyle}
-                contentContainerStyle={{
-                  paddingHorizontal: 16,
-                  paddingTop: 12,
-                }}
-                // Load older messages when scrolling toward the "end" (visually = top)
-                onEndReached={() => {
-                  if (!isLoading && hasMore) {
-                    loadMessages(false);
-                  }
-                }}
-                onEndReachedThreshold={0.3}
-                onScroll={(e) => {
-                  const { contentOffset, contentSize, layoutMeasurement } =
-                    e.nativeEvent;
-                  const rawOffsetY = contentOffset.y;
-
-                  // Track current scroll offset
-                  scrollOffsetRef.current = rawOffsetY;
-
-                  // With inverted list: offset 0 = bottom (newest), higher offset = top (older)
-                  // Show scroll-to-bottom button when user scrolls up (away from newest)
-                  if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
-                    if (!showScrollToBottom) {
-                      scrollToBottomAnim.setValue(1);
-                      setShowScrollToBottom(true);
+              enableFlashListChat ? (
+                <FlashList<DecryptedMessageEntryResponse>
+                  ref={flatListRef}
+                  data={flashListData}
+                  keyExtractor={keyExtractor}
+                  renderItem={renderItem}
+                  ListHeaderComponent={topListHeader}
+                  ListFooterComponent={bottomListFooter}
+                  showsVerticalScrollIndicator={Platform.OS === "web"}
+                  style={scrollBarStyle}
+                  contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingTop: 12,
+                    flexGrow: 1,
+                    justifyContent: "flex-end",
+                  }}
+                  onStartReached={() => {
+                    if (!isLoading && hasMore) {
+                      loadMessages(false);
                     }
-                  } else {
-                    if (showScrollToBottom) setShowScrollToBottom(false);
-                  }
-                }}
-                scrollEventThrottle={16}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
-                // Performance optimizations - especially important for web
-                windowSize={Platform.OS === "web" ? 21 : 11}
-                maxToRenderPerBatch={Platform.OS === "web" ? 5 : 10}
-                initialNumToRender={Platform.OS === "web" ? 15 : 20}
-                removeClippedSubviews={Platform.OS !== "web"}
-                updateCellsBatchingPeriod={Platform.OS === "web" ? 100 : 50}
-                ListEmptyComponent={() => (
-                  <View
-                    className="items-center justify-center px-6 py-10"
-                    style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}
-                  >
-                    {isLoading ? (
-                      <View className="items-center">
-                        <ActivityIndicator size="large" color={accentColor} />
-                        <Text className="mt-4 text-sm font-medium text-gray-500">
-                          Loading messages...
-                        </Text>
-                      </View>
-                    ) : (
-                      <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                        <Feather
-                          name="message-circle"
-                          size={38}
-                          color={isDark ? "#64748b" : "#9ca3af"}
-                        />
-                        <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                          No messages yet
-                        </Text>
-                        <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
-                          Start the conversation and it will appear here
-                          instantly.
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              />
+                  }}
+                  onStartReachedThreshold={0.3}
+                  maintainVisibleContentPosition={{
+                    autoscrollToTopThreshold: 40,
+                    autoscrollToBottomThreshold: 80,
+                    animateAutoScrollToBottom: true,
+                    startRenderingFromBottom: true,
+                  }}
+                  onScroll={handleListScroll}
+                  scrollEventThrottle={16}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  ListEmptyComponent={() => (
+                    <View
+                      className="items-center justify-center px-6 py-10"
+                      style={{ minHeight: 400 }}
+                    >
+                      {isLoading ? (
+                        <View className="items-center">
+                          <ActivityIndicator size="large" color={accentColor} />
+                          <Text className="mt-4 text-sm font-medium text-gray-500">
+                            Loading messages...
+                          </Text>
+                        </View>
+                      ) : (
+                        <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                          <Feather
+                            name="message-circle"
+                            size={38}
+                            color={isDark ? "#64748b" : "#9ca3af"}
+                          />
+                          <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                            No messages yet
+                          </Text>
+                          <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
+                            Start the conversation and it will appear here
+                            instantly.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                />
+              ) : (
+                <FlatList<DecryptedMessageEntryResponse>
+                  ref={flatListRef}
+                  data={displayMessages}
+                  keyExtractor={keyExtractor}
+                  renderItem={renderItem}
+                  inverted={true}
+                  // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
+                  ListFooterComponent={topListHeader}
+                  ListHeaderComponent={bottomListFooter}
+                  showsVerticalScrollIndicator={Platform.OS === "web"}
+                  style={scrollBarStyle}
+                  contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingTop: 12,
+                  }}
+                  // Load older messages when scrolling toward the "end" (visually = top)
+                  onEndReached={() => {
+                    if (!isLoading && hasMore) {
+                      loadMessages(false);
+                    }
+                  }}
+                  onEndReachedThreshold={0.3}
+                  onScroll={handleListScroll}
+                  scrollEventThrottle={16}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  // Performance optimizations - especially important for web
+                  windowSize={Platform.OS === "web" ? 21 : 11}
+                  maxToRenderPerBatch={Platform.OS === "web" ? 5 : 10}
+                  initialNumToRender={Platform.OS === "web" ? 15 : 20}
+                  removeClippedSubviews={Platform.OS !== "web"}
+                  updateCellsBatchingPeriod={Platform.OS === "web" ? 100 : 50}
+                  ListEmptyComponent={() => (
+                    <View
+                      className="items-center justify-center px-6 py-10"
+                      style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}
+                    >
+                      {isLoading ? (
+                        <View className="items-center">
+                          <ActivityIndicator size="large" color={accentColor} />
+                          <Text className="mt-4 text-sm font-medium text-gray-500">
+                            Loading messages...
+                          </Text>
+                        </View>
+                      ) : (
+                        <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                          <Feather
+                            name="message-circle"
+                            size={38}
+                            color={isDark ? "#64748b" : "#9ca3af"}
+                          />
+                          <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                            No messages yet
+                          </Text>
+                          <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
+                            Start the conversation and it will appear here
+                            instantly.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                />
+              )
             )}
 
             {showScrollToBottom && (
@@ -904,11 +1034,11 @@ export function ConversationScreen({ navigation, route }: Props) {
                 }}
               >
                 <TouchableOpacity
-                  onPress={() => {
-                    console.log(
-                      "[ConversationScreen] Scroll-to-latest pressed",
-                      {
-                        scrollOffset: scrollOffsetRef.current,
+	                  onPress={() => {
+	                    devLog(
+	                      "[ConversationScreen] Scroll-to-latest pressed",
+	                      {
+	                        scrollOffset: scrollOffsetRef.current,
                         messageCount: messages.length,
                       }
                     );
@@ -918,11 +1048,15 @@ export function ConversationScreen({ navigation, route }: Props) {
                       useNativeDriver: true,
                     }).start(() => setShowScrollToBottom(false));
                     try {
-                      // With inverted list, offset 0 = visual bottom (newest messages)
-                      flatListRef.current?.scrollToOffset({
-                        offset: 0,
-                        animated: true,
-                      });
+                      if (enableFlashListChat) {
+                        flatListRef.current?.scrollToEnd({ animated: true });
+                      } else {
+                        // With inverted list, offset 0 = visual bottom (newest messages)
+                        flatListRef.current?.scrollToOffset({
+                          offset: 0,
+                          animated: true,
+                        });
+                      }
                     } catch (err) {
                       console.warn(
                         "[ConversationScreen] scrollToOffset failed",
@@ -975,8 +1109,7 @@ export function ConversationScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* Typing indicator - shown above composer when someone is typing */}
-        {isTyping && <TypingIndicator label={typingLabel} isDark={isDark} />}
+
 
         <Animated.View
           style={composerAnimatedStyle}
@@ -1064,6 +1197,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                             setActualBubbleHeight(height);
                           }}
                           isGroupChat={isGroupChat}
+                          showTail={selectedShowTail}
                         />
                       </Reanimated.View>
 

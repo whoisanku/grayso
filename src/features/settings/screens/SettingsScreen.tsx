@@ -12,6 +12,7 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import { identity } from "deso-protocol";
 import { handleLogout } from "@/lib/auth";
 import { Toast } from "@/components/ui/Toast";
+import { useAuthTransition } from "@/state/auth/AuthTransitionProvider";
 
 export function SettingsScreen({ navigation }: any) {
   const { colorScheme } = useColorScheme();
@@ -19,6 +20,7 @@ export function SettingsScreen({ navigation }: any) {
   const { colorMode, setColorMode } = useAppearance();
   const { currentUser } = useContext(DeSoIdentityContext);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { startAuthTransition, endAuthTransition } = useAuthTransition();
   
   const {
     accentId,
@@ -34,6 +36,7 @@ export function SettingsScreen({ navigation }: any) {
   const onLogout = async () => {
     try {
       setIsLoggingOut(true);
+      startAuthTransition("logout");
       await handleLogout(() => identity.logout());
       Toast.show({
         type: "success",
@@ -49,6 +52,7 @@ export function SettingsScreen({ navigation }: any) {
       });
     } finally {
       setIsLoggingOut(false);
+      endAuthTransition();
     }
   };
 

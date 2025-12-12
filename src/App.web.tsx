@@ -22,6 +22,7 @@ import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 import { AppearanceProvider } from "./state/theme/useAppearance";
 import { RootStackParamList } from "./navigation/types";
 import { AppToast } from "./components/ui/Toast";
+import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
 
 // Web specific config if needed
 configure({
@@ -56,26 +57,28 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppearanceProvider>
-        <AppThemeProvider>
-          <DeSoIdentityProvider>
-            <CryptoPolyfill />
-            <SafeAreaProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-                <NavigationContainer
-                  linking={linking}
-                  theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                  documentTitle={{ formatter: () => "Grayso" }}
-                >
-                  <RootNavigator />
-                </NavigationContainer>
-                <AppToast />
-              </GestureHandlerRootView>
-            </SafeAreaProvider>
-          </DeSoIdentityProvider>
-        </AppThemeProvider>
-      </AppearanceProvider>
+      <AuthTransitionProvider>
+        <AppearanceProvider>
+          <AppThemeProvider>
+            <DeSoIdentityProvider>
+              <CryptoPolyfill />
+              <SafeAreaProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                  <NavigationContainer
+                    linking={linking}
+                    theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                    documentTitle={{ formatter: () => "Grayso" }}
+                  >
+                    <RootNavigator />
+                  </NavigationContainer>
+                  <AppToast />
+                </GestureHandlerRootView>
+              </SafeAreaProvider>
+            </DeSoIdentityProvider>
+          </AppThemeProvider>
+        </AppearanceProvider>
+      </AuthTransitionProvider>
     </QueryClientProvider>
   );
 }

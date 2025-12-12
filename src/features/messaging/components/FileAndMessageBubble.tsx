@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, ActivityIndicator, Text, Dimensions, Platform } from 'react-native';
+import React from "react";
+import { View, Text, Dimensions, Platform } from "react-native";
 import { cx } from '@/lib/styles';
 import { MessageImage } from './MessageImage';
 
@@ -14,6 +14,8 @@ type FileAndMessageBubbleProps = {
     extraData?: Record<string, any> | null;
     isDark: boolean;
     onImagePress?: (images: string[], index: number) => void;
+    compact?: boolean;
+    borderRadius?: number;
 };
 
 export const FileAndMessageBubble = React.memo(({ 
@@ -21,6 +23,8 @@ export const FileAndMessageBubble = React.memo(({
     extraData, 
     isDark,
     onImagePress,
+    compact = false,
+    borderRadius = 12,
 }: FileAndMessageBubbleProps) => {
     let imageUrls: string[] = [];
     const metadata: Record<string, any> = extraData ?? {};
@@ -77,22 +81,26 @@ export const FileAndMessageBubble = React.memo(({
 
         const imageCount = imageUrls.length;
         const GRID_GAP = 3;
-        const CORNER_RADIUS = 0; // Images in grid are often square/tight. 
-        // Bubbles usually handle outer radius, but if internal images touch edge, they need radius.
-        // For now let's keep it simple.
+        const effectiveRadius = compact ? 0 : borderRadius;
+        const effectiveMaxWidth = Math.max(
+          0,
+          MAX_BUBBLE_WIDTH - (compact ? 0 : 32)
+        ); // account for parent bubble horizontal padding
 
         // Single image - use aspect ratio logic via MessageImage
         if (imageCount === 1) {
             const { width, height } = getDimensions(0);
             return (
-                <View className="mb-2" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View style={{ maxWidth: effectiveMaxWidth }}>
                     <MessageImage
                         uri={imageUrls[0]}
                         width={width}
                         height={height}
-                        maxWidth={MAX_BUBBLE_WIDTH}
-                        maxHeight={280}
-                        borderRadius={12} // Bubble radius
+                        maxWidth={effectiveMaxWidth}
+                        maxHeight={effectiveMaxWidth}
+                        borderRadius={effectiveRadius}
+                        forceSquare={true}
+                        contentFit="contain"
                         onPress={() => handleImagePress(0)}
                     />
                 </View>
@@ -101,9 +109,9 @@ export const FileAndMessageBubble = React.memo(({
 
         // Two images - side by side
         if (imageCount === 2) {
-            const itemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
+            const itemWidth = (effectiveMaxWidth - GRID_GAP) / 2;
             return (
-                <View className="mb-2 flex-row overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View className={cx("flex-row overflow-hidden", compact ? undefined : "rounded-xl")} style={{ maxWidth: effectiveMaxWidth }}>
                     <MessageImage
                         uri={imageUrls[0]}
                         style={{ width: itemWidth, height: itemWidth }}
@@ -123,11 +131,11 @@ export const FileAndMessageBubble = React.memo(({
 
         // Three images - 1 large top, 2 small bottom
         if (imageCount === 3) {
-            const bottomItemWidth = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
-            const topHeight = MAX_BUBBLE_WIDTH * 0.56;
+            const bottomItemWidth = (effectiveMaxWidth - GRID_GAP) / 2;
+            const topHeight = effectiveMaxWidth * 0.56;
             
             return (
-                <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+                <View className={cx("overflow-hidden", compact ? undefined : "rounded-xl")} style={{ maxWidth: effectiveMaxWidth }}>
                     <MessageImage
                         uri={imageUrls[0]}
                         style={{ width: '100%', height: topHeight }}
@@ -155,11 +163,11 @@ export const FileAndMessageBubble = React.memo(({
         }
 
         // Four or more images - 2x2 grid with +N overlay on 4th if more
-        const gridItemSize = (MAX_BUBBLE_WIDTH - GRID_GAP) / 2;
+        const gridItemSize = (effectiveMaxWidth - GRID_GAP) / 2;
         const extraCount = imageCount - 4;
 
         return (
-            <View className="mb-2 overflow-hidden rounded-xl" style={{ maxWidth: MAX_BUBBLE_WIDTH }}>
+            <View className={cx("overflow-hidden", compact ? undefined : "rounded-xl")} style={{ maxWidth: effectiveMaxWidth }}>
                 {/* Top row */}
                 <View className="flex-row">
                     <MessageImage

@@ -15,7 +15,7 @@ import {
 } from "@/lib/supabaseClient";
 import { Platform } from "react-native";
 import { StorageService } from "@/lib/storage";
-import { GroupMember } from "@/services/desoGraphql";
+import type { GroupMember } from "@/lib/deso/graphql";
 
 type Mailbox = "inbox" | "spam";
 
@@ -43,6 +43,7 @@ export const useConversations = (
 ): UseConversationsResult => {
   const { currentUser } = useContext(DeSoIdentityContext);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
 
   // Hydrate cached conversations immediately for fast paint
@@ -121,15 +122,27 @@ export const useConversations = (
     refetchOnReconnect: false,
   });
 
-  // Persist conversations to storage when updated
+  // Persist conversations to storage when updated (debounced)
   useEffect(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
-    if (!userPk || !data) return;
-    // Only persist if data has expected shape
-    if (data.pages) {
-      void StorageService.saveConversations(userPk, mailbox, data);
+    if (!userPk || !data?.pages) return;
+
+    const debounceMs = Platform.OS === "web" ? 2000 : 1000;
+
+    if (persistTimeoutRef.current) {
+      clearTimeout(persistTimeoutRef.current);
     }
-  }, [currentUser?.PublicKeyBase58Check, data]);
+
+    persistTimeoutRef.current = setTimeout(() => {
+      void StorageService.saveConversations(userPk, mailbox, data);
+    }, debounceMs);
+
+    return () => {
+      if (persistTimeoutRef.current) {
+        clearTimeout(persistTimeoutRef.current);
+      }
+    };
+  }, [currentUser?.PublicKeyBase58Check, mailbox, data]);
 
   useEffect(() => {
     const userPublicKey = currentUser?.PublicKeyBase58Check;

@@ -317,6 +317,11 @@ export const MessageBubble = React.memo(function MessageBubble({
     const isLastInGroup = !isNextMessageFromSameSender || !isNextMessageClose;
     const isOnlyMessage = isFirstInGroup && isLastInGroup;
 
+    const bubbleBackgroundColor = isMine
+        ? accentColor
+        : (isDark ? "#1e2738" : "#f8fafc");
+    const bubbleBorderColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+
     // Dynamic border radius based on position in group - memoized for performance
     const borderRadiusStyle = useMemo(() => {
         const R = 22; // Large radius
@@ -339,7 +344,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     const bubbleExtraStyle = useMemo(() => {
         const baseStyles = [
             borderRadiusStyle,
-            !isMine && { borderWidth: 0.5, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
+            !isMine && { borderWidth: 0.5, borderColor: bubbleBorderColor },
         ];
         
         if (Platform.OS === 'web') {
@@ -438,21 +443,20 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     ) : null}
                                 </View>
                             ) : null}
-                            <Reanimated.View
-                                ref={animatedBubbleRef}
-                                style={[
-                                    bubbleExtraStyle,
-                                    { 
-                                        paddingHorizontal: isMediaOnly ? 0 : 16,
-                                        paddingVertical: isMediaOnly ? 0 : 12,
-                                        maxWidth: Platform.OS === 'web' ? 320 : '80%',
-                                        overflow: 'hidden',
-                                        backgroundColor: isMine 
-                                            ? accentColor 
-                                            : (isDark ? '#1e2738' : '#f8fafc'),
-                                    },
-                                ]}
-                            >
+                            <View style={{ position: "relative" }}>
+                                <Reanimated.View
+                                    ref={animatedBubbleRef}
+                                    style={[
+                                        bubbleExtraStyle,
+                                        { 
+                                            paddingHorizontal: isMediaOnly ? 0 : 16,
+                                            paddingVertical: isMediaOnly ? 0 : 12,
+                                            maxWidth: Platform.OS === 'web' ? 320 : '80%',
+                                            overflow: 'hidden',
+                                            backgroundColor: bubbleBackgroundColor,
+                                        },
+                                    ]}
+                                >
                                 {/* Only show sender name in GROUP chats */}
                                 {!isMine && isGroupChat && isFirstInGroup && (
                                     <Text
@@ -464,42 +468,39 @@ export const MessageBubble = React.memo(function MessageBubble({
                                     </Text>
                                 )}
                                 {renderReplyPreview()}
-                                <View style={{
-                                    marginHorizontal: isMediaOnly ? 0 : -16,
-                                    marginTop: isMediaOnly ? 0 : -12,
-                                    marginBottom: isMediaOnly ? 0 : 4
-                                }}>
+                                <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
                                     <FileAndMessageBubble
                                         decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
                                         extraData={extraData}
                                         isDark={isDark}
                                         onImagePress={handleImagePress}
+                                        compact={isMediaOnly}
                                     />
                                     <VideoMessageBubble
                                         decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
                                         extraData={extraData}
                                         isDark={isDark}
+                                        compact={isMediaOnly}
                                     />
-                                </View>
-                                {/* WhatsApp-style: text + inline timestamp using nested Text */}
-                                {(!isMediaOnly) && (
-                                    <Text
-                                        className="text-base leading-[22px]"
-                                        style={{ 
-                                            flexShrink: 1, 
-                                            color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
-                                            marginTop: hasMedia ? 4 : 0, 
-                                            paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
-                                            marginBottom: isMediaOnly ? 12 : 0,
-                                        }}
-                                    >
-                                        {messageText}
-                                        {/* Invisible spacer to ensure minimum gap before timestamp */}
-                                        <Text style={{ fontSize: 10, opacity: 0 }}>
-                                            {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                    {/* WhatsApp-style: text + inline timestamp using nested Text */}
+                                    {(!isMediaOnly) && (
+                                        <Text
+                                            className="text-base leading-[22px]"
+                                            style={{ 
+                                                flexShrink: 1, 
+                                                color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
+                                                paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
+                                                marginBottom: isMediaOnly ? 12 : 0,
+                                            }}
+                                        >
+                                            {messageText}
+                                            {/* Invisible spacer to ensure minimum gap before timestamp */}
+                                            <Text style={{ fontSize: 10, opacity: 0 }}>
+                                                {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                            </Text>
                                         </Text>
-                                    </Text>
-                                )}
+                                    )}
+                                </View>
                                 
                                 {/* Actual timestamp overlaid at bottom-right */}
                                 {isMediaOnly ? (
@@ -557,7 +558,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         )}
                                     </Text>
                                 )}
-                            </Reanimated.View>
+                                </Reanimated.View>
+                            </View>
                         </View>
                     </GestureDetector>
                 </Reanimated.View>

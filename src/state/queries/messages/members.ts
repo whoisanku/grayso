@@ -1,4 +1,4 @@
-import { fetchAccessGroupMembers } from "../../../services/desoGraphql";
+import { fetchAccessGroupMembers } from "@/lib/deso/graphql";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "../../../constants/messaging";
 
 export const getGroupMembersQueryKey = (

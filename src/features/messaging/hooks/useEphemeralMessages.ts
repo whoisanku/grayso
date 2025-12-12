@@ -42,6 +42,13 @@ export type UseEphemeralMessagesReturn = {
 
 const DEFAULT_MESSAGE_LIFETIME = 30000; // 30 seconds
 
+const devLog = (...args: unknown[]) => {
+    if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.log(...args);
+    }
+};
+
 export function useEphemeralMessages({
     conversationId,
     userPublicKey,
@@ -104,7 +111,7 @@ export function useEphemeralMessages({
                 recipientPublicKey,
             };
 
-            console.log('[useEphemeralMessages] Sending message:', payload.id);
+            devLog('[useEphemeralMessages] Sending message:', payload.id);
 
             // Broadcast message
             await channelRef.current.send({
@@ -146,7 +153,7 @@ export function useEphemeralMessages({
         const supabase = getSupabaseClient();
         const channelName = `ephemeral:${conversationId}`;
 
-        console.log('[useEphemeralMessages] Subscribing to channel:', channelName);
+        devLog('[useEphemeralMessages] Subscribing to channel:', channelName);
         setConnectionState('connecting');
 
         const channel = supabase.channel(channelName, {
@@ -163,7 +170,7 @@ export function useEphemeralMessages({
 
             // Deduplication check
             if (receivedMessageIdsRef.current.has(messagePayload.id)) {
-                console.log('[useEphemeralMessages] Duplicate message ignored:', messagePayload.id);
+                devLog('[useEphemeralMessages] Duplicate message ignored:', messagePayload.id);
                 return;
             }
 
@@ -177,7 +184,7 @@ export function useEphemeralMessages({
                 return;
             }
 
-            console.log('[useEphemeralMessages] Received message:', messagePayload.id);
+            devLog('[useEphemeralMessages] Received message:', messagePayload.id);
 
             try {
                 // Decrypt message content
@@ -218,7 +225,7 @@ export function useEphemeralMessages({
 
         // Subscribe to channel
         channel.subscribe((status) => {
-            console.log('[useEphemeralMessages] Subscription status:', status);
+            devLog('[useEphemeralMessages] Subscription status:', status);
 
             if (status === 'SUBSCRIBED') {
                 setConnectionState('connected');
@@ -240,7 +247,7 @@ export function useEphemeralMessages({
 
         // Cleanup
         return () => {
-            console.log('[useEphemeralMessages] Cleaning up channel:', channelName);
+            devLog('[useEphemeralMessages] Cleaning up channel:', channelName);
 
             // Clear all message timeouts
             messageTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));

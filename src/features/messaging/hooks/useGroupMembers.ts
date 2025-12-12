@@ -11,6 +11,13 @@ import {
   removeMembersFromGroup,
 } from "@/features/messaging/api/groupChat";
 
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
 type UseGroupMembersProps = {
   isGroupChat: boolean;
   threadAccessGroupKeyName?: string;
@@ -53,14 +60,14 @@ export const useGroupMembers = ({
         ? initialGroupMembers 
         : [];
     
-    console.log("[useGroupMembers] Current member count:", result.length);
+    devLog("[useGroupMembers] Current member count:", result.length);
     return result;
   }, [groupMembers, initialGroupMembers]);
 
   // Force refetch when modal opens to ensure fresh data
   useEffect(() => {
     if (showMembersModal && isGroupChat && ownerKey) {
-      console.log("[useGroupMembers] Modal opened - forcing refetch");
+      devLog("[useGroupMembers] Modal opened - forcing refetch");
       loadGroupMembers();
     }
   }, [showMembersModal, isGroupChat, ownerKey, loadGroupMembers]);
