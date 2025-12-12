@@ -3,7 +3,9 @@ import { View, Dimensions, Platform } from "react-native";
 import { MessageVideo } from "./MessageVideo";
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAX_VIDEO_WIDTH = Platform.OS === 'web' ? 320 : SCREEN_WIDTH * 0.72;
+const MAX_VIDEO_WIDTH = Platform.OS === 'web'
+  ? Math.min(SCREEN_WIDTH * 0.72, 320)
+  : SCREEN_WIDTH * 0.72;
 const MAX_VIDEO_HEIGHT = 280;
 
 export type VideoMessageBubbleProps = {
@@ -12,6 +14,7 @@ export type VideoMessageBubbleProps = {
   isDark: boolean;
   compact?: boolean;
   borderRadius?: number;
+  onPlayVideo?: (uri: string) => void;
 };
 
 type NormalizedVideoSource = {
@@ -28,8 +31,23 @@ const normalizeVideoSource = (url: string): NormalizedVideoSource => {
       const videoId = parsed.pathname.replace(/^\//, "");
 
       if (videoId) {
+        // Use the iframe URL directly - it works on all platforms
         return {
-          streamUrl: `https://videodelivery.net/${videoId}/manifest/video.m3u8`,
+          streamUrl: url,
+          posterUrl: `https://videodelivery.net/${videoId}/thumbnails/thumbnail.jpg?time=1s`,
+          id: videoId
+        };
+      }
+    }
+
+    // If it's already an HLS or other videodelivery URL, keep it as is
+    if (parsed.hostname === "videodelivery.net") {
+      const videoIdMatch = url.match(/videodelivery\.net\/([^\/]+)\//);
+      if (videoIdMatch && videoIdMatch[1]) {
+        const videoId = videoIdMatch[1];
+
+        return {
+          streamUrl: url,
           posterUrl: `https://videodelivery.net/${videoId}/thumbnails/thumbnail.jpg?time=1s`,
           id: videoId
         };
@@ -49,7 +67,7 @@ const buildStreamUrlFromClientId = (clientId?: string): NormalizedVideoSource | 
   if (!sanitized) return null;
 
   return {
-    streamUrl: `https://videodelivery.net/${sanitized}/manifest/video.m3u8`,
+    streamUrl: `https://iframe.videodelivery.net/${sanitized}`,
     posterUrl: `https://videodelivery.net/${sanitized}/thumbnails/thumbnail.jpg?time=1s`,
     id: sanitized
   };
@@ -74,12 +92,13 @@ const parseVideoUrls = (value?: string): string[] => {
   return [];
 };
 
-export const VideoMessageBubble = React.memo(({ 
-  decryptedVideoURLs, 
-  extraData, 
+export const VideoMessageBubble = React.memo(({
+  decryptedVideoURLs,
+  extraData,
   isDark,
   compact = false,
   borderRadius = 12,
+  onPlayVideo,
 }: VideoMessageBubbleProps) => {
   let videoUrls = parseVideoUrls(decryptedVideoURLs);
   const metadata: Record<string, any> = extraData ?? {};
@@ -116,6 +135,13 @@ export const VideoMessageBubble = React.memo(({
     <View>
       {videoUrls.map((url, index) => {
         const normalized = normalizeVideoSource(url);
+        console.log('[VideoMessageBubble] Decrypted video URL:', {
+          originalUrl: url,
+          normalizedStreamUrl: normalized.streamUrl,
+          posterUrl: normalized.posterUrl,
+          videoId: normalized.id,
+        });
+
         const widthKey = `video.${index}.width`;
         const heightKey = `video.${index}.height`;
         const rawWidth = metadata[widthKey];
@@ -128,52 +154,54 @@ export const VideoMessageBubble = React.memo(({
           const clientIdKey = `video.${index}.clientId`;
           const fallback = buildStreamUrlFromClientId(metadata[clientIdKey] as string | undefined);
           if (!fallback?.streamUrl) {
-           return null;
+            return null;
           }
-          
-          return (
-  	             <MessageVideo
-  	               key={fallback.id || `${index}`}
-  	               uri={fallback.streamUrl}
-  	               posterUri={fallback.posterUrl}
-  	               width={videoWidth}
-  	               height={videoHeight}
-	               maxWidth={effectiveMaxWidth}
-  	               maxHeight={MAX_VIDEO_HEIGHT}
-		             borderRadius={compact ? 0 : borderRadius}
-		             isDark={isDark}
-		             className={
-	               index < videoUrls.length - 1
-	                 ? compact
-	                   ? "mb-1"
-	                   : "mb-3"
-	                 : ""
-	             }
-	           />
-	          );
-	        }
 
-	        return (
-		           <MessageVideo
-		             key={normalized.id || url}
-		             uri={normalized.streamUrl}
-		             posterUri={normalized.posterUrl}
-	             width={videoWidth}
-	             height={videoHeight}
-	             maxWidth={effectiveMaxWidth}
-	             maxHeight={MAX_VIDEO_HEIGHT}
-		             borderRadius={compact ? 0 : borderRadius}
-		             isDark={isDark}
-		             className={
-	               index < videoUrls.length - 1
-	                 ? compact
-	                   ? "mb-1"
-	                   : "mb-3"
-	                 : ""
-	             }
-	           />
-	        );
-	      })}
+          return (
+            <MessageVideo
+              key={fallback.id || `${index}`}
+              uri={fallback.streamUrl}
+              posterUri={fallback.posterUrl}
+              width={videoWidth}
+              height={videoHeight}
+              maxWidth={effectiveMaxWidth}
+              maxHeight={MAX_VIDEO_HEIGHT}
+              borderRadius={compact ? 0 : borderRadius}
+              isDark={isDark}
+              className={
+                index < videoUrls.length - 1
+                  ? compact
+                    ? "mb-1"
+                    : "mb-3"
+                  : ""
+              }
+              onPlay={onPlayVideo ? () => onPlayVideo(fallback.streamUrl) : undefined}
+            />
+          );
+        }
+
+        return (
+          <MessageVideo
+            key={normalized.id || url}
+            uri={normalized.streamUrl}
+            posterUri={normalized.posterUrl}
+            width={videoWidth}
+            height={videoHeight}
+            maxWidth={effectiveMaxWidth}
+            maxHeight={MAX_VIDEO_HEIGHT}
+            borderRadius={compact ? 0 : borderRadius}
+            isDark={isDark}
+            className={
+              index < videoUrls.length - 1
+                ? compact
+                  ? "mb-1"
+                  : "mb-3"
+                : ""
+            }
+            onPlay={onPlayVideo ? () => onPlayVideo(normalized.streamUrl) : undefined}
+          />
+        );
+      })}
     </View>
   );
 });

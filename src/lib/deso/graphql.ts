@@ -500,7 +500,7 @@ export async function fetchGroupMessagesViaGraphql({
 export async function fetchAccessGroupMembers({
   accessGroupKeyName,
   accessGroupOwnerPublicKey,
-  limit = 100,
+  limit = 1000,
   afterCursor,
   graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
   DEFAULT_GRAPHQL_URL,

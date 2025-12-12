@@ -244,8 +244,7 @@ export function usePresence({
             setOnlineUsers([]);
             presenceStateRef.current = {};
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [conversationId, userPublicKey, enabled]);
+    }, [conversationId, userPublicKey, enabled, updateOnlineUsers, broadcastPresence]);
 
     const isOnline = useCallback(
         (publicKey: string) => {
