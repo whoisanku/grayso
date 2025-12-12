@@ -19,11 +19,8 @@ import {
   Animated,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  ScrollView,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Image } from "expo-image";
 import { UserAvatar } from "@/components/UserAvatar";
 
 import Reanimated from "react-native-reanimated";
@@ -50,7 +47,6 @@ import {
 } from "@/constants/messaging";
 import {
   FALLBACK_PROFILE_IMAGE,
-  getProfileDisplayName,
   getProfileImageUrl,
 } from "@/utils/deso";
 import { getMessageId } from "@/utils/messageUtils";

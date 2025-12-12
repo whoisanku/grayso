@@ -480,7 +480,7 @@ export function computeModalPositions(
   return { bubbleTop, actionTop, actionLeft, showAbove: false };
 }
 
-export function getFallbackBubbleLayout(): {
+function getFallbackBubbleLayout(): {
   x: number;
   y: number;
   width: number;

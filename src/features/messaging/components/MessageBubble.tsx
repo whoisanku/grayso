@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useMemo } from "react";
-import { View, Text, Image, Keyboard, Platform, TouchableOpacity } from "react-native";
+import { View, Text, Keyboard, Platform, TouchableOpacity } from "react-native";
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -13,6 +13,7 @@ import Reanimated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { DecryptedMessageEntryResponse, PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { getProfileDisplayName, getProfileImageUrl, FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
@@ -29,6 +30,8 @@ import { FileAndMessageBubble } from "./FileAndMessageBubble";
 import { VideoMessageBubble } from "./VideoMessageBubble";
 import { ImageGalleryModal } from "./ImageGalleryModal";
 import { useAccentColor } from "@/state/theme/useAccentColor";
+
+const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 export type MessageBubbleProps = {
     item: DecryptedMessageEntryResponse;
@@ -434,6 +437,11 @@ export const MessageBubble = React.memo(function MessageBubble({
                                             <Image
                                                 source={{ uri: avatarUri }}
                                                 className="h-8 w-8 rounded-full bg-gray-200"
+                                                placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
+                                                placeholderContentFit="cover"
+                                                transition={200}
+                                                contentFit="cover"
+                                                cachePolicy="memory-disk"
                                             />
                                         </TouchableOpacity>
                                     ) : isFirstInGroup ? (

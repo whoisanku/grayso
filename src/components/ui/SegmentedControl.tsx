@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Pressable, Text, Platform } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useColorScheme } from 'nativewind';
 
 export type SegmentedControlItem<T extends string> = {
