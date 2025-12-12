@@ -46,6 +46,7 @@ export function ProfileHeader({
   const [hasAvatarError, setHasAvatarError] = useState(false);
   const [hasBannerError, setHasBannerError] = useState(false);
   const [isAvatarLoading, setIsAvatarLoading] = useState(true);
+  const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(true);
   const [isBannerLoaded, setIsBannerLoaded] = useState(false);
 
@@ -65,6 +66,8 @@ export function ProfileHeader({
   // Reset error state when avatar URL changes
   useEffect(() => {
     setHasAvatarError(false);
+    setIsAvatarLoading(true);
+    setIsAvatarLoaded(false);
   }, [avatarUrl]);
 
   const bannerUrl = useMemo(() => {
@@ -219,11 +222,21 @@ export function ProfileHeader({
               transition={300}
               cachePolicy="memory-disk"
               recyclingKey={avatarUrl}
-              onLoadStart={() => setIsAvatarLoading(true)}
+              style={[
+                Platform.OS === "web"
+                  ? { display: isAvatarLoaded ? "flex" : "none" }
+                  : { opacity: isAvatarLoaded ? 1 : 0 },
+              ]}
+              onLoadStart={() => {
+                setIsAvatarLoading(true);
+                setIsAvatarLoaded(false);
+              }}
+              onLoad={() => setIsAvatarLoaded(true)}
               onLoadEnd={() => setIsAvatarLoading(false)}
               onError={() => {
                 setHasAvatarError(true);
                 setIsAvatarLoading(false);
+                setIsAvatarLoaded(false);
               }}
             />
           ) : (

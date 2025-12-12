@@ -235,6 +235,7 @@ export function HomeScreen() {
   const {
     conversations: spamConversations,
     profiles: spamProfiles,
+    groupExtraData: spamGroupExtraData,
     isLoading: isLoadingSpam,
     isFetching: isFetchingSpam,
     isFetchingNextPage: isFetchingNextSpam,
@@ -325,7 +326,8 @@ export function HomeScreen() {
   const buildItemsFromConversations = useCallback(
     (
       source: ConversationMap,
-      profileMap: PublicKeyToProfileEntryResponseMap
+      profileMap: PublicKeyToProfileEntryResponseMap,
+      groupExtraDataMap: Record<string, Record<string, string> | null> = {}
     ) => {
       const userPk = currentUser?.PublicKeyBase58Check;
       if (!userPk) return [];
@@ -376,23 +378,46 @@ export function HomeScreen() {
         let hasGroupImage = false;
 
         if (isGroup) {
-          // Extract group image from message ExtraData or RecipientInfo
+          const accessGroupKeyName = (last?.RecipientInfo as any)
+            ?.AccessGroupKeyName;
+          const groupKey =
+            accessGroupKeyName && typeof accessGroupKeyName === "string"
+              ? `${otherPk}-${accessGroupKeyName}`
+              : null;
+
+          const groupExtra = groupKey ? groupExtraDataMap[groupKey] : null;
+
+          // Extract group image from access group ExtraData (GraphQL), then fall back to message/recipient extraData
           const recipientExtraData = (last?.RecipientInfo as any)?.ExtraData as
             | Record<string, any>
             | undefined;
           const messageExtraData2 = last?.MessageInfo?.ExtraData as
             | Record<string, any>
             | undefined;
-          const groupImageURL =
-            recipientExtraData?.GroupImageURL ||
-            messageExtraData2?.GroupImageURL;
 
-          // If there's a custom group image, use it
+          const groupImageURL =
+            groupExtra?.groupImage ||
+            groupExtra?.GroupImageURL ||
+            groupExtra?.groupImageURL ||
+            groupExtra?.groupImageUrl ||
+            groupExtra?.GroupImageUrl ||
+            groupExtra?.LargeProfilePicURL ||
+            groupExtra?.FeaturedImageURL ||
+            recipientExtraData?.groupImage ||
+            recipientExtraData?.GroupImageURL ||
+            recipientExtraData?.groupImageURL ||
+            recipientExtraData?.groupImageUrl ||
+            recipientExtraData?.GroupImageUrl ||
+            messageExtraData2?.groupImage ||
+            messageExtraData2?.GroupImageURL ||
+            messageExtraData2?.groupImageURL ||
+            messageExtraData2?.groupImageUrl ||
+            messageExtraData2?.GroupImageUrl;
+
           if (groupImageURL && typeof groupImageURL === "string") {
             avatarUri = groupImageURL;
             hasGroupImage = true;
           } else {
-            // No group image, will show placeholder icon instead
             avatarUri = FALLBACK_GROUP_IMAGE;
           }
         } else {
@@ -427,16 +452,31 @@ export function HomeScreen() {
         };
       });
     },
-    [currentUser?.PublicKeyBase58Check, profiles, groupMembers]
+    [
+      currentUser?.PublicKeyBase58Check,
+      profiles,
+      groupMembers,
+      groupExtraData,
+    ]
   );
 
   const inboxItems = useMemo(
-    () => buildItemsFromConversations(conversations, profiles),
-    [buildItemsFromConversations, conversations, profiles]
+    () => buildItemsFromConversations(conversations, profiles, groupExtraData),
+    [buildItemsFromConversations, conversations, profiles, groupExtraData]
   );
   const spamItems = useMemo(
-    () => buildItemsFromConversations(spamConversations, spamProfiles ?? {}),
-    [buildItemsFromConversations, spamConversations, spamProfiles]
+    () =>
+      buildItemsFromConversations(
+        spamConversations,
+        spamProfiles ?? {},
+        spamGroupExtraData
+      ),
+    [
+      buildItemsFromConversations,
+      spamConversations,
+      spamProfiles,
+      spamGroupExtraData,
+    ]
   );
   const enhancedItems = useMemo(() => {
     const baseItems = activeMailbox === "spam" ? spamItems : inboxItems;
@@ -1114,13 +1154,13 @@ export function HomeScreen() {
             dataSet={{ virtualizedList: "true" }}
             className="flex-1"
           >
-	            <FlashList
-	              data={enhancedItems}
-	              keyExtractor={(item) => item.id}
-	              extraData={optimisticOverrides} // Force re-render when items move between mailboxes
-	              className="flex-1"
-	              showsVerticalScrollIndicator={false}
-	              ItemSeparatorComponent={() => null}
+              <FlashList
+                data={enhancedItems}
+                keyExtractor={(item) => item.id}
+                extraData={optimisticOverrides} // Force re-render when items move between mailboxes
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0
                   ? "flex-grow items-center justify-center px-4"
@@ -1392,12 +1432,12 @@ export function HomeScreen() {
                     </Text>
                   </View>
                 ) : (
-	                  <FlashList
-	                    data={newChatResults}
-	                    keyExtractor={(item) => item.publicKey}
-	                    keyboardShouldPersistTaps="handled"
-	                    showsVerticalScrollIndicator={false}
-	                    renderItem={({ item }) => (
+                    <FlashList
+                      data={newChatResults}
+                      keyExtractor={(item) => item.publicKey}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                      renderItem={({ item }) => (
                       <TouchableOpacity
                         style={{
                           flexDirection: "row",
