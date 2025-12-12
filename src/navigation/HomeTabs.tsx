@@ -20,6 +20,7 @@ import { buildProfilePictureUrl } from "deso-protocol";
 import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import Animated, {
   Easing,
   interpolate,
@@ -33,6 +34,8 @@ import { DesktopLeftNav } from "../features/messaging/components/desktop/Desktop
 import { DesktopRightNav } from "../features/messaging/components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH } from "../alf/breakpoints";
 import { getBorderColor } from "../theme/borders";
+import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
+import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
@@ -42,12 +45,20 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const isDark = colorScheme === "dark";
   const { accentColor, accentStrong } = useAccentColor();
   const insets = useSafeAreaInsets();
+  const [showWalletSwitcher, setShowWalletSwitcher] = React.useState(false);
+  const { accounts } = useWalletSwitcher();
+  const longPressHandledRef = React.useRef(false);
 
   const tabButtons = state.routes.map((route, index) => {
     const { options } = descriptors[route.key];
     const isFocused = state.index === index;
 
     const onPress = () => {
+      if (route.name === "Profile" && longPressHandledRef.current) {
+        longPressHandledRef.current = false;
+        return;
+      }
+
       const event = navigation.emit({
         type: "tabPress",
         target: route.key,
@@ -62,6 +73,18 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         }
       }
     };
+
+    // Handle long-press on Profile icon with haptic feedback
+    const onLongPress =
+      route.name === "Profile"
+      ? () => {
+          longPressHandledRef.current = true;
+          if (Platform.OS !== "web") {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          }
+          setShowWalletSwitcher(true);
+        }
+      : undefined;
 
     // Center button (Compose) - integrated into bottom bar
     if (route.name === "Post") {
@@ -98,6 +121,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <TouchableOpacity
         key={route.key}
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={250}
         activeOpacity={0.7}
         style={{
           flex: 1,
@@ -144,25 +169,35 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   // Bluesky-style attached bottom bar
   return (
-    <View
-      // @ts-ignore - data attribute for CSS scroll lock
-      dataSet={{ scrollLock: "true" }}
-      style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: "row",
-        backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: getBorderColor(isDark, "contrast_low"),
-        paddingLeft: 5,
-        paddingRight: 10,
-        paddingBottom: Math.max(insets.bottom, 15),
-      }}
-    >
-      {tabButtons}
-    </View>
+    <>
+      <View
+        // @ts-ignore - data attribute for CSS scroll lock
+        dataSet={{ scrollLock: "true" }}
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          flexDirection: "row",
+          backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: getBorderColor(isDark, "contrast_low"),
+          paddingLeft: 5,
+          paddingRight: 10,
+          paddingBottom: Math.max(insets.bottom, 15),
+        }}
+      >
+        {tabButtons}
+      </View>
+      {/* Wallet Switcher Modal - triggered by long-press on Profile icon */}
+      {showWalletSwitcher && (
+        <WalletSwitcher 
+          showTrigger={false}
+          externalOpen={showWalletSwitcher}
+          onExternalClose={() => setShowWalletSwitcher(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -438,5 +473,3 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
     </Drawer>
   );
 }
-
-

@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from "react-native";
+import { View, Text, Pressable, TouchableOpacity, ScrollView, Platform, ActivityIndicator, LayoutAnimation } from "react-native";
 import { useColorScheme } from "nativewind";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import { Feather } from "@expo/vector-icons";
@@ -13,6 +13,11 @@ import { identity } from "deso-protocol";
 import { handleLogout } from "@/lib/auth";
 import { Toast } from "@/components/ui/Toast";
 import { useAuthTransition } from "@/state/auth/AuthTransitionProvider";
+import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
+import { WalletList } from "@/features/auth/components/WalletList";
+import { AvatarStack } from "@/components/ui/AvatarStack";
+import { UserAvatar } from "@/components/UserAvatar";
+import { getProfileDisplayName, getProfileImageUrl, formatPublicKey } from "@/utils/deso";
 
 export function SettingsScreen({ navigation }: any) {
   const { colorScheme } = useColorScheme();
@@ -21,6 +26,9 @@ export function SettingsScreen({ navigation }: any) {
   const { currentUser } = useContext(DeSoIdentityContext);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { startAuthTransition, endAuthTransition } = useAuthTransition();
+  const { accounts } = useWalletSwitcher();
+  const [showWallets, setShowWallets] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
   
   const {
     accentId,
@@ -56,6 +64,12 @@ export function SettingsScreen({ navigation }: any) {
     }
   };
 
+  const profile = currentUser?.ProfileEntryResponse;
+  const publicKey = currentUser?.PublicKeyBase58Check || "";
+  const displayName = getProfileDisplayName(profile, publicKey);
+  const username = profile?.Username || formatPublicKey(publicKey);
+  const avatarUrl = getProfileImageUrl(publicKey);
+
   return (
     <DesktopShell>
       <ScreenWrapper
@@ -63,148 +77,158 @@ export function SettingsScreen({ navigation }: any) {
         edges={['top']}
       >
         <View className="flex-row items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-           <TouchableOpacity 
+           <Pressable 
              onPress={handleBackPress} 
-             className="mr-3"
+             className="mr-3 rounded-full p-1.5 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
            >
               <Feather name="arrow-left" size={24} color={isDark ? "white" : "black"} />
-           </TouchableOpacity>
+           </Pressable>
            <Text className="text-xl font-bold text-slate-900 dark:text-white">Settings</Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
-          <View className="mb-6">
-             <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">Appearance</Text>
-             <View 
-               className="rounded-xl p-4"
-               style={{ 
-                 backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(241, 245, 249, 0.8)',
-                 borderWidth: 1,
-                 borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
-                 ...Platform.select({
-                   web: {
-                     // @ts-ignore - web-only CSS
-                     transition: 'background-color 0.3s ease-in-out, border-color 0.3s ease-in-out',
-                   },
-                 }),
-               }}
-             >
-               <View className="flex-row items-center mb-3">
-                 <Feather 
-                   name="smartphone" 
-                   size={20} 
-                   color={isDark ? "#94a3b8" : "#64748b"} 
-                 />
-                 <Text className="ml-2 text-base font-medium text-slate-900 dark:text-white">
-                   Color Mode
-                 </Text>
-               </View>
-               <SegmentedControl
-                 items={[
-                   { label: 'System', value: 'system' },
-                   { label: 'Light', value: 'light' },
-                   { label: 'Dark', value: 'dark' },
-                 ]}
-                 value={colorMode}
-                 onChange={setColorMode}
-                 label="Color mode"
-               />
-             </View>
-          </View>
-
-          <View className="mb-8">
-            <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-3 uppercase tracking-wider">
-              Theme Color
+        <ScrollView>
+          {/* Profile Card */}
+          <View className="items-center py-8 px-4 border-b border-slate-200 dark:border-slate-800">
+            <UserAvatar
+              uri={avatarUrl}
+              name={displayName}
+              size={80}
+            />
+            <Text className="mt-3 text-xl font-bold text-slate-900 dark:text-white">
+              {displayName}
             </Text>
-            <View 
-              className="rounded-2xl p-4"
-              style={{ 
-                backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : 'rgba(241, 245, 249, 0.8)',
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
-              }}
-            >
-              {/* Color Circles Row */}
-              <View className="flex-row items-center justify-around">
-                {ACCENT_OPTIONS.map((option) => {
-                  const selected = option.id === accentId;
-                  return (
-                    <TouchableOpacity
-                      key={option.id}
-                      onPress={() => setAccentId(option.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: option.primary,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        {selected && (
-                          <Feather name="check" size={16} color={option.onPrimary} />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </View>
-
-          <View>
-             <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">About</Text>
-             <View className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-4">
-                <Text className="text-base text-slate-900 dark:text-white">Version 1.0.0</Text>
-             </View>
-          </View>
-
-          <View className="mt-8">
-            <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
-              Account
+            <Text className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              @{username}
             </Text>
-            <View
-              className="rounded-2xl p-4 flex-row items-center gap-3"
-              style={{
-                backgroundColor: isDark ? "rgba(30, 41, 59, 0.6)" : "rgba(254, 242, 242, 0.9)",
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(248, 113, 113, 0.3)" : "rgba(248, 113, 113, 0.4)",
-              }}
-            >
-              <View className="flex-1">
-                <Text className="text-base font-semibold text-slate-900 dark:text-white">
-                  Log out
-                </Text>
-                <Text className="text-sm text-slate-600 dark:text-slate-300" numberOfLines={2}>
-                  {currentUser?.ProfileEntryResponse?.Username
-                    ? `Sign out of @${currentUser.ProfileEntryResponse.Username}`
-                    : "Sign out of your account"}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={onLogout}
-                disabled={isLoggingOut}
-                className="flex-row items-center px-4 py-2 rounded-xl"
-                style={{
-                  backgroundColor: isDark ? "rgba(248, 113, 113, 0.2)" : "#fee2e2",
-                  opacity: isLoggingOut ? 0.7 : 1,
+          </View>
+
+          {/* Switch Account Section */}
+          {accounts.length > 1 && (
+            <View className="border-b border-slate-200 dark:border-slate-800">
+              <Pressable
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  }
+                  setShowWallets(!showWallets);
                 }}
+                className="flex-row items-center justify-between px-4 py-4 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
               >
+                <View className="flex-row items-center gap-3">
+                  <Feather name="users" size={20} color={isDark ? "#e2e8f0" : "#0f172a"} />
+                  <Text className="text-base text-slate-900 dark:text-white">Switch account</Text>
+                </View>
+                {showWallets ? (
+                  <Feather name="chevron-up" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
+                ) : (
+                  <AvatarStack maxVisible={3} size={24} />
+                )}
+              </Pressable>
+              {showWallets && (
+                <View className="px-4 pb-4">
+                  <WalletList />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Appearance Section */}
+          <View className="border-b border-slate-200 dark:border-slate-800">
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== "web") {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                }
+                setShowAppearance(!showAppearance);
+              }}
+              className="flex-row items-center justify-between px-4 py-4 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
+            >
+              <View className="flex-row items-center gap-3">
+                <Feather name="droplet" size={20} color={isDark ? "#e2e8f0" : "#0f172a"} />
+                <Text className="text-base text-slate-900 dark:text-white">Appearance</Text>
+              </View>
+              <Feather 
+                name={showAppearance ? "chevron-up" : "chevron-right"} 
+                size={20} 
+                color={isDark ? "#94a3b8" : "#64748b"} 
+              />
+            </Pressable>
+
+            {/* Appearance Content */}
+            {showAppearance && (
+              <View className="px-4 pb-4 bg-slate-50 dark:bg-slate-900/50">
+                {/* Color Mode */}
+                <View className="mb-4">
+                  <Text className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Color Mode
+                  </Text>
+                  <SegmentedControl
+                    items={[
+                      { label: 'System', value: 'system' },
+                      { label: 'Light', value: 'light' },
+                      { label: 'Dark', value: 'dark' },
+                    ]}
+                    value={colorMode}
+                    onChange={setColorMode}
+                    label="Color mode"
+                  />
+                </View>
+
+                {/* Theme Color */}
+                <View>
+                  <Text className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                    Theme Color
+                  </Text>
+                  <View className="flex-row items-center justify-around">
+                    {ACCENT_OPTIONS.map((option) => {
+                      const selected = option.id === accentId;
+                      return (
+                        <TouchableOpacity
+                          key={option.id}
+                          onPress={() => setAccentId(option.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 16,
+                              backgroundColor: option.primary,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            {selected && (
+                              <Feather name="check" size={16} color={option.onPrimary} />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+
+
+          {/* Sign Out */}
+          <View className="pt-4 px-4 pb-8">
+            <Pressable
+              onPress={onLogout}
+              disabled={isLoggingOut}
+              className="py-4 rounded-xl px-3 -mx-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
+            >
+              <View className="flex-row items-center">
                 {isLoggingOut ? (
                   <ActivityIndicator size="small" color={isDark ? "#fca5a5" : "#ef4444"} />
                 ) : (
-                  <>
-                    <Feather name="log-out" size={18} color={isDark ? "#fca5a5" : "#ef4444"} />
-                    <Text className="ml-2 font-semibold text-red-600 dark:text-red-300">
-                      Log out
-                    </Text>
-                  </>
+                  <Text className="text-base font-medium text-red-600 dark:text-red-400">
+                    Sign out
+                  </Text>
                 )}
-              </TouchableOpacity>
-            </View>
+              </View>
+            </Pressable>
           </View>
         </ScrollView>
       </ScreenWrapper>

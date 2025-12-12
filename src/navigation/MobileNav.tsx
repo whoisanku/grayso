@@ -1,10 +1,11 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { View, TouchableOpacity, Platform, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 
 import { type RootStackParamList, type HomeTabParamList } from "./types";
 import MessageIcon from "../assets/navIcons/message.svg";
@@ -13,6 +14,8 @@ import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { getBorderColor } from "../theme/borders";
+import { SwitchWalletDialog } from "@/features/auth/components/SwitchWalletDialog";
+import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
 
 type MobileNavProps = {
   activeTab?: keyof HomeTabParamList;
@@ -25,6 +28,17 @@ export function MobileNav({ activeTab }: MobileNavProps) {
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
   const { accentColor } = useAccentColor();
+  const { accounts } = useWalletSwitcher();
+  const [showWalletSwitcher, setShowWalletSwitcher] = useState(false);
+
+  const handleProfileLongPress = () => {
+    if (accounts.length > 1) {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      setShowWalletSwitcher(true);
+    }
+  };
 
   const tabConfig = useMemo(
     () => [
@@ -68,6 +82,7 @@ export function MobileNav({ activeTab }: MobileNavProps) {
       {
         key: "Profile" as const,
         onPress: () => navigation.navigate("Main", { screen: "Profile" }),
+        onLongPress: handleProfileLongPress,
         renderIcon: (focused: boolean) =>
           focused ? (
             <UserIconFilled
@@ -110,6 +125,7 @@ export function MobileNav({ activeTab }: MobileNavProps) {
           <TouchableOpacity
             key={tab.key}
             onPress={tab.onPress}
+            onLongPress={(tab as any).onLongPress}
             activeOpacity={0.8}
             style={styles.tabButton}
           >
@@ -117,6 +133,12 @@ export function MobileNav({ activeTab }: MobileNavProps) {
           </TouchableOpacity>
         );
       })}
+      
+      {/* Wallet Switcher Dialog */}
+      <SwitchWalletDialog
+        visible={showWalletSwitcher}
+        onClose={() => setShowWalletSwitcher(false)}
+      />
     </View>
   );
 }

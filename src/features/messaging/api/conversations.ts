@@ -64,6 +64,32 @@ export type Conversation = {
 
 export type ConversationMap = Record<string, Conversation>;
 
+export type ThreadMeta = {
+  isSpam: boolean;
+  requiredPaymentAmountUsdCents?: string | null;
+};
+
+export type ThreadMetaMap = Record<string, ThreadMeta>;
+
+const pickGroupImageFromExtraData = (
+  extraData?: Record<string, string> | null
+): string | undefined => {
+  if (!extraData) {
+    return undefined;
+  }
+
+  return (
+    extraData.groupImage ||
+    extraData.GroupImageURL ||
+    extraData.groupImageURL ||
+    extraData.groupImageUrl ||
+    extraData.GroupImageUrl ||
+    extraData.LargeProfilePicURL ||
+    extraData.FeaturedImageURL ||
+    undefined
+  );
+};
+
 const buildConversationMapFromMessages = (
   decrypted: DecryptedMessageEntryResponse[]
 ): ConversationMap => {
@@ -105,6 +131,218 @@ const buildConversationMapFromMessages = (
   });
 
   return conversations;
+};
+
+export const getAllConversationsFromFocusGraphql = async (
+  userPublicKeyBase58Check: string,
+  allAccessGroups: AccessGroupEntryResponse[],
+  offset = 0,
+  first = 20
+): Promise<{
+  conversations: ConversationMap;
+  publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap;
+  updatedAllAccessGroups: AccessGroupEntryResponse[];
+  hasMore: boolean;
+  groupMembers: Record<string, GroupMember[]>;
+  groupExtraData: Record<string, Record<string, string> | null>;
+  threadMeta: ThreadMetaMap;
+}> => {
+  const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
+    userPublicKey: userPublicKeyBase58Check,
+    isSpam: null,
+    first,
+    offset,
+  });
+
+  const threadMeta: ThreadMetaMap = {};
+  const publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
+    {};
+
+  const groupMembersMap: Record<string, GroupMember[]> = {};
+  const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
+  const memberFetchPromises: Promise<void>[] = [];
+
+  const rawMessages: NewMessageEntryResponse[] = threadNodes
+    .map((thread) => {
+      const message = thread.thread?.messages?.nodes?.[0];
+      if (!message?.encryptedText) {
+        return null;
+      }
+
+      const threadIdentifier = thread.threadIdentifier || "";
+      if (threadIdentifier) {
+        threadMeta[threadIdentifier] = {
+          isSpam: coerceSpamFlag(thread.isSpam),
+          requiredPaymentAmountUsdCents:
+            thread.requiredPaymentAmountUsdCents ?? null,
+        };
+      }
+
+      const senderAccount = message.sender;
+      const receiverAccount = message.receiver;
+      const senderPublicKey =
+        senderAccount?.publicKey || thread.initiatorPublicKey || "";
+      const receiverPublicKey = receiverAccount?.publicKey || "";
+
+      const { nanos, nanosString } = normalizeTimestampToNanos(
+        message.timestamp ?? 0
+      );
+
+      if (senderAccount?.publicKey) {
+        publicKeyToProfileEntryResponseMap[senderAccount.publicKey] =
+          buildDefaultProfileEntry(
+            senderAccount.publicKey,
+            senderAccount.username ?? undefined,
+            pickProfilePicFromExtraData(senderAccount.extraData)
+          );
+      }
+
+      if (receiverAccount?.publicKey) {
+        publicKeyToProfileEntryResponseMap[receiverAccount.publicKey] =
+          buildDefaultProfileEntry(
+            receiverAccount.publicKey,
+            receiverAccount.username ?? undefined,
+            pickProfilePicFromExtraData(receiverAccount.extraData)
+          );
+      }
+
+      if (!senderPublicKey || (!receiverPublicKey && !thread.thread?.isGroupChatMessage)) {
+        return null;
+      }
+
+      const isGroupChat = Boolean(
+        thread.thread?.isGroupChatMessage || message.isGroupChatMessage
+      );
+      const chatType = isGroupChat ? ChatType.GROUPCHAT : ChatType.DM;
+
+      const senderGroup = pickDefaultAccessGroup(
+        senderAccount || undefined,
+        senderPublicKey
+      );
+      const senderAccessGroupPublicKey =
+        findAccessGroupPublicKey(allAccessGroups, senderGroup.owner, senderGroup.keyName) ||
+        senderGroup.publicKey ||
+        "";
+
+      const recipientGroup = isGroupChat
+        ? {
+            keyName:
+              thread.thread?.accessGroupKeyName ||
+              DEFAULT_KEY_MESSAGING_GROUP_NAME,
+            owner:
+              thread.thread?.accessGroupOwnerPublicKey ||
+              receiverPublicKey ||
+              senderPublicKey,
+            publicKey: null as string | null,
+          }
+        : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
+
+      if (isGroupChat) {
+        const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
+
+        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
+          const fetchPromise = fetchAccessGroupMembers({
+            accessGroupKeyName: recipientGroup.keyName,
+            accessGroupOwnerPublicKey: recipientGroup.owner,
+            limit: 10,
+          })
+            .then(({ members, extraData }) => {
+              if (!groupExtraDataMap[groupKey] && extraData) {
+                groupExtraDataMap[groupKey] = extraData;
+              }
+
+              const hasCustomImageNow = Boolean(
+                pickGroupImageFromExtraData(extraData)
+              );
+
+              if (
+                !hasCustomImageNow &&
+                members?.length &&
+                !groupMembersMap[groupKey]
+              ) {
+                groupMembersMap[groupKey] = members.slice(0, 3);
+              }
+            })
+            .catch((err) => {
+              console.warn("[FocusGraphql] Failed to fetch group members", {
+                groupKey,
+                error: err,
+              });
+            });
+
+          memberFetchPromises.push(fetchPromise);
+        }
+      }
+
+      const recipientAccessGroupPublicKey =
+        findAccessGroupPublicKey(
+          allAccessGroups,
+          recipientGroup.owner,
+          recipientGroup.keyName
+        ) ||
+        recipientGroup.publicKey ||
+        "";
+
+      return {
+        ChatType: chatType,
+        SenderInfo: {
+          OwnerPublicKeyBase58Check: senderPublicKey,
+          AccessGroupPublicKeyBase58Check: senderAccessGroupPublicKey,
+          AccessGroupKeyName: senderGroup.keyName,
+        },
+        RecipientInfo: {
+          OwnerPublicKeyBase58Check: recipientGroup.owner,
+          AccessGroupPublicKeyBase58Check: recipientAccessGroupPublicKey,
+          AccessGroupKeyName: recipientGroup.keyName,
+        },
+        MessageInfo: {
+          EncryptedText: message.encryptedText,
+          TimestampNanos: nanos,
+          TimestampNanosString: nanosString,
+          ExtraData: {
+            ...(message.extraData || {}),
+            threadIdentifier,
+          },
+        },
+      } as NewMessageEntryResponse;
+    })
+    .filter(
+      (message): message is NewMessageEntryResponse =>
+        Boolean(message?.MessageInfo?.EncryptedText)
+    );
+
+  if (rawMessages.length === 0) {
+    return {
+      conversations: {},
+      publicKeyToProfileEntryResponseMap,
+      updatedAllAccessGroups: allAccessGroups,
+      hasMore: false,
+      groupMembers: groupMembersMap,
+      groupExtraData: groupExtraDataMap,
+      threadMeta,
+    };
+  }
+
+  await Promise.allSettled(memberFetchPromises);
+
+  const { decrypted, updatedAllAccessGroups } =
+    await decryptAccessGroupMessagesWithRetry(
+      userPublicKeyBase58Check,
+      rawMessages,
+      allAccessGroups
+    );
+
+  const conversations = buildConversationMapFromMessages(decrypted);
+
+  return {
+    conversations,
+    publicKeyToProfileEntryResponseMap,
+    updatedAllAccessGroups,
+    hasMore: Boolean(pageInfo?.hasNextPage),
+    groupMembers: groupMembersMap,
+    groupExtraData: groupExtraDataMap,
+    threadMeta,
+  };
 };
 
 export const getConversationsNewMap = async (
@@ -274,6 +512,7 @@ export const getConversationsFromFocusGraphql = async (
 }> => {
   const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
     userPublicKey: userPublicKeyBase58Check,
+    isSpam: false,
     first,
     offset,
   });
@@ -359,27 +598,28 @@ export const getConversationsFromFocusGraphql = async (
       if (isGroupChat) {
         const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
 
-        // Persist any access group extra data (e.g., groupImage)
-        const groupExtra = thread.thread?.accessGroup?.extraData || null;
-        if (groupExtra && !groupExtraDataMap[groupKey]) {
-          groupExtraDataMap[groupKey] = groupExtra;
-        }
-
-        const hasCustomImage = Boolean(groupExtra?.groupImage);
-
-        if (!groupMembersMap[groupKey]) {
-          // Fetch a small member sample when no custom image so we can render stacked avatars.
+        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
+          // Fetch access group extraData (for groupImage) + a small member sample.
           const fetchPromise = fetchAccessGroupMembers({
             accessGroupKeyName: recipientGroup.keyName,
             accessGroupOwnerPublicKey: recipientGroup.owner,
             limit: 10,
           })
             .then(({ members, extraData }) => {
-              if (!hasCustomImage && members?.length) {
-                groupMembersMap[groupKey] = members.slice(0, 3);
-              }
               if (!groupExtraDataMap[groupKey] && extraData) {
                 groupExtraDataMap[groupKey] = extraData;
+              }
+
+              const hasCustomImageNow = Boolean(
+                pickGroupImageFromExtraData(extraData)
+              );
+
+              if (
+                !hasCustomImageNow &&
+                members?.length &&
+                !groupMembersMap[groupKey]
+              ) {
+                groupMembersMap[groupKey] = members.slice(0, 3);
               }
             })
             .catch((err) => {
@@ -589,25 +829,28 @@ export const getSpamConversationsFromFocusGraphql = async (
 
       if (isGroupChat) {
         const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
-        const groupExtra = thread.thread?.accessGroup?.extraData || null;
-        if (groupExtra && !groupExtraDataMap[groupKey]) {
-          groupExtraDataMap[groupKey] = groupExtra;
-        }
 
-        const hasCustomImage = Boolean(groupExtra?.groupImage);
-
-        if (!groupMembersMap[groupKey]) {
+        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
           const fetchPromise = fetchAccessGroupMembers({
             accessGroupKeyName: recipientGroup.keyName,
             accessGroupOwnerPublicKey: recipientGroup.owner,
             limit: 10,
           })
             .then(({ members, extraData }) => {
-              if (!hasCustomImage && members?.length) {
-                groupMembersMap[groupKey] = members.slice(0, 3);
-              }
               if (!groupExtraDataMap[groupKey] && extraData) {
                 groupExtraDataMap[groupKey] = extraData;
+              }
+
+              const hasCustomImageNow = Boolean(
+                pickGroupImageFromExtraData(extraData)
+              );
+
+              if (
+                !hasCustomImageNow &&
+                members?.length &&
+                !groupMembersMap[groupKey]
+              ) {
+                groupMembersMap[groupKey] = members.slice(0, 3);
               }
             })
             .catch((err) => {

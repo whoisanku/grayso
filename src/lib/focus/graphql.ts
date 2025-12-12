@@ -401,9 +401,6 @@ export type FocusThreadNode = {
     accessGroupKeyName?: string | null;
     accessGroupOwnerPublicKey?: string | null;
     threadIdentifier?: string | null;
-    accessGroup?: {
-      extraData?: Record<string, string> | null;
-    } | null;
     messages?: { nodes?: FocusMessageNode[] | null } | null;
   } | null;
 };
@@ -734,7 +731,7 @@ export async function fetchInboxMessageThreads({
   first = 20,
   offset = 0,
   orderBy = ["LATEST_MESSAGE_TIMESTAMP_DESC"],
-  isSpam = false,
+  isSpam,
   filter,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
   DEFAULT_FOCUS_GRAPHQL_URL,
@@ -743,7 +740,7 @@ export async function fetchInboxMessageThreads({
   first?: number;
   offset?: number;
   orderBy?: string[];
-  isSpam?: boolean;
+  isSpam?: boolean | null;
   filter?: Record<string, unknown>;
   graphqlEndpoint?: string;
 }): Promise<{
@@ -753,8 +750,12 @@ export async function fetchInboxMessageThreads({
   const mergedFilter = {
     initiator: { isBlacklisted: { equalTo: false } },
     ...filter,
-    // Explicit isSpam param takes precedence over caller-provided filter
-    isSpam: { equalTo: isSpam },
+    ...(typeof isSpam === "boolean"
+      ? {
+          // Explicit isSpam param takes precedence over caller-provided filter
+          isSpam: { equalTo: isSpam },
+        }
+      : {}),
   } as Record<string, unknown>;
 
   const variables: Record<string, unknown> = {

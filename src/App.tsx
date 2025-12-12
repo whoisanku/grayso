@@ -1,3 +1,5 @@
-// Platform-specific App entry point
-// This file re-exports the platform-specific App component
-export { default } from './AppTest';
+// TypeScript-only fallback entry point.
+//
+// Metro will prefer platform files (`App.native.tsx`, `App.web.tsx`), but `tsc`
+// needs a resolvable module for `import App from "./src/App"`.
+export { default } from "./App.native";

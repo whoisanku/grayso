@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import {
   Text,
+  Pressable,
   TouchableOpacity,
   View,
   ActivityIndicator,
@@ -15,7 +16,6 @@ import {
   Modal,
   Platform,
   TextInput,
-  ScrollView,
 } from "react-native";
 import { UserAvatar } from "@/components/UserAvatar";
 import { FlashList } from "@shopify/flash-list";
@@ -41,15 +41,14 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "@/constants/messaging";
 import {
   formatPublicKey,
-  FALLBACK_GROUP_IMAGE,
   FALLBACK_PROFILE_IMAGE,
   getProfileImageUrl,
 } from "@/utils/deso";
 
-import { useConversations } from "@/features/messaging/hooks/useConversations";
+import { useConversationThreads } from "@/features/messaging/hooks/useConversationThreads";
+import { useThreadSettings } from "@/features/messaging/hooks/useThreadSettings";
 import {
   SafeAreaView,
-  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "@/constants/events";
 import { getBorderColor } from "@/theme/borders";
@@ -66,14 +65,7 @@ import {
 } from "@/alf/breakpoints";
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import {
-  getConversationsQueryKey,
-  fetchConversations,
-} from "@/state/queries/messages/list";
-import type { GroupMember } from "@/lib/deso/graphql";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
-import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
@@ -98,7 +90,100 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
   ComposerNavigationProp
 >;
 
-const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
+type ConversationRowProps = {
+  item: MockConversation;
+  isDesktopWeb: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+};
+
+function ConversationRow({
+  item,
+  isDesktopWeb,
+  onPress,
+  onLongPress,
+}: ConversationRowProps) {
+  return (
+    <View className="w-full bg-white dark:bg-[#0a0f1a]">
+      <Pressable
+        className="w-full flex-row items-center px-4 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={isDesktopWeb ? { borderRadius: 14, overflow: "hidden" } : undefined}
+      >
+        <View className="mr-3">
+          <UserAvatar
+            uri={item.avatarUri}
+            name={item.name}
+            size={56} // 14 * 4 = 56px
+            isGroup={item.isGroup}
+            recyclingKey={item.id}
+          />
+        </View>
+        <View className="flex-1 min-w-0">
+          <View className="flex-row items-center justify-between mb-1">
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
+            >
+              {item.name}
+            </Text>
+            {item.time ? (
+              <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
+                {item.time}
+              </Text>
+            ) : null}
+          </View>
+          <View className="flex-row items-center">
+            <Text
+              numberOfLines={1}
+              className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+            >
+              {item.preview}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+type NewChatResultRowProps = {
+  item: UserSearchResult;
+  isDark: boolean;
+  onPress: () => void;
+};
+
+function NewChatResultRow({ item, isDark, onPress }: NewChatResultRowProps) {
+  return (
+    <Pressable
+      className="transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
+      onPress={onPress}
+    >
+      <View className="flex-row items-center px-5 py-3">
+      <UserAvatar
+        uri={getProfileImageUrl(item.publicKey)}
+        name={item.username || "?"}
+        size={48}
+        className="bg-slate-200 dark:bg-slate-700"
+      />
+      <View style={{ marginLeft: 14, flex: 1 }}>
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: "600",
+            color: isDark ? "#ffffff" : "#0f172a",
+          }}
+          numberOfLines={1}
+        >
+          {item.username || "Anonymous"}
+        </Text>
+      </View>
+      </View>
+    </Pressable>
+  );
+}
 
 // UI-only mock data
 type MockConversation = {
@@ -108,6 +193,7 @@ type MockConversation = {
   time: string;
   avatarUri?: string | null;
   isGroup: boolean;
+  mailbox: "inbox" | "spam";
   chatType: ChatType;
   threadPublicKey: string;
   threadIdentifier?: string;
@@ -115,8 +201,10 @@ type MockConversation = {
   userAccessGroupKeyName?: string;
   partyGroupOwnerPublicKeyBase58Check?: string;
   lastTimestampNanos?: number;
-  recipientInfo?: any; // Using any for now to match the data structure
-  hasGroupImage?: boolean;
+  recipientInfo?: {
+    OwnerPublicKeyBase58Check: string;
+    AccessGroupKeyName?: string | null;
+  } | null;
 };
 
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -171,8 +259,6 @@ const getMediaPreviewText = (
 
 export function HomeScreen() {
   const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
-  const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation =
@@ -197,10 +283,6 @@ export function HomeScreen() {
     >
   >({});
 
-  // Track optimistic mailbox overrides: ID -> 'inbox' | 'spam'
-  const [optimisticOverrides, setOptimisticOverrides] = useState<
-    Record<string, "inbox" | "spam">
-  >({});
   // Track loading state for specific items
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
 
@@ -223,27 +305,18 @@ export function HomeScreen() {
     profiles,
     groupMembers,
     groupExtraData,
-    isLoading: isLoadingInbox,
-    isFetching: isFetchingInbox,
-    isFetchingNextPage: isFetchingNextInbox,
-    hasNextPage: hasMoreInbox,
-    reload: reloadInbox,
-    loadMore: loadMoreInbox,
-    error: errorInbox,
-  } = useConversations("inbox");
+    threadMeta,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    hasNextPage,
+    reload,
+    loadMore,
+    error,
+  } = useConversationThreads();
 
-  const {
-    conversations: spamConversations,
-    profiles: spamProfiles,
-    groupExtraData: spamGroupExtraData,
-    isLoading: isLoadingSpam,
-    isFetching: isFetchingSpam,
-    isFetchingNextPage: isFetchingNextSpam,
-    hasNextPage: hasMoreSpam,
-    reload: reloadSpam,
-    loadMore: loadMoreSpam,
-    error: errorSpam,
-  } = useConversations("spam", { enabled: activeMailbox === "spam" });
+  const { settings: threadSettings, setThreadMailbox: setThreadMailboxOverride } =
+    useThreadSettings();
 
   useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
@@ -374,8 +447,7 @@ export function HomeScreen() {
           : `${senderName}: ${last?.DecryptedMessage || "..."}`;
 
         // For group chats, check if there's a custom group image in RecipientInfo ExtraData
-        let avatarUri: string;
-        let hasGroupImage = false;
+        let avatarUri: string | null = null;
 
         if (isGroup) {
           const accessGroupKeyName = (last?.RecipientInfo as any)
@@ -416,9 +488,6 @@ export function HomeScreen() {
 
           if (groupImageURL && typeof groupImageURL === "string") {
             avatarUri = groupImageURL;
-            hasGroupImage = true;
-          } else {
-            avatarUri = FALLBACK_GROUP_IMAGE;
           }
         } else {
           avatarUri = buildProfilePictureUrl(otherPk, {
@@ -427,9 +496,20 @@ export function HomeScreen() {
         }
 
         // Extract thread identifier from message ExtraData
+        const threadIdentifierRaw = (
+          last?.MessageInfo?.ExtraData as Record<string, unknown> | undefined
+        )?.threadIdentifier;
         const threadIdentifier =
-          (last?.MessageInfo?.ExtraData as Record<string, any> | undefined)
-            ?.threadIdentifier || "";
+          typeof threadIdentifierRaw === "string" ? threadIdentifierRaw : "";
+
+        const mailboxOverride = threadIdentifier
+          ? threadSettings[threadIdentifier]
+          : undefined;
+        const metaMailbox = threadIdentifier
+          ? threadMeta[threadIdentifier]?.isSpam
+          : undefined;
+        const mailbox: "inbox" | "spam" =
+          mailboxOverride ?? (metaMailbox ? "spam" : "inbox");
 
         return {
           id: conversationKey,
@@ -438,6 +518,7 @@ export function HomeScreen() {
           time,
           avatarUri,
           isGroup,
+          mailbox,
           chatType: c.ChatType,
           threadPublicKey: otherPk,
           threadIdentifier,
@@ -447,113 +528,61 @@ export function HomeScreen() {
             ? last?.RecipientInfo?.AccessGroupKeyName
             : DEFAULT_KEY_MESSAGING_GROUP_NAME,
           partyGroupOwnerPublicKeyBase58Check: otherPk,
-          recipientInfo: last?.RecipientInfo,
-          hasGroupImage,
+          recipientInfo: (last?.RecipientInfo as MockConversation["recipientInfo"]) ?? null,
         };
       });
     },
     [
       currentUser?.PublicKeyBase58Check,
-      profiles,
-      groupMembers,
-      groupExtraData,
+      threadMeta,
+      threadSettings,
     ]
   );
 
-  const inboxItems = useMemo(
+  const allItems = useMemo(
     () => buildItemsFromConversations(conversations, profiles, groupExtraData),
     [buildItemsFromConversations, conversations, profiles, groupExtraData]
   );
-  const spamItems = useMemo(
-    () =>
-      buildItemsFromConversations(
-        spamConversations,
-        spamProfiles ?? {},
-        spamGroupExtraData
-      ),
-    [
-      buildItemsFromConversations,
-      spamConversations,
-      spamProfiles,
-      spamGroupExtraData,
-    ]
-  );
-  const enhancedItems = useMemo(() => {
-    const baseItems = activeMailbox === "spam" ? spamItems : inboxItems;
-    const otherItems = activeMailbox === "spam" ? inboxItems : spamItems;
 
-    const visible: MockConversation[] = [];
+  const items = useMemo(() => {
+    const visible = allItems
+      .map((item) => {
+        const optimistic = optimisticPreviews[item.id];
+        if (!optimistic) {
+          return item;
+        }
 
-    // 1) Start with items belonging to the active mailbox
-    baseItems.forEach((item) => {
-      const optimisticMailbox = optimisticOverrides[item.id];
-      if (optimisticMailbox && optimisticMailbox !== activeMailbox) {
-        // Optimistically moved out; skip showing here
-        return;
-      }
+        if (optimistic.timestampNanos <= (item.lastTimestampNanos ?? 0)) {
+          return item;
+        }
 
-      let updatedItem = { ...item };
-      const optimistic = optimisticPreviews[item.id];
-      if (
-        optimistic &&
-        optimistic.timestampNanos > (item.lastTimestampNanos ?? 0)
-      ) {
         const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
-        const hasImages = optimistic.extraData?.decryptedImageURLs;
-        const hasVideos = optimistic.extraData?.decryptedVideoURLs;
+        const hasImages = Boolean(optimistic.extraData?.decryptedImageURLs);
+        const hasVideos = Boolean(optimistic.extraData?.decryptedVideoURLs);
         let previewText = "";
         if (hasVideos) previewText = "You sent a video";
         else if (hasImages) previewText = "You sent an image";
         if (optimistic.messageText.trim()) {
           previewText = previewText
             ? `${previewText}: ${optimistic.messageText.trim()}`
-            : `You: ${
-                optimistic.messageText.trim() === "🚀"
-                  ? "🚀"
-                  : optimistic.messageText
-              }`;
+            : `You: ${optimistic.messageText.trim()}`;
         }
-        updatedItem = {
-          ...updatedItem,
-          preview: previewText || updatedItem.preview,
+
+        return {
+          ...item,
+          preview: previewText || item.preview,
           time: formatTimestamp(optimisticTimestampMs),
           lastTimestampNanos: optimistic.timestampNanos,
         };
-      }
-      visible.push(updatedItem);
-    });
-
-    // 2) Add items from the other mailbox that were optimistically moved into this one
-    otherItems.forEach((item) => {
-      const optimisticMailbox = optimisticOverrides[item.id];
-      if (optimisticMailbox === activeMailbox) {
-        visible.push({ ...item });
-      }
-    });
+      })
+      .filter((item) => item.mailbox === activeMailbox);
 
     return visible.sort(
       (a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0)
     );
-  }, [
-    activeMailbox,
-    inboxItems,
-    spamItems,
-    optimisticPreviews,
-    optimisticOverrides,
-  ]);
+  }, [activeMailbox, allItems, optimisticPreviews]);
 
-  const isLoadingMailbox =
-    activeMailbox === "spam" ? isLoadingSpam : isLoadingInbox;
-  const isFetchingMailbox =
-    activeMailbox === "spam" ? isFetchingSpam : isFetchingInbox;
-  const isFetchingNextMailbox =
-    activeMailbox === "spam" ? isFetchingNextSpam : isFetchingNextInbox;
-  const isRefreshingMailbox = isFetchingMailbox && !isFetchingNextMailbox;
-  const hasMoreMailbox = activeMailbox === "spam" ? hasMoreSpam : hasMoreInbox;
-  const loadMoreMailbox =
-    activeMailbox === "spam" ? loadMoreSpam : loadMoreInbox;
-  const reloadMailbox = activeMailbox === "spam" ? reloadSpam : reloadInbox;
-  const errorMailbox = activeMailbox === "spam" ? errorSpam : errorInbox;
+  const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
 
   const handlePress = useCallback(
     (item: MockConversation) => {
@@ -593,7 +622,9 @@ export function HomeScreen() {
         title: safeTitle,
         recipientInfo: item.recipientInfo,
         initialGroupMembers:
-          item.isGroup && item.recipientInfo
+          item.isGroup &&
+          item.recipientInfo?.OwnerPublicKeyBase58Check &&
+          item.recipientInfo?.AccessGroupKeyName
             ? groupMembers[
                 `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
               ]
@@ -608,123 +639,6 @@ export function HomeScreen() {
     navigation.navigate("Composer");
   }, [navigation]);
 
-  const moveConversationInCache = useCallback(
-    (
-      conversationId: string,
-      fromMailbox: "inbox" | "spam",
-      toMailbox: "inbox" | "spam"
-    ) => {
-      if (!currentUser?.PublicKeyBase58Check) return;
-
-      type ConversationsPage = Awaited<ReturnType<typeof fetchConversations>>;
-      const fromKey = getConversationsQueryKey(
-        currentUser.PublicKeyBase58Check,
-        fromMailbox
-      );
-      const toKey = getConversationsQueryKey(
-        currentUser.PublicKeyBase58Check,
-        toMailbox
-      );
-
-      const fromData =
-        queryClient.getQueryData<InfiniteData<ConversationsPage>>(fromKey);
-      if (!fromData) return;
-
-      let movedConversation: ConversationMap[string] | undefined;
-      let movedProfiles: PublicKeyToProfileEntryResponseMap = {};
-      let movedGroupMembers: Record<string, GroupMember[]> = {};
-      let movedGroupExtraData: Record<string, Record<string, string> | null> =
-        {};
-
-      const updatedFromPages = fromData.pages.map((page) => {
-        if (page.conversations[conversationId]) {
-          movedConversation = page.conversations[conversationId];
-          movedProfiles = { ...movedProfiles, ...page.profiles };
-          movedGroupMembers = { ...movedGroupMembers, ...page.groupMembers };
-          movedGroupExtraData = {
-            ...movedGroupExtraData,
-            ...page.groupExtraData,
-          };
-          const nextPage = {
-            ...page,
-            conversations: { ...page.conversations },
-          } as ConversationsPage;
-          delete nextPage.conversations[conversationId];
-          return nextPage;
-        }
-        return page;
-      });
-
-      if (movedConversation) {
-        queryClient.setQueryData<InfiniteData<ConversationsPage>>(fromKey, {
-          ...fromData,
-          pages: updatedFromPages,
-        });
-
-        const toData =
-          queryClient.getQueryData<InfiniteData<ConversationsPage>>(toKey);
-        if (toData) {
-          const updatedToPages = toData.pages.length
-            ? toData.pages.map((page, index) => {
-                if (index === 0) {
-                  return {
-                    ...page,
-                    conversations: {
-                      ...page.conversations,
-                      [conversationId]: movedConversation!,
-                    },
-                    profiles: {
-                      ...page.profiles,
-                      ...movedProfiles,
-                    },
-                    groupMembers: {
-                      ...page.groupMembers,
-                      ...movedGroupMembers,
-                    },
-                    groupExtraData: {
-                      ...page.groupExtraData,
-                      ...movedGroupExtraData,
-                    },
-                  } as ConversationsPage;
-                }
-                return page;
-              })
-            : [
-                {
-                  conversations: { [conversationId]: movedConversation },
-                  profiles: movedProfiles,
-                  groupMembers: movedGroupMembers,
-                  groupExtraData: movedGroupExtraData,
-                  hasMore: false,
-                  nextOffset: null,
-                } as ConversationsPage,
-              ];
-
-          queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
-            ...toData,
-            pages: updatedToPages,
-          });
-        } else {
-          // If target cache missing, seed it
-          queryClient.setQueryData<InfiniteData<ConversationsPage>>(toKey, {
-            pageParams: [0],
-            pages: [
-              {
-                conversations: { [conversationId]: movedConversation },
-                profiles: movedProfiles,
-                groupMembers: movedGroupMembers,
-                groupExtraData: movedGroupExtraData,
-                hasMore: false,
-                nextOffset: null,
-              } as ConversationsPage,
-            ],
-          });
-        }
-      }
-    },
-    [currentUser?.PublicKeyBase58Check, queryClient]
-  );
-
   const handleMoveSpam = useCallback(
     async (item: MockConversation, moveToSpam: boolean) => {
       if (!currentUser?.PublicKeyBase58Check) return;
@@ -738,13 +652,9 @@ export function HomeScreen() {
       }
 
       const targetMailbox = moveToSpam ? "spam" : "inbox";
-      const sourceMailbox = moveToSpam ? "inbox" : "spam";
+      const previousMailboxOverride = threadSettings[threadId];
 
-      // Optimistically update UI immediately
-      setOptimisticOverrides((prev) => ({
-        ...prev,
-        [item.id]: targetMailbox,
-      }));
+      await setThreadMailboxOverride(threadId, targetMailbox);
 
       setLoadingItems((prev) => {
         const next = new Set(prev);
@@ -758,24 +668,10 @@ export function HomeScreen() {
           threadId,
           moveToSpam
         );
-
-        // Update caches locally to avoid global refresh
-        moveConversationInCache(item.id, sourceMailbox, targetMailbox);
-
-        // Clear optimistic override since cache now reflects truth
-        setOptimisticOverrides((prev) => {
-          const next = { ...prev };
-          delete next[item.id];
-          return next;
-        });
+        void reload();
       } catch (error) {
         console.error("Failed to move conversation:", error);
-        // Revert optimistic update on error
-        setOptimisticOverrides((prev) => {
-          const next = { ...prev };
-          delete next[item.id];
-          return next;
-        });
+        await setThreadMailboxOverride(threadId, previousMailboxOverride ?? null);
       } finally {
         setLoadingItems((prev) => {
           const next = new Set(prev);
@@ -784,12 +680,15 @@ export function HomeScreen() {
         });
       }
     },
-    [currentUser?.PublicKeyBase58Check, moveConversationInCache]
+    [
+      currentUser?.PublicKeyBase58Check,
+      reload,
+      setThreadMailboxOverride,
+      threadSettings,
+    ]
   );
 
-  const items = enhancedItems; // for empty state usage
-
-  if (isLoadingMailbox && items.length === 0) {
+  if (isLoading && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
@@ -911,21 +810,21 @@ export function HomeScreen() {
     );
   }
 
-  if (errorMailbox) {
+  if (error) {
     return (
       <SafeAreaView className="flex-1 bg-white px-6 py-10 dark:bg-slate-950">
         <View className="flex-1 items-center justify-center rounded-3xl border border-red-200 bg-red-50 px-5 py-8 dark:border-red-900 dark:bg-red-950/30">
           <Feather name="alert-triangle" size={28} color="#ef4444" />
           <Text className="mt-3 text-base font-semibold text-red-900 dark:text-red-200">
-            We couldn't load your inbox
+            We couldn't load your chats
           </Text>
           <Text className="mt-2 text-center text-sm text-red-700">
-            {errorMailbox}
+            {error}
           </Text>
           <TouchableOpacity
             className="mt-6 rounded-full bg-red-500 px-6 py-2"
             activeOpacity={0.8}
-            onPress={() => reloadMailbox()}
+            onPress={() => reload()}
           >
             <Text className="text-sm font-semibold text-white">Try again</Text>
           </TouchableOpacity>
@@ -944,7 +843,7 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {!isLoadingMailbox && isRefreshingMailbox && (
+          {!isLoading && isRefreshingMailbox && (
             <View
               style={{
                 width: "100%",
@@ -1155,9 +1054,9 @@ export function HomeScreen() {
             className="flex-1"
           >
               <FlashList
-                data={enhancedItems}
+                data={items}
                 keyExtractor={(item) => item.id}
-                extraData={optimisticOverrides} // Force re-render when items move between mailboxes
+                extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
                 className="flex-1"
                 showsVerticalScrollIndicator={false}
                 ItemSeparatorComponent={() => null}
@@ -1176,74 +1075,37 @@ export function HomeScreen() {
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshingMailbox}
-                  onRefresh={reloadMailbox}
+                  onRefresh={reload}
                   tintColor={isDark ? accentColor : accentColor}
                   colors={[accentColor]}
                 />
               }
               onEndReached={() => {
-                if (hasMoreMailbox && !isFetchingNextMailbox) {
-                  loadMoreMailbox();
+                if (hasNextPage && !isFetchingNextPage) {
+                  loadMore();
                 }
               }}
               onEndReachedThreshold={0.2}
               ListFooterComponent={
-                isFetchingNextMailbox ? (
+                isFetchingNextPage ? (
                   <View className="py-6 items-center justify-center">
                     <ActivityIndicator size="small" color={accentColor} />
                   </View>
                 ) : null
               }
               renderItem={({ item }) => (
-                <View className="flex-row items-center bg-white px-4 py-3 dark:bg-[#0a0f1a]">
-                  <TouchableOpacity
-                    className="flex-1 flex-row items-center"
-                    activeOpacity={0.7}
-                    onPress={() => handlePress(item)}
-                    onLongPress={() => {
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }
-                      setSelectedItem(item);
-                      setShowActionModal(true);
-                    }}
-                    style={isDesktopWeb ? { borderRadius: 14 } : undefined}
-                  >
-                    <View className="mr-3">
-                      <UserAvatar
-                        uri={item.avatarUri}
-                        name={item.name}
-                        size={56} // 14 * 4 = 56px
-                        isGroup={item.isGroup}
-                        recyclingKey={item.id}
-                      />
-                    </View>
-                    <View className="flex-1 min-w-0">
-                      <View className="flex-row items-center justify-between mb-1">
-                        <Text
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          className="flex-1 mr-2 text-[15px] font-bold text-[#0f172a] dark:text-white"
-                        >
-                          {item.name}
-                        </Text>
-                        {item.time ? (
-                          <Text className="text-[13px] text-slate-500 flex-shrink-0 dark:text-slate-400">
-                            {item.time}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <View className="flex-row items-center">
-                        <Text
-                          numberOfLines={1}
-                          className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
-                        >
-                          {item.preview}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </View>
+                <ConversationRow
+                  item={item}
+                  isDesktopWeb={isDesktopWeb}
+                  onPress={() => handlePress(item)}
+                  onLongPress={() => {
+                    if (Platform.OS !== "web") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    }
+                    setSelectedItem(item);
+                    setShowActionModal(true);
+                  }}
+                />
               )}
               ListEmptyComponent={() => (
                 <View className="flex-1 items-center justify-center px-6 py-20">
@@ -1295,7 +1157,7 @@ export function HomeScreen() {
           onClose={() => setShowGroupComposerModal(false)}
           onGroupCreated={() => {
             setShowGroupComposerModal(false);
-            reloadMailbox(); // Reload conversations to show the new group
+            reload(); // Reload conversations to show the new group
           }}
           onNavigateToGroup={(groupName, ownerPublicKey, initialMessage) => {
             setShowGroupComposerModal(false);
@@ -1438,35 +1300,11 @@ export function HomeScreen() {
                       keyboardShouldPersistTaps="handled"
                       showsVerticalScrollIndicator={false}
                       renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          paddingHorizontal: 20,
-                          paddingVertical: 12,
-                        }}
+                      <NewChatResultRow
+                        item={item}
+                        isDark={isDark}
                         onPress={() => handleSelectNewChatProfile(item)}
-                        activeOpacity={0.7}
-                      >
-                        <UserAvatar
-                          uri={getProfileImageUrl(item.publicKey)}
-                          name={item.username || "?"}
-                          size={48}
-                          className="bg-slate-200 dark:bg-slate-700"
-                        />
-                        <View style={{ marginLeft: 14, flex: 1 }}>
-                          <Text
-                            style={{
-                              fontSize: 16,
-                              fontWeight: "600",
-                              color: isDark ? "#ffffff" : "#0f172a",
-                            }}
-                            numberOfLines={1}
-                          >
-                            {item.username || "Anonymous"}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
+                      />
                     )}
                   />
                 )}

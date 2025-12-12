@@ -4,6 +4,8 @@ export const StorageKeys = {
     CHAT_HISTORY: 'chat_history',
     USER_SETTINGS: 'user_settings',
     CONVERSATIONS: 'conversations',
+    THREAD_SETTINGS: 'thread_settings',
+    CONVERSATION_THREADS: 'conversation_threads',
 };
 
 export const StorageService = {
@@ -109,5 +111,54 @@ export const StorageService = {
             console.error('Failed to load conversations cache', e);
         }
         return null;
+    },
+
+    saveConversationThreads: async (userPublicKey: string, payload: unknown) => {
+        const key = `${StorageKeys.CONVERSATION_THREADS}_${userPublicKey}`;
+        try {
+            const json = JSON.stringify(payload);
+            await AsyncStorage.setItem(key, json);
+        } catch (e) {
+            console.error('Failed to save conversation threads cache', e);
+        }
+    },
+
+    getConversationThreads: async (userPublicKey: string) => {
+        const key = `${StorageKeys.CONVERSATION_THREADS}_${userPublicKey}`;
+        try {
+            const json = await AsyncStorage.getItem(key);
+            if (json) {
+                return JSON.parse(json);
+            }
+        } catch (e) {
+            console.error('Failed to load conversation threads cache', e);
+        }
+        return null;
+    },
+
+    saveThreadSettings: async (
+        userPublicKey: string,
+        payload: Record<string, "inbox" | "spam">
+    ) => {
+        const key = `${StorageKeys.THREAD_SETTINGS}_${userPublicKey}`;
+        try {
+            const json = JSON.stringify(payload);
+            await AsyncStorage.setItem(key, json);
+        } catch (e) {
+            console.error('Failed to save thread settings', e);
+        }
+    },
+
+    getThreadSettings: async (userPublicKey: string) => {
+        const key = `${StorageKeys.THREAD_SETTINGS}_${userPublicKey}`;
+        try {
+            const json = await AsyncStorage.getItem(key);
+            if (json) {
+                return JSON.parse(json);
+            }
+        } catch (e) {
+            console.error('Failed to load thread settings', e);
+        }
+        return null as Record<string, "inbox" | "spam"> | null;
     },
 };

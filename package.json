@@ -8,7 +8,11 @@
     "android": "npx expo run:android",
     "ios": "npx expo run:ios",
     "web": "npx expo start --web",
-    "dev": "npx expo start"
+    "dev": "npx expo start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:strict": "tsc -p tsconfig.typecheck.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.6.0",
@@ -81,8 +85,15 @@
     "@types/react-native": "^0.72.8",
     "@types/react-navigation": "^3.0.8",
     "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.49.0",
+    "@typescript-eslint/parser": "^8.49.0",
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-preset-expo": "^54.0.7",
+    "eslint": "^9.39.1",
+    "eslint-config-expo": "^10.0.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-unused-imports": "^4.3.0",
     "metro-react-native-babel-transformer": "^0.77.0",
     "prettier-plugin-tailwindcss": "^0.5.11",
     "react-native-svg-transformer": "^1.5.1",
