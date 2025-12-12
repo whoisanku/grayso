@@ -68,6 +68,28 @@ export const fetchConversations = async (
     publicKeyToProfileEntryResponseMap =
       fallback.publicKeyToProfileEntryResponseMap;
     allAccessGroups = fallback.updatedAllAccessGroups;
+
+    // Reconcile against Focus spam threads so inbox fallback doesn't show spam too.
+    try {
+      const spamResult = await getSpamConversationsFromFocusGraphql(
+        userPublicKey,
+        allAccessGroups,
+        0,
+        100
+      );
+      const spamKeys = new Set(Object.keys(spamResult.conversations));
+      if (spamKeys.size > 0) {
+        conversations = Object.fromEntries(
+          Object.entries(conversations).filter(([key]) => !spamKeys.has(key))
+        ) as ConversationMap;
+      }
+      allAccessGroups = spamResult.updatedAllAccessGroups;
+    } catch (spamErr) {
+      console.warn(
+        "[fetchConversations] Failed to filter spam from inbox fallback",
+        spamErr
+      );
+    }
   }
 
   // We skip group member fetch here to keep payload light; fetch lazily per row if needed.

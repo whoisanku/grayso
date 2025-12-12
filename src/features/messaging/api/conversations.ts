@@ -39,6 +39,23 @@ const devLog = (...args: unknown[]) => {
   }
 };
 
+const coerceSpamFlag = (value: unknown): boolean => {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  return false;
+};
+
+const hasExplicitSpamFlag = (value: unknown): boolean =>
+  value !== undefined && value !== null;
+
 export type Conversation = {
   firstMessagePublicKey: string;
   messages: DecryptedMessageEntryResponse[];
@@ -271,7 +288,8 @@ export const getConversationsFromFocusGraphql = async (
 
   const rawMessages: NewMessageEntryResponse[] = threadNodes
     .map((thread) => {
-      if (thread.isSpam) {
+      const isSpam = coerceSpamFlag(thread.isSpam);
+      if (isSpam) {
         return null;
       }
 
@@ -476,6 +494,7 @@ export const getSpamConversationsFromFocusGraphql = async (
     devLog(`[SPAM DEBUG] Thread ${index}:`, {
       threadIdentifier: thread.threadIdentifier,
       isSpam: thread.isSpam,
+      normalizedIsSpam: coerceSpamFlag(thread.isSpam),
       isSpamType: typeof thread.isSpam,
       initiator: thread.initiatorPublicKey?.substring(0, 10) + '...'
     });
@@ -494,7 +513,8 @@ export const getSpamConversationsFromFocusGraphql = async (
       // Inbox filters OUT spam (thread.isSpam === true)
       // Spam filters OUT non-spam (thread.isSpam !== true)
       // This keeps only threads where isSpam is explicitly true
-      if (!thread.isSpam) {
+      const isSpam = coerceSpamFlag(thread.isSpam);
+      if (hasExplicitSpamFlag(thread.isSpam) && !isSpam) {
         devLog(
           "[SPAM DEBUG] Filtering out non-spam thread (isSpam =",
           thread.isSpam,
