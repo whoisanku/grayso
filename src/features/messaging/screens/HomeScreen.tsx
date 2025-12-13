@@ -364,21 +364,6 @@ export function HomeScreen() {
     };
   }, []);
 
-  // Update optimistic previews from global socket "new_message" events
-  useEffect(() => {
-    Object.entries(latestMessages).forEach(([conversationId, message]) => {
-      if (message && message.MessageInfo) {
-        setOptimisticPreviews(prev => ({
-          ...prev,
-          [conversationId]: {
-            messageText: message.DecryptedMessage || "",
-            timestampNanos: message.MessageInfo.TimestampNanos,
-            extraData: message.MessageInfo.ExtraData
-          }
-        }));
-      }
-    });
-  }, [latestMessages]);
 
   // Debounced search for new chat modal
   useEffect(() => {
@@ -584,42 +569,13 @@ export function HomeScreen() {
   const items = useMemo(() => {
     const visible = allItems
       .map((item) => {
-        const optimistic = optimisticPreviews[item.id];
-        if (!optimistic) {
-          return item;
-        }
-
-        if (optimistic.timestampNanos <= (item.lastTimestampNanos ?? 0)) {
-          return item;
-        }
-
-        const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
-        const hasImages = Boolean(optimistic.extraData?.decryptedImageURLs);
-        const hasVideos = Boolean(optimistic.extraData?.decryptedVideoURLs);
-        let previewText = "";
-        if (hasVideos) previewText = "You sent a video";
-        else if (hasImages) previewText = "You sent an image";
-        if (optimistic.messageText.trim()) {
-          previewText = previewText
-            ? `${previewText}: ${optimistic.messageText.trim()}`
-            : `You: ${optimistic.messageText.trim()}`;
-        }
-
-        return {
-          ...item,
-          preview: previewText || item.preview,
-          time: formatTimestamp(optimisticTimestampMs),
-          lastTimestampNanos: optimistic.timestampNanos,
-        };
-      })
-      .map((item) => {
-        // Add typing status
-        // For DMs, the typing status is keyed by the other user's public key
-        // For Groups, it's keyed by the conversation ID
-
+        // Add typing status and latest message previews
         const isTyping = item.chatType === ChatType.DM
           ? typingStatuses[item.threadPublicKey]
           : typingStatuses[item.id];
+
+        const latestMessageKey = item.isGroup ? item.id : item.threadPublicKey;
+        const latestMessage = latestMessageKey ? latestMessages[latestMessageKey] : null;
 
         if (isTyping) {
           return {
@@ -628,14 +584,87 @@ export function HomeScreen() {
             isTyping: true
           };
         }
-        return item;
+
+        let previewText = item.preview;
+        let lastTimestamp = item.lastTimestampNanos ?? 0;
+        let timeLabel = item.time;
+
+        const optimistic = optimisticPreviews[item.id];
+        if (optimistic && optimistic.timestampNanos > lastTimestamp) {
+          const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
+          const hasImages = Boolean(optimistic.extraData?.decryptedImageURLs);
+          const hasVideos = Boolean(optimistic.extraData?.decryptedVideoURLs);
+          let optimisticPreview = "";
+          if (hasVideos) optimisticPreview = "You sent a video";
+          else if (hasImages) optimisticPreview = "You sent an image";
+          if (optimistic.messageText.trim()) {
+            optimisticPreview = optimisticPreview
+              ? `${optimisticPreview}: ${optimistic.messageText.trim()}`
+              : `You: ${optimistic.messageText.trim()}`;
+          }
+          previewText = optimisticPreview || previewText;
+          timeLabel = formatTimestamp(optimisticTimestampMs);
+          lastTimestamp = optimistic.timestampNanos;
+        }
+
+        if (latestMessage) {
+          const messageTimestamp = latestMessage.MessageInfo?.TimestampNanos ?? 0;
+          if (messageTimestamp >= lastTimestamp) {
+            const messageTimestampMs = messageTimestamp / 1e6;
+            const senderPk = latestMessage.SenderInfo?.OwnerPublicKeyBase58Check;
+            const isCurrentUserSender = senderPk === currentUser?.PublicKeyBase58Check;
+            const senderName = isCurrentUserSender
+              ? "You"
+              : senderPk
+                ? profiles[senderPk]?.Username || formatPublicKey(senderPk)
+                : item.name;
+            const messageExtraData = latestMessage.MessageInfo?.ExtraData as
+              | Record<string, any>
+              | undefined;
+            const mediaPreview = getMediaPreviewText(messageExtraData, senderName);
+            const rawDecrypted = latestMessage.DecryptedMessage ?? "";
+            const decrypted = rawDecrypted.trim();
+            let messagePreview = mediaPreview ?? (decrypted || rawDecrypted);
+
+            if (!messagePreview) {
+              messagePreview = isCurrentUserSender
+                ? "You sent a message"
+                : `${senderName} sent a message`;
+            } else if (!mediaPreview) {
+              if (isCurrentUserSender && !messagePreview.startsWith("You:")) {
+                messagePreview = `You: ${messagePreview}`;
+              } else if (!isCurrentUserSender && !messagePreview.startsWith(`${senderName}:`)) {
+                messagePreview = `${senderName}: ${messagePreview}`;
+              }
+            }
+
+            previewText = messagePreview;
+            timeLabel = formatTimestamp(messageTimestampMs);
+            lastTimestamp = messageTimestamp;
+          }
+        }
+
+        return {
+          ...item,
+          preview: previewText,
+          time: timeLabel,
+          lastTimestampNanos: lastTimestamp,
+        };
       })
       .filter((item) => item.mailbox === activeMailbox);
 
     return visible.sort(
       (a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0)
     );
-  }, [activeMailbox, allItems, optimisticPreviews, typingStatuses]);
+  }, [
+    activeMailbox,
+    allItems,
+    typingStatuses,
+    latestMessages,
+    optimisticPreviews,
+    currentUser?.PublicKeyBase58Check,
+    profiles,
+  ]);
 
   const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
 

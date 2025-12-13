@@ -500,15 +500,7 @@ export const Composer = React.memo(function Composer({
               conversationId,
               timestampNanos,
               message: {
-                DecryptedMessage: textToSend, // Send decrypted text for preview (only if safe/encrypted channel, but here we trust the channel)
-                // Note: Ideally we send encrypted and let receiver decrypt, but for preview speed we might send a snippet or just notification
-                // For now, let's send the metadata and let the receiver fetch/decrypt if needed, OR send a "new_message" event
-                // Actually, for "WhatsApp style" preview, we need the text. 
-                // Since Supabase channels are over TLS, it's relatively safe, but for end-to-end encryption purists, we should send encrypted.
-                // However, the receiver's chat list might not have the keys loaded to decrypt instantly without performance hit.
-                // Let's send the encrypted payload and let the receiver handle it, OR just trigger a refetch.
-                // But the requirement is "live message previews".
-                // Let's send the same payload as 'new_message' event.
+                DecryptedMessage: textToSend,
                 SenderInfo: { OwnerPublicKeyBase58Check: userPublicKey },
                 MessageInfo: { TimestampNanos: timestampNanos, EncryptedText: EncryptedMessageText }
               }
@@ -897,6 +889,25 @@ export const Composer = React.memo(function Composer({
             undefined,
             { keepAlive: true }
           );
+
+          // Also broadcast to the recipient's global channel for the list preview
+          const globalChannel = `messages:${counterPartyPublicKey}`;
+          devLog("[Composer] Broadcasting to global channel:", globalChannel);
+          await broadcastMessageUpdate(
+            {
+              conversationId,
+              timestampNanos,
+              message: {
+                SenderInfo: { OwnerPublicKeyBase58Check: userPublicKey },
+                MessageInfo: { TimestampNanos: timestampNanos, EncryptedText: EncryptedMessageText },
+                ChatType: chatType
+              }
+            },
+            globalChannel,
+            "new_message",
+            { keepAlive: true }
+          );
+
           devLog("[Composer] Message broadcast via Supabase successfully");
         } catch (broadcastError) {
           console.warn(

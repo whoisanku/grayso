@@ -5,13 +5,17 @@ import {
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
-import { identity } from "deso-protocol";
+import { identity, getAllAccessGroups, type AccessGroupEntryResponse } from "deso-protocol";
 import { Platform } from "react-native";
 
 import {
   conversationThreadsKeys,
   fetchConversationThreads,
 } from "@/state/queries/messages/threads";
+import {
+  decryptAccessGroupMessagesWithRetry,
+  findAccessGroupPublicKey,
+} from "@/features/messaging/api/conversations";
 import type { ConversationMap, ThreadMetaMap } from "@/features/messaging/api/conversations";
 import type { PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import type { GroupMember } from "@/lib/deso/graphql";
@@ -53,6 +57,7 @@ export const useConversationThreads = (
   const [latestMessages, setLatestMessages] = useState<Record<string, any>>({});
   const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [reconnectKey, setReconnectKey] = useState(0);
+  const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
 
   // Hydrate cached conversations immediately for fast paint
   useEffect(() => {
@@ -157,6 +162,17 @@ export const useConversationThreads = (
   }, [currentUser?.PublicKeyBase58Check, data]);
 
   useEffect(() => {
+    if (!data?.pages) return;
+
+    for (const page of data.pages) {
+      if (page?.accessGroups && page.accessGroups.length > 0) {
+        accessGroupsRef.current = page.accessGroups;
+        break;
+      }
+    }
+  }, [data?.pages]);
+
+  useEffect(() => {
     let isMounted = true;
     const userPublicKey = currentUser?.PublicKeyBase58Check;
     const supabaseEnabled = isSupabaseConfigured();
@@ -236,10 +252,16 @@ export const useConversationThreads = (
         }
       })
       .on("broadcast", { event: "new_message" }, ({ payload }: { payload: any }) => {
+        console.log("✅ [useConversationThreads] Received new_message broadcast event:", payload);
         if (!isMounted) return;
-        console.log("[useConversationThreads] Received new_message event:", payload);
+        console.log("[useConversationThreads] Processing new_message event:", payload);
         // Optimistically update the latest message for the conversation
         const { conversationId, message } = payload;
+
+        if (!message) {
+          console.warn("[useConversationThreads] Payload missing message object");
+          return;
+        }
 
         // For new messages, we need to find the correct conversation key too
         // The payload structure for new_message is slightly different, usually doesn't have metadata at top level
@@ -251,33 +273,140 @@ export const useConversationThreads = (
         // If it's a DM, conversationId sent by sender is RecipientPK. We want SenderPK.
         // If it's a Group, conversationId is GroupID.
 
-        // Let's try to use senderPublicKey if it's a DM (implied if conversationId matches our PK?)
-        // Or safer: update both potential keys if we aren't sure, or check if conversationId matches userPublicKey
-
-        let key = conversationId;
-        if (conversationId === userPublicKey && senderPublicKey) {
-          key = senderPublicKey;
-        }
-
-        if (conversationId === userPublicKey && senderPublicKey) {
-          key = senderPublicKey;
-        }
+        // For DMs, the key should be the sender's public key. For group chats, it's the conversationId.
+        const key = message?.ChatType === 'DM' && senderPublicKey
+          ? senderPublicKey
+          : conversationId;
 
         console.log("[useConversationThreads] Derived new_message key:", key);
 
         if (key && message) {
-          setLatestMessages(prev => ({
-            ...prev,
-            [key]: message
-          }));
+          // Normalize the message structure for decryption
+          // The payload might have flat fields (EncryptedMessageText) or nested (MessageInfo.EncryptedText)
 
-          // Also trigger a refetch to ensure consistency
-          if (debounceRef.current) {
-            clearTimeout(debounceRef.current);
+          let recipientOwnerPk = message.RecipientInfo?.OwnerPublicKeyBase58Check || message.RecipientAccessGroupOwnerPublicKeyBase58Check || "";
+
+          // If recipient PK is missing, try to derive it
+          if (!recipientOwnerPk && userPublicKey) {
+            const senderPk = message.SenderInfo?.OwnerPublicKeyBase58Check || message.SenderAccessGroupOwnerPublicKeyBase58Check || "";
+
+            if (senderPk && senderPk !== userPublicKey) {
+              // If I am not the sender, I must be the recipient
+              recipientOwnerPk = userPublicKey;
+            } else if (senderPk === userPublicKey && conversationId) {
+              // If I am the sender, the other key in conversationId is the recipient
+              // Format is usually PK1-PK2-DM or similar. 
+              // We can try to remove our key and see what's left.
+              const parts = conversationId.split('-');
+              const otherPart = parts.find((p: string) => p !== userPublicKey && p.startsWith('BC1'));
+              if (otherPart) {
+                recipientOwnerPk = otherPart;
+              }
+            }
           }
-          debounceRef.current = setTimeout(() => {
-            stableRefetch();
-          }, Platform.OS === "web" ? 150 : 75);
+
+          // Try to find Access Group Public Keys if missing
+          const senderAccessGroupKeyName = message.SenderInfo?.AccessGroupKeyName || message.SenderAccessGroupKeyName || "default-key";
+          const recipientAccessGroupKeyName = message.RecipientInfo?.AccessGroupKeyName || message.RecipientAccessGroupKeyName || "default-key";
+
+          const senderOwnerPk = message.SenderInfo?.OwnerPublicKeyBase58Check || message.SenderAccessGroupOwnerPublicKeyBase58Check || "";
+
+          // We need to find the Access Group Public Key for both sender and recipient
+          // We can look in accessGroupsRef.current
+
+          // Helper to find key in our local cache
+          const findKey = (ownerPk: string, keyName: string) => {
+            if (!ownerPk) return "";
+            return findAccessGroupPublicKey(accessGroupsRef.current, ownerPk, keyName) || "";
+          };
+
+          let senderAccessGroupPk = message.SenderInfo?.AccessGroupPublicKeyBase58Check ||
+            message.SenderAccessGroupPublicKeyBase58Check ||
+            findKey(senderOwnerPk, senderAccessGroupKeyName);
+
+          // If sender access group PK is still missing, we must fetch it
+          if (!senderAccessGroupPk && senderOwnerPk) {
+            try {
+              // We can't await here easily without making the whole thing async, which it is (void async IIFE below)
+              // But we need the key BEFORE constructing messageToDecrypt if we want to be clean.
+              // Actually, we can do it inside the async block.
+            } catch (e) {
+              console.warn("[useConversationThreads] Failed to fetch sender access groups", e);
+            }
+          }
+
+          const recipientAccessGroupPk = message.RecipientInfo?.AccessGroupPublicKeyBase58Check ||
+            message.RecipientAccessGroupPublicKeyBase58Check ||
+            findKey(recipientOwnerPk, recipientAccessGroupKeyName);
+
+
+          if (!userPublicKey) {
+            console.warn("[useConversationThreads] Missing user public key for decryption");
+            return;
+          }
+
+          void (async () => {
+            try {
+              // Fetch sender access group key if missing
+              if (!senderAccessGroupPk && senderOwnerPk) {
+                try {
+                  const senderGroups = await getAllAccessGroups({ PublicKeyBase58Check: senderOwnerPk });
+                  const allSenderGroups = (senderGroups.AccessGroupsOwned || []).concat(senderGroups.AccessGroupsMember || []);
+                  senderAccessGroupPk = findAccessGroupPublicKey(allSenderGroups, senderOwnerPk, senderAccessGroupKeyName) || "";
+                  console.log("[useConversationThreads] Fetched sender access group key:", senderAccessGroupPk);
+                } catch (e) {
+                  console.warn("[useConversationThreads] Failed to fetch sender access groups", e);
+                }
+              }
+
+              const messageToDecrypt = {
+                ...message,
+                ChatType: message.ChatType || (message.RecipientAccessGroupKeyName ? 'GROUPCHAT' : 'DM'),
+                SenderInfo: {
+                  OwnerPublicKeyBase58Check: senderOwnerPk,
+                  AccessGroupPublicKeyBase58Check: senderAccessGroupPk,
+                  AccessGroupKeyName: senderAccessGroupKeyName,
+                },
+                RecipientInfo: {
+                  OwnerPublicKeyBase58Check: recipientOwnerPk,
+                  AccessGroupPublicKeyBase58Check: recipientAccessGroupPk,
+                  AccessGroupKeyName: recipientAccessGroupKeyName,
+                },
+                MessageInfo: {
+                  EncryptedText: message.MessageInfo?.EncryptedText || message.EncryptedMessageText || "",
+                  TimestampNanos: message.MessageInfo?.TimestampNanos || payload.timestampNanos || 0,
+                  TimestampNanosString: String(message.MessageInfo?.TimestampNanos || payload.timestampNanos || 0),
+                  ExtraData: message.MessageInfo?.ExtraData || message.ExtraData || {},
+                },
+              };
+
+              const { decrypted, updatedAllAccessGroups } =
+                await decryptAccessGroupMessagesWithRetry(
+                  userPublicKey,
+                  [messageToDecrypt],
+                  accessGroupsRef.current
+                );
+
+              if (!isMounted) return;
+
+              accessGroupsRef.current = updatedAllAccessGroups;
+
+              if (decrypted.length > 0) {
+                const decryptedMsg = decrypted[0];
+                if (decryptedMsg.error) {
+                  console.warn("[useConversationThreads] Decryption returned error:", decryptedMsg.error);
+                } else {
+                  setLatestMessages(prev => ({
+                    ...prev,
+                    [key]: decryptedMsg
+                  }));
+                }
+              }
+            } catch (error) {
+              if (!isMounted) return;
+              console.warn("[useConversationThreads] Failed to decrypt new_message payload", error);
+            }
+          })();
         }
       })
       .subscribe((status, err) => {

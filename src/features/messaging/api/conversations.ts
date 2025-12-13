@@ -226,15 +226,15 @@ export const getAllConversationsFromFocusGraphql = async (
 
       const recipientGroup = isGroupChat
         ? {
-            keyName:
-              thread.thread?.accessGroupKeyName ||
-              DEFAULT_KEY_MESSAGING_GROUP_NAME,
-            owner:
-              thread.thread?.accessGroupOwnerPublicKey ||
-              receiverPublicKey ||
-              senderPublicKey,
-            publicKey: null as string | null,
-          }
+          keyName:
+            thread.thread?.accessGroupKeyName ||
+            DEFAULT_KEY_MESSAGING_GROUP_NAME,
+          owner:
+            thread.thread?.accessGroupOwnerPublicKey ||
+            receiverPublicKey ||
+            senderPublicKey,
+          publicKey: null as string | null,
+        }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
       if (isGroupChat) {
@@ -439,7 +439,7 @@ export const getConversations = async (
   }
 };
 
-const findAccessGroupPublicKey = (
+export const findAccessGroupPublicKey = (
   allAccessGroups: AccessGroupEntryResponse[],
   ownerPublicKey: string,
   keyName: string
@@ -719,7 +719,7 @@ export const getSpamConversationsFromFocusGraphql = async (
     offset,
     first,
   });
-  
+
   const { nodes: threadNodes, pageInfo } = await fetchInboxMessageThreads({
     userPublicKey: userPublicKeyBase58Check,
     isSpam: true,
@@ -728,7 +728,7 @@ export const getSpamConversationsFromFocusGraphql = async (
   });
 
   devLog("[SPAM DEBUG] Received thread nodes:", threadNodes.length);
-  
+
   // Log isSpam values for all threads to understand what the API returns
   threadNodes.forEach((thread, index) => {
     devLog(`[SPAM DEBUG] Thread ${index}:`, {
