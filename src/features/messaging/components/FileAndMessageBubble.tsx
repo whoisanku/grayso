@@ -100,7 +100,7 @@ export const FileAndMessageBubble = React.memo(({
                         maxHeight={effectiveMaxWidth}
                         borderRadius={effectiveRadius}
                         forceSquare={true}
-                        contentFit="contain"
+                        contentFit="cover"
                         onPress={() => handleImagePress(0)}
                     />
                 </View>

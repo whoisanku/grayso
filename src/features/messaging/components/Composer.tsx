@@ -37,6 +37,7 @@ import { getDisplayedMessageText } from "../../../utils/messageUtils";
 import * as ImagePicker from "expo-image-picker";
 import { uploadImage, uploadVideo } from "@/lib/media";
 import { useAccentColor } from "@/state/theme/useAccentColor";
+import { CircularProgress } from "@/components/ui/CircularProgress";
 
 // Type for selected images (for future API integration)
 export type SelectedImage = {
@@ -244,16 +245,29 @@ export const Composer = React.memo(function Composer({
   // This ensures the entire content (including FlatList) moves up with keyboard
 
   const focusInput = useCallback(() => {
-    textInputRef.current?.focus();
+    if (Platform.OS === 'web') {
+      // On web PWA, we need to both focus and click to reliably trigger keyboard
+      const input = textInputRef.current as any;
+      if (input) {
+        input.focus();
+        // Trigger click to ensure mobile browsers show keyboard
+        if (input.click) {
+          input.click();
+        }
+      }
+    } else {
+      textInputRef.current?.focus();
+    }
   }, []);
 
-  // Auto-focus when entering edit mode or reply mode (with better timing)
+  // Auto-focus when entering edit mode or reply mode (with better timing for web PWA)
   useEffect(() => {
     if (editingMessage || replyToMessage) {
-      // Use a longer delay to ensure layout is stable
+      // Use a longer delay on web to ensure keyboard opens reliably
+      const delay = Platform.OS === 'web' ? 300 : 150;
       const timer = setTimeout(() => {
         focusInput();
-      }, 150);
+      }, delay);
       return () => clearTimeout(timer);
     }
   }, [editingMessage, replyToMessage, focusInput]);
@@ -906,34 +920,14 @@ export const Composer = React.memo(function Composer({
 
               {/* Progress Overlay */}
               {image.uploadStatus === "uploading" && (
-                <View className="absolute inset-0 items-center justify-center bg-black/35 rounded-xl px-4">
-                  <View
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 22,
-                      borderWidth: 2,
-                      borderColor: accentStrong,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: accentSoft,
-                    }}
-                  >
-                    <ActivityIndicator size="small" color={accentColor} />
-                  </View>
-                  <View className="w-full h-1.5 bg-white/30 rounded-full mt-3">
-                    <View
-                      style={{
-                        width: `${Math.max(
-                          5,
-                          Math.min(100, Math.round((image.progress || 0) * 100))
-                        )}%`,
-                        height: "100%",
-                        backgroundColor: accentColor,
-                        borderRadius: 999,
-                      }}
-                    />
-                  </View>
+                <View className="absolute inset-0 items-center justify-center bg-black/40 rounded-xl">
+                  <CircularProgress
+                    size={48}
+                    strokeWidth={4}
+                    progress={image.progress || 0}
+                    color="#ffffff"
+                    backgroundColor="rgba(255, 255, 255, 0.25)"
+                  />
                 </View>
               )}
 
