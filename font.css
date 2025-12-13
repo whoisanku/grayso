@@ -1,0 +1,24 @@
+/* Sofia Pro Font Faces for Web */
+@font-face {
+  font-family: "Sofia Pro";
+  src: url("/assets/fonts/SofiaProSoftReg.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sofia Pro";
+  src: url("/assets/fonts/SofiaProSoftMed.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sofia Pro";
+  src: url("/assets/fonts/SofiaProSoftBold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

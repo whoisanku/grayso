@@ -22,6 +22,13 @@ let cachedClient: SupabaseClient | null = null;
 const baseMessage =
   "Supabase credentials are missing. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.";
 
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
 function buildAuthOptions(): AuthOptions {
   if (Platform.OS === "web") {
     return {
@@ -137,7 +144,7 @@ export async function broadcastMessageUpdate(
       });
     });
 
-    console.log(`[Supabase] Subscribed to broadcast channel: ${channelName}`);
+    devLog(`[Supabase] Subscribed to broadcast channel: ${channelName}`);
 
     await channel.send({
       type: "broadcast",
@@ -145,7 +152,7 @@ export async function broadcastMessageUpdate(
       payload,
     });
 
-    console.log(`[Supabase] Broadcast sent successfully to ${channelName}`);
+    devLog(`[Supabase] Broadcast sent successfully to ${channelName}`);
   } catch (error) {
     console.warn("Supabase broadcast failed", error);
   } finally {
@@ -154,13 +161,13 @@ export async function broadcastMessageUpdate(
         // Small delay before unsubscribing to ensure message is flushed
         setTimeout(async () => {
           await channel.unsubscribe();
-          console.log(`[Supabase] Unsubscribed from channel: ${channelName}`);
+          devLog(`[Supabase] Unsubscribed from channel: ${channelName}`);
         }, 100);
       } catch (unsubscribeError) {
         console.warn("Supabase broadcast unsubscribe error", unsubscribeError);
       }
     } else {
-      console.log(`[Supabase] Keeping channel open: ${channelName}`);
+      devLog(`[Supabase] Keeping channel open: ${channelName}`);
     }
   }
 }

@@ -1,3 +1,115 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Default Font Family - Sofia Pro */
+* {
+  font-family: "Sofia Pro", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+
+/* ===================================
+   Mobile PWA Scroll & Touch Fixes
+   =================================== */
+
+/* Prevent overscroll bounce and pull-to-refresh on mobile */
+html, body {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent body scroll - app manages its own scroll containers */
+  overflow: hidden;
+}
+
+/* Touch web / PWA should behave more like native (no hover + no long-press text selection) */
+@media (hover: none) and (pointer: coarse) {
+  * {
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+
+  /* Allow selection/cursor in actual inputs */
+  input, textarea, [contenteditable] {
+    -webkit-touch-callout: default !important;
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+}
+
+/* iOS Safari specific fixes for PWA */
+@supports (-webkit-touch-callout: none) {
+  body {
+    /* Prevent elastic scrolling */
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+  
+  #root {
+    /* Allow root to scroll instead of body */
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Prevent pull-to-refresh and horizontal panning on the root element */
+#root {
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior: none;
+}
+
+/* Fixed position elements should not trigger scroll */
+[style*="position: fixed"],
+[style*="position:fixed"],
+.fixed {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Header and navigation bars should not scroll */
+[data-scroll-lock="true"] {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+/* Scrollable containers should allow vertical scroll only */
+[data-scrollable="true"],
+[data-virtualized-list="true"] {
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent iOS Safari from zooming on double-tap */
+* {
+  touch-action: manipulation;
+}
+
+/* Allow vertical scroll on scrollable elements */
+[data-scrollable="true"] *,
+[data-virtualized-list="true"] * {
+  touch-action: pan-y;
+}
+
+/* iOS momentum scrolling for better UX */
+.overflow-auto,
+.overflow-y-auto,
+.overflow-y-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent horizontal scroll everywhere */
+* {
+  overscroll-behavior-x: none;
+}
+
+/* Make sure modals and overlays don't trigger page scroll */
+[role="dialog"],
+[role="presentation"],
+.modal,
+.overlay {
+  touch-action: none;
+  overscroll-behavior: none;
+}

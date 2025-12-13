@@ -8,111 +8,109 @@ import {
   getConversationsNewMap,
   getConversationsFromFocusGraphql,
   getSpamConversationsFromFocusGraphql,
-} from "../../../services/conversations";
-import { fetchAccessGroupMembers, GroupMember } from "../../../services/desoGraphql";
+} from "@/features/messaging/api/conversations";
+import type { GroupMember } from "@/lib/deso/graphql";
 
-export const getConversationsQueryKey = (userPublicKey?: string) =>
-  ["conversations", userPublicKey] as const;
+export const getConversationsQueryKey = (
+  userPublicKey?: string,
+  mailbox: "inbox" | "spam" = "inbox"
+) => ["conversations", mailbox, userPublicKey] as const;
 
-export const fetchConversations = async (userPublicKey: string) => {
+export const fetchConversations = async (
+  userPublicKey: string,
+  options: { offset?: number; limit?: number; mailbox?: "inbox" | "spam" } = {}
+) => {
   if (!userPublicKey) {
     throw new Error("User public key is required");
   }
+
+  const { offset = 0, limit = 20, mailbox = "inbox" } = options;
 
   // Start with empty access groups - they will be fetched by GraphQL functions if needed during decryption
   let allAccessGroups: AccessGroupEntryResponse[] = [];
 
   let conversations: ConversationMap = {};
-  let spamConversations: ConversationMap = {};
   let publicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap = {};
-  let spamPublicKeyToProfileEntryResponseMap: PublicKeyToProfileEntryResponseMap =
-    {};
+  let hasMore = false;
+  let groupMembers: Record<string, GroupMember[]> = {};
+  let groupExtraData: Record<string, Record<string, string> | null> = {};
 
   try {
-    const focusResult = await getConversationsFromFocusGraphql(
-      userPublicKey,
-      allAccessGroups
-    );
+    const focusResult =
+      mailbox === "spam"
+        ? await getSpamConversationsFromFocusGraphql(
+            userPublicKey,
+            allAccessGroups,
+            offset,
+            limit
+          )
+        : await getConversationsFromFocusGraphql(
+            userPublicKey,
+            allAccessGroups,
+            offset,
+            limit
+          );
 
     conversations = focusResult.conversations;
     publicKeyToProfileEntryResponseMap =
       focusResult.publicKeyToProfileEntryResponseMap;
     allAccessGroups = focusResult.updatedAllAccessGroups;
-
-    try {
-      const spamResult = await getSpamConversationsFromFocusGraphql(
-        userPublicKey,
-        allAccessGroups
-      );
-      spamConversations = spamResult.conversations;
-      spamPublicKeyToProfileEntryResponseMap =
-        spamResult.publicKeyToProfileEntryResponseMap;
-      allAccessGroups = spamResult.updatedAllAccessGroups;
-    } catch (err) {
-      console.warn("Focus GraphQL spam inbox fetch failed", err);
-    }
+    hasMore = focusResult.hasMore;
+    groupMembers = focusResult.groupMembers;
+    groupExtraData = focusResult.groupExtraData;
   } catch (err) {
     console.warn("Focus GraphQL inbox fetch failed, falling back", err);
   }
 
-  if (Object.keys(conversations).length === 0) {
+  if (mailbox === "inbox" && offset === 0 && Object.keys(conversations).length === 0) {
     const fallback = await getConversationsNewMap(userPublicKey, allAccessGroups);
     conversations = fallback.conversations;
     publicKeyToProfileEntryResponseMap =
       fallback.publicKeyToProfileEntryResponseMap;
     allAccessGroups = fallback.updatedAllAccessGroups;
+
+    // Reconcile against Focus spam threads so inbox fallback doesn't show spam too.
+    try {
+      const spamResult = await getSpamConversationsFromFocusGraphql(
+        userPublicKey,
+        allAccessGroups,
+        0,
+        100
+      );
+      const spamKeys = new Set(Object.keys(spamResult.conversations));
+      if (spamKeys.size > 0) {
+        conversations = Object.fromEntries(
+          Object.entries(conversations).filter(([key]) => !spamKeys.has(key))
+        ) as ConversationMap;
+      }
+      allAccessGroups = spamResult.updatedAllAccessGroups;
+    } catch (spamErr) {
+      console.warn(
+        "[fetchConversations] Failed to filter spam from inbox fallback",
+        spamErr
+      );
+    }
   }
 
-  // Fetch group members for avatars (include both inbox and spam group chats)
-  const inboxGroupChats = Object.values(conversations).filter(
-    (c) => c.ChatType === ChatType.GROUPCHAT
-  );
-  const spamGroupChats = Object.values(spamConversations).filter(
-    (c) => c.ChatType === ChatType.GROUPCHAT
-  );
-  const groupChats = [...inboxGroupChats, ...spamGroupChats];
-
+  // We skip group member fetch here to keep payload light; fetch lazily per row if needed.
   const membersMap: Record<string, GroupMember[]> = {};
   const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
 
-  await Promise.all(
-    groupChats.map(async (chat) => {
-      const lastMsg = chat.messages[0];
-      if (!lastMsg) return;
+  // Prefer results from Focus GraphQL when available; otherwise fall back to empty.
+  if (Object.keys(groupMembers).length) {
+    Object.assign(membersMap, groupMembers);
+  }
 
-      const accessGroupKeyName = lastMsg.RecipientInfo.AccessGroupKeyName;
-      const ownerPublicKey = lastMsg.RecipientInfo.OwnerPublicKeyBase58Check;
-
-      if (!accessGroupKeyName || !ownerPublicKey) return;
-
-      try {
-        const { members, extraData } = await fetchAccessGroupMembers({
-          accessGroupKeyName,
-          accessGroupOwnerPublicKey: ownerPublicKey,
-          limit: 4, // Fetch just enough for the stack
-        });
-
-        // Create a unique key for the group
-        const groupKey = `${ownerPublicKey}-${accessGroupKeyName}`;
-        membersMap[groupKey] = members;
-        groupExtraDataMap[groupKey] = extraData || null;
-      } catch (err) {
-        console.warn(
-          `Failed to fetch members for group ${accessGroupKeyName}`,
-          err
-        );
-      }
-    })
-  );
+  if (Object.keys(groupExtraData).length) {
+    Object.assign(groupExtraDataMap, groupExtraData);
+  }
 
   return {
     conversations,
-    spamConversations,
-    profiles: {
-      ...publicKeyToProfileEntryResponseMap,
-      ...spamPublicKeyToProfileEntryResponseMap,
-    },
+    profiles: publicKeyToProfileEntryResponseMap,
     groupMembers: membersMap,
     groupExtraData: groupExtraDataMap,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
   };
 };

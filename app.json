@@ -29,7 +29,9 @@
       "package": "com.anonymous.starterapp"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-video",
+      "expo-font"
     ],
     "web": {
       "bundler": "metro",

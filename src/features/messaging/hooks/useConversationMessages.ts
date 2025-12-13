@@ -6,23 +6,42 @@ import {
     AccessGroupEntryResponse,
     NewMessageEntryResponse,
 } from "deso-protocol";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
     encryptAndSendNewMessage,
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
     decryptAccessGroupMessages,
-} from "../../../services/conversations";
+    fetchProfilesBatch,
+} from "@/features/messaging/api/conversations";
 import {
-    AUTO_LOAD_DELAY_MS,
     MESSAGE_PAGE_SIZE,
-    SCROLL_PAGINATION_TRIGGER,
     DEFAULT_KEY_MESSAGING_GROUP_NAME,
-} from "../../../constants/messaging";
+} from "@/constants/messaging";
 import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from "../../../utils/messageUtils";
-import { DeviceEventEmitter } from "react-native";
-import { OUTGOING_MESSAGE_EVENT } from "../../../constants/events";
-import { StorageService } from "../../../services/storage";
+import { DeviceEventEmitter, Platform } from "react-native";
+import { OUTGOING_MESSAGE_EVENT } from "@/constants/events";
+import { StorageService } from "@/lib/storage";
 import { getSupabaseClient, isSupabaseConfigured, type MessageBroadcastPayload } from "../../../lib/supabaseClient";
+
+const messageKeys = {
+    thread: (conversationId: string) => ["conversation-messages", conversationId] as const,
+};
+
+type PageParam = {
+    cursor: string | null;
+    beforeTimestamp: number | null;
+    isInitial?: boolean;
+};
+
+type PageData = {
+    messages: DecryptedMessageEntryResponse[];
+    profiles: PublicKeyToProfileEntryResponseMap;
+    accessGroups: AccessGroupEntryResponse[];
+    nextCursor: string | null;
+    nextTimestamp: number | null;
+    hasMore: boolean;
+};
 
 type UseConversationMessagesProps = {
     threadPublicKey: string;
@@ -34,6 +53,7 @@ type UseConversationMessagesProps = {
     lastTimestampNanos?: number;
     recipientInfo?: any;
     conversationId: string;
+    initialProfile?: any; // Profile to seed immediately
 };
 
 export const useConversationMessages = ({
@@ -46,22 +66,16 @@ export const useConversationMessages = ({
     lastTimestampNanos,
     recipientInfo,
     conversationId,
+    initialProfile,
 }: UseConversationMessagesProps) => {
-    // Initialize messages with empty array, load from cache asynchronously
-    const [messages, setMessages] = useState<DecryptedMessageEntryResponse[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
+    const queryClient = useQueryClient();
     const [error, setError] = useState<string | null>(null);
-    const [profiles, setProfiles] = useState<PublicKeyToProfileEntryResponseMap>({});
     const [isSendingMessage, setIsSendingMessage] = useState(false);
 
     const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
-    const paginationCursorRef = useRef<string | null>(null);
-    const hasMoreRef = useRef(true);
-    const isLoadingRef = useRef(false);
-    const oldestTimestampRef = useRef<number | null>(null);
-    const profileCacheRef = useRef<Map<string, string>>(new Map()); // In-memory profile image cache
+    const profileCacheRef = useRef<Map<string, string>>(new Map());
+    const hydratedRef = useRef(false);
+    const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const isGroupChat = chatType === ChatType.GROUPCHAT;
     const counterPartyPublicKey = partyGroupOwnerPublicKeyBase58Check ?? threadPublicKey;
@@ -73,327 +87,386 @@ export const useConversationMessages = ({
             next: DecryptedMessageEntryResponse[]
         ) => {
             const map = new Map<string, DecryptedMessageEntryResponse>();
-            const contentMap = new Map<string, number>(); // Track content+sender to detect duplicates
+            const contentLastTsMap = new Map<string, number>(); // Track sender+trimmed-content within 60s
+            const exactRecentTsMap = new Map<string, number[]>(); // Track exact sender+content within 5s
 
-            // Helper to create content key for duplicate detection
+            const contentWindowNanos = 60000 * 1e6;
+            const exactWindowNanos = 5000 * 1e6;
+
+            const getTimestampKey = (message: DecryptedMessageEntryResponse) =>
+                message.MessageInfo?.TimestampNanosString ??
+                String(message.MessageInfo?.TimestampNanos ?? "");
+
+            const getSenderKey = (message: DecryptedMessageEntryResponse) =>
+                message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
+
             const getContentKey = (message: DecryptedMessageEntryResponse) => {
                 const content = message.DecryptedMessage?.trim() ?? "";
-                const sender = message.SenderInfo?.OwnerPublicKeyBase58Check ?? "";
+                const sender = getSenderKey(message);
                 return `${sender}:${content}`;
             };
 
-            // Add new messages first (source of truth)
-            next.forEach((message) => {
-                const timestamp =
-                    message.MessageInfo?.TimestampNanosString ??
-                    String(message.MessageInfo?.TimestampNanos ?? "");
-                const senderKey =
-                    message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
-                const uniqueKey = `${timestamp}-${senderKey}`;
+            const getExactContentKey = (message: DecryptedMessageEntryResponse) => {
+                const content = message.DecryptedMessage ?? "";
+                const sender = getSenderKey(message);
+                return `${sender}:${content}`;
+            };
 
-                // Track content for duplicate detection
-                const contentKey = getContentKey(message);
-                const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
-                const existingTimestamp = contentMap.get(contentKey);
-
-                // Only add if we don't have this exact content from same sender within 60 seconds
-                if (!existingTimestamp || Math.abs(msgTimestamp - existingTimestamp) > 60000 * 1e6) {
-                    map.set(uniqueKey, message);
-                    contentMap.set(contentKey, msgTimestamp);
-                }
-            });
-
-            // Merge previous messages, checking for duplicates
-            prev.forEach((message) => {
-                const timestamp =
-                    message.MessageInfo?.TimestampNanosString ??
-                    String(message.MessageInfo?.TimestampNanos ?? "");
-                const senderKey =
-                    message.SenderInfo?.OwnerPublicKeyBase58Check ?? "unknown-sender";
-                const uniqueKey = `${timestamp}-${senderKey}`;
+            const tryInsert = (message: DecryptedMessageEntryResponse, fromNext: boolean) => {
+                const timestampKey = getTimestampKey(message);
+                const senderKey = getSenderKey(message);
+                const uniqueKey = `${timestampKey}-${senderKey}`;
 
                 if (map.has(uniqueKey)) return;
 
-                // Check content-based duplicates
-                const contentKey = getContentKey(message);
                 const msgTimestamp = message.MessageInfo?.TimestampNanos ?? 0;
-                const existingTimestamp = contentMap.get(contentKey);
+                const contentKey = getContentKey(message);
+                const lastContentTimestamp = contentLastTsMap.get(contentKey);
 
-                // Skip if same content from same sender exists within 60 seconds
-                if (existingTimestamp && Math.abs(msgTimestamp - existingTimestamp) < 60000 * 1e6) {
+                if (lastContentTimestamp != null) {
+                    const diff = Math.abs(msgTimestamp - lastContentTimestamp);
+                    if (fromNext ? diff <= contentWindowNanos : diff < contentWindowNanos) {
+                        return;
+                    }
+                }
+
+                const exactKey = getExactContentKey(message);
+                const recentExact = exactRecentTsMap.get(exactKey) ?? [];
+                const prunedExact = recentExact.filter(
+                    (ts) => Math.abs(msgTimestamp - ts) < exactWindowNanos
+                );
+
+                if (prunedExact.length > 0) {
                     return;
                 }
 
-                // Fuzzy duplicate check for optimistic messages
-                const isDuplicate = Array.from(map.values()).some((existing) => {
-                    const timeDiff = Math.abs(
-                        (existing.MessageInfo?.TimestampNanos ?? 0) -
-                        (message.MessageInfo?.TimestampNanos ?? 0)
-                    );
-                    return (
-                        existing.DecryptedMessage === message.DecryptedMessage &&
-                        existing.SenderInfo?.OwnerPublicKeyBase58Check ===
-                        message.SenderInfo?.OwnerPublicKeyBase58Check &&
-                        timeDiff < 5000 * 1e6 // 5 seconds
-                    );
-                });
+                prunedExact.push(msgTimestamp);
+                exactRecentTsMap.set(exactKey, prunedExact);
 
-                if (!isDuplicate) {
-                    map.set(uniqueKey, message);
-                    contentMap.set(contentKey, msgTimestamp);
-                }
-            });
+                map.set(uniqueKey, message);
+                contentLastTsMap.set(contentKey, msgTimestamp);
+            };
 
-            // Sort descending (newest first) for inverted FlatList
-            // With inverted list: data[0] appears at visual bottom, data[last] at top
-            // So newest-first in array = newest at visual bottom (correct for chat)
+            next.forEach((message) => tryInsert(message, true));
+            prev.forEach((message) => tryInsert(message, false));
+
             const sorted = normalizeAndSortMessages(Array.from(map.values()));
-            // normalizeAndSortMessages returns ascending (oldest first), so reverse for descending
             return sorted.reverse();
         },
         []
     );
 
-    const loadMessages = useCallback(
-        async (initial = false, isPullToRefresh = false) => {
-            // Prevent concurrent requests with better debouncing
-            if (isLoadingRef.current || (!initial && !hasMoreRef.current)) {
-                return;
-            }
-
-            isLoadingRef.current = true;
-            if (initial) {
-                if (isPullToRefresh) {
-                    setIsRefreshing(true);
-                } else {
-                    setIsLoading(true);
-                }
-                paginationCursorRef.current = null;
-                hasMoreRef.current = true;
-                setHasMore(true);
-            } else {
-                setIsLoading(true);
-            }
-
+    const fetchPage = useCallback(
+        async ({ cursor, beforeTimestamp, isInitial }: PageParam): Promise<PageData> => {
             setError(null);
+            const nowNanos = Date.now() * 1_000_000;
+            const paginationTimestamp = beforeTimestamp ?? nowNanos;
 
-            try {
-                let pageInfo: {
-                    hasNextPage: boolean;
-                    endCursor: string | null;
-                } | null = null;
-                let result:
-                    | Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>
-                    | Awaited<ReturnType<typeof fetchPaginatedGroupThreadMessages>>;
+            let result:
+                | Awaited<ReturnType<typeof fetchPaginatedDmThreadMessages>>
+                | Awaited<ReturnType<typeof fetchPaginatedGroupThreadMessages>>;
 
-                // Calculate the correct timestamp to use for pagination
-                // If initial load, use current time (latest)
-                // If pagination, use the oldest loaded message's timestamp
-                const nowMs = Date.now();
-                const currentTimestampNanos = nowMs * 1_000_000;
+            if (isGroupChat) {
+                const groupOwnerPublicKey =
+                    recipientOwnerKey ??
+                    partyGroupOwnerPublicKeyBase58Check ??
+                    counterPartyPublicKey ??
+                    userPublicKey;
 
-                // For pagination, we want to fetch messages OLDER than our oldest current message
-                const paginationTimestamp = !initial && oldestTimestampRef.current
-                    ? oldestTimestampRef.current
-                    : currentTimestampNanos;
+                const payload = {
+                    UserPublicKeyBase58Check: groupOwnerPublicKey,
+                    AccessGroupKeyName: threadAccessGroupKeyName,
+                    MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
+                    StartTimeStamp: paginationTimestamp,
+                    StartTimeStampString: String(paginationTimestamp),
+                } as const;
 
-                if (isGroupChat) {
-                    const groupOwnerPublicKey =
-                        recipientOwnerKey ??
-                        partyGroupOwnerPublicKeyBase58Check ??
-                        counterPartyPublicKey ??
-                        userPublicKey;
-
-                    console.log('🔍 [GROUP CHAT FETCH DEBUG]', {
-                        initial,
-                        currentTime: new Date().toISOString(),
-                        timestampUsed: paginationTimestamp,
-                        timestampDate: new Date(paginationTimestamp / 1_000_000).toISOString(),
-                        cursor: initial ? null : paginationCursorRef.current,
-                        pageSize: MESSAGE_PAGE_SIZE,
-                    });
-
-                    const payload = {
-                        UserPublicKeyBase58Check: groupOwnerPublicKey,
-                        AccessGroupKeyName: threadAccessGroupKeyName,
-                        MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
-                        StartTimeStamp: paginationTimestamp,
-                        StartTimeStampString: String(paginationTimestamp),
-                    } as const;
-
-                    const groupResult = await fetchPaginatedGroupThreadMessages(
-                        payload,
-                        accessGroupsRef.current,
-                        userPublicKey,
-                        {
-                            afterCursor: initial ? null : paginationCursorRef.current,
-                            limit: MESSAGE_PAGE_SIZE,
-                            recipientAccessGroupOwnerPublicKey: groupOwnerPublicKey,
-                        }
-                    );
-
-                    console.log('📦 [GROUP CHAT FETCH RESULT]', {
-                        messagesCount: groupResult.decrypted.length,
-                        firstMessageTime: groupResult.decrypted[0]?.MessageInfo?.TimestampNanos
-                            ? new Date(groupResult.decrypted[0].MessageInfo.TimestampNanos / 1_000_000).toISOString()
-                            : 'N/A',
-                        lastMessageTime: groupResult.decrypted[groupResult.decrypted.length - 1]?.MessageInfo?.TimestampNanos
-                            ? new Date(groupResult.decrypted[groupResult.decrypted.length - 1].MessageInfo.TimestampNanos / 1_000_000).toISOString()
-                            : 'N/A',
-                        hasNextPage: groupResult.pageInfo.hasNextPage,
-                        endCursor: groupResult.pageInfo.endCursor,
-                    });
-
-                    result = groupResult;
-                    pageInfo = groupResult.pageInfo;
-                } else {
-                    console.log('🔍 [DM FETCH DEBUG]', {
-                        initial,
-                        currentTime: new Date().toISOString(),
-                        timestampUsed: paginationTimestamp,
-                        timestampDate: new Date(paginationTimestamp / 1_000_000).toISOString(),
-                        cursor: initial ? null : paginationCursorRef.current,
-                        pageSize: MESSAGE_PAGE_SIZE,
-                    });
-
-                    const payload = {
-                        UserGroupOwnerPublicKeyBase58Check: userPublicKey,
-                        UserGroupKeyName: userAccessGroupKeyName,
-                        PartyGroupOwnerPublicKeyBase58Check: counterPartyPublicKey,
-                        PartyGroupKeyName: threadAccessGroupKeyName,
-                        MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
-                        StartTimeStamp: paginationTimestamp,
-                        StartTimeStampString: String(paginationTimestamp),
-                    } as const;
-
-                    const dmResult = await fetchPaginatedDmThreadMessages(
-                        payload,
-                        accessGroupsRef.current,
-                        {
-                            afterCursor: initial ? null : paginationCursorRef.current,
-                            limit: MESSAGE_PAGE_SIZE,
-                            fallbackBeforeTimestampNanos: !initial ? paginationTimestamp : undefined,
-                        }
-                    );
-
-                    console.log('📦 [DM FETCH RESULT]', {
-                        messagesCount: dmResult.decrypted.length,
-                        firstMessageTime: dmResult.decrypted[0]?.MessageInfo?.TimestampNanos
-                            ? new Date(dmResult.decrypted[0].MessageInfo.TimestampNanos / 1_000_000).toISOString()
-                            : 'N/A',
-                        lastMessageTime: dmResult.decrypted[dmResult.decrypted.length - 1]?.MessageInfo?.TimestampNanos
-                            ? new Date(dmResult.decrypted[dmResult.decrypted.length - 1].MessageInfo.TimestampNanos / 1_000_000).toISOString()
-                            : 'N/A',
-                        hasNextPage: dmResult.pageInfo.hasNextPage,
-                        endCursor: dmResult.pageInfo.endCursor,
-                    });
-
-                    result = dmResult;
-                    pageInfo = dmResult.pageInfo;
-                }
-
-                const decryptedMessages = result.decrypted.filter(
-                    (msg): msg is DecryptedMessageEntryResponse => Boolean(msg)
+                result = await fetchPaginatedGroupThreadMessages(
+                    payload,
+                    accessGroupsRef.current,
+                    userPublicKey,
+                    {
+                        afterCursor: cursor,
+                        limit: MESSAGE_PAGE_SIZE,
+                        recipientAccessGroupOwnerPublicKey: groupOwnerPublicKey,
+                    }
                 );
+            } else {
+                const payload = {
+                    UserGroupOwnerPublicKeyBase58Check: userPublicKey,
+                    UserGroupKeyName: userAccessGroupKeyName,
+                    PartyGroupOwnerPublicKeyBase58Check: counterPartyPublicKey,
+                    PartyGroupKeyName: threadAccessGroupKeyName,
+                    MaxMessagesToFetch: MESSAGE_PAGE_SIZE,
+                    StartTimeStamp: paginationTimestamp,
+                    StartTimeStampString: String(paginationTimestamp),
+                } as const;
 
-                setMessages((prev) => {
-                    // Both initial and merge should return newest-first (descending) for inverted FlatList
-                    const nextMessages = initial
-                        ? normalizeAndSortMessages([...decryptedMessages]).reverse()
-                        : mergeMessages(prev, decryptedMessages);
-
-                    // Filter out edit messages when calculating oldest timestamp
-                    // We need to find the oldest "real" message to use as the cursor for the next fetch
-                    const nonEditMessages = nextMessages.filter(msg => {
-                        const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
-                        const hasEditedMessageId = extraData?.editedMessageId != null;
-                        const isEdited = extraData?.edited === 'true';
-                        return !hasEditedMessageId && !isEdited; // Keep only non-edit messages
-                    });
-
-                    // Sort by timestamp descending to ensure we get the oldest one at the end
-                    nonEditMessages.sort((a, b) =>
-                        (b.MessageInfo?.TimestampNanos ?? 0) - (a.MessageInfo?.TimestampNanos ?? 0)
-                    );
-
-                    let oldest =
-                        nonEditMessages[nonEditMessages.length - 1]?.MessageInfo
-                            ?.TimestampNanos ?? null;
-
-                    // Fallback: If we only have edit messages (unlikely but possible),
-                    // we must use the oldest message we have to ensure pagination progresses.
-                    if (!oldest && nextMessages.length > 0) {
-                        const sortedAll = [...nextMessages].sort((a, b) =>
-                            (b.MessageInfo?.TimestampNanos ?? 0) - (a.MessageInfo?.TimestampNanos ?? 0)
-                        );
-                        oldest = sortedAll[sortedAll.length - 1]?.MessageInfo?.TimestampNanos ?? null;
+                result = await fetchPaginatedDmThreadMessages(
+                    payload,
+                    accessGroupsRef.current,
+                    {
+                        afterCursor: cursor,
+                        limit: MESSAGE_PAGE_SIZE,
+                        fallbackBeforeTimestampNanos: cursor ? paginationTimestamp : undefined,
                     }
-
-                    if (oldest) {
-                        oldestTimestampRef.current = oldest;
-                    }
-
-                    // Cache messages synchronously to MMKV
-                    StorageService.saveChatHistory(conversationId, nextMessages);
-
-                    return nextMessages;
-                });
-
-                // Auto-load more if content doesn't fill screen (with longer delay)
-                if (initial && decryptedMessages.length === MESSAGE_PAGE_SIZE && hasMoreRef.current) {
-                    setTimeout(() => {
-                        if (!isLoadingRef.current && hasMoreRef.current) {
-                            loadMessages(false);
-                        }
-                    }, AUTO_LOAD_DELAY_MS * 2); // Double delay for stability
-                }
-
-                accessGroupsRef.current = result.updatedAllAccessGroups;
-
-                if (result.publicKeyToProfileEntryResponseMap) {
-                    setProfiles((prev) => ({
-                        ...prev,
-                        ...result.publicKeyToProfileEntryResponseMap,
-                    }));
-                }
-
-                let nextCursor = pageInfo?.endCursor ?? paginationCursorRef.current;
-                let nextHasMore = Boolean(pageInfo?.hasNextPage && nextCursor);
-
-                if (!nextHasMore && decryptedMessages.length === MESSAGE_PAGE_SIZE) {
-                    nextHasMore = true;
-                    if (!nextCursor) {
-                        nextCursor =
-                            decryptedMessages[decryptedMessages.length - 1]?.MessageInfo
-                                ?.TimestampNanosString ?? null;
-                    }
-                }
-
-                paginationCursorRef.current = nextCursor ?? null;
-                hasMoreRef.current = Boolean(nextHasMore && paginationCursorRef.current);
-                setHasMore(hasMoreRef.current);
-
-            } catch (err) {
-                setError(
-                    err instanceof Error ? err.message : "Failed to load messages"
                 );
-            } finally {
-                isLoadingRef.current = false;
-                setIsLoading(false);
-                setIsRefreshing(false);
             }
+
+            const decryptedMessages = result.decrypted.filter(
+                (msg): msg is DecryptedMessageEntryResponse => Boolean(msg)
+            );
+
+            accessGroupsRef.current = result.updatedAllAccessGroups;
+
+            const profilesMap: PublicKeyToProfileEntryResponseMap = {
+                ...(result.publicKeyToProfileEntryResponseMap ?? {}),
+            };
+
+            // Ensure we have profile metadata for every sender/receiver in this page
+            const missingKeys = new Set<string>();
+            decryptedMessages.forEach((msg) => {
+                const sender = msg.SenderInfo?.OwnerPublicKeyBase58Check;
+                const recipient = msg.RecipientInfo?.OwnerPublicKeyBase58Check;
+                [sender, recipient].forEach((pk) => {
+                    if (!pk) return;
+                    if (profilesMap[pk]) return;
+                    if (profileCacheRef.current.has(pk)) return;
+                    missingKeys.add(pk);
+                });
+            });
+
+            if (missingKeys.size > 0) {
+                const fetchedProfiles = await fetchProfilesBatch(Array.from(missingKeys));
+                Object.assign(profilesMap, fetchedProfiles);
+                Array.from(missingKeys).forEach((pk) => {
+                    profileCacheRef.current.set(pk, "fetched");
+                });
+            }
+
+            const merged = mergeMessages([], decryptedMessages);
+
+            const nonEditMessages = merged.filter(msg => {
+                const extraData = msg.MessageInfo?.ExtraData as Record<string, any> | undefined;
+                const hasEditedMessageId = extraData?.editedMessageId != null;
+                const isEdited = extraData?.edited === "true";
+                return !hasEditedMessageId && !isEdited;
+            });
+
+            const sortedByOldest = [...nonEditMessages].sort(
+                (a, b) => (a.MessageInfo?.TimestampNanos ?? 0) - (b.MessageInfo?.TimestampNanos ?? 0)
+            );
+
+            const oldest = sortedByOldest[0]?.MessageInfo?.TimestampNanos ?? null;
+
+            let nextCursor = result.pageInfo?.endCursor ?? null;
+            let nextHasMore = Boolean(result.pageInfo?.hasNextPage && nextCursor);
+
+            if (!nextHasMore && decryptedMessages.length === MESSAGE_PAGE_SIZE) {
+                nextHasMore = true;
+                if (!nextCursor) {
+                    nextCursor =
+                        decryptedMessages[decryptedMessages.length - 1]?.MessageInfo
+                            ?.TimestampNanosString ?? null;
+                }
+            }
+
+            return {
+                messages: merged,
+                profiles: profilesMap,
+                accessGroups: accessGroupsRef.current,
+                nextCursor,
+                nextTimestamp: oldest,
+                hasMore: nextHasMore,
+            };
         },
         [
             counterPartyPublicKey,
             isGroupChat,
-            lastTimestampNanos,
-            partyGroupOwnerPublicKeyBase58Check,
             mergeMessages,
+            partyGroupOwnerPublicKeyBase58Check,
+            recipientOwnerKey,
             threadAccessGroupKeyName,
             userAccessGroupKeyName,
             userPublicKey,
-            recipientOwnerKey,
         ]
+    );
+
+    const initialPageParam: PageParam = { cursor: null, beforeTimestamp: null, isInitial: true };
+
+    const {
+        data,
+        isLoading: queryLoading,
+        isFetchingNextPage,
+        fetchNextPage,
+        refetch,
+        isRefetching,
+    } = useInfiniteQuery<PageData, Error, InfiniteData<PageData, PageParam>, ReturnType<typeof messageKeys.thread>, PageParam>({
+        queryKey: messageKeys.thread(conversationId),
+        queryFn: ({ pageParam }) =>
+            fetchPage(
+                (pageParam as PageParam) ?? initialPageParam
+            ),
+        getNextPageParam: (lastPage) =>
+            lastPage.hasMore
+                ? {
+                    cursor: lastPage.nextCursor,
+                    beforeTimestamp: lastPage.nextTimestamp,
+                    isInitial: false,
+                } as PageParam
+                : undefined,
+        initialPageParam,
+        staleTime: 1000 * 30,
+    });
+
+    const profiles = useMemo(() => {
+        const baseProfiles = data?.pages?.reduce<PublicKeyToProfileEntryResponseMap>((acc, page) => {
+            return { ...acc, ...page.profiles };
+        }, {}) ?? {};
+        
+        // Seed with initialProfile to avoid loading delay
+        if (initialProfile && counterPartyPublicKey) {
+            return { [counterPartyPublicKey]: initialProfile, ...baseProfiles };
+        }
+        
+        return baseProfiles;
+    }, [data?.pages, initialProfile, counterPartyPublicKey]);
+
+    const messages = useMemo(() => {
+        if (!data?.pages) return [];
+        return data.pages.reduce<DecryptedMessageEntryResponse[]>((acc, page) => {
+            return mergeMessages(acc, page.messages);
+        }, []);
+    }, [data?.pages, mergeMessages]);
+
+    const hasMore = data?.pages?.[data.pages.length - 1]?.hasMore ?? false;
+    const isLoading = queryLoading && !isRefetching && !isFetchingNextPage;
+    const isRefreshing = isRefetching;
+
+    // Hydrate from local storage once
+    useEffect(() => {
+        if (hydratedRef.current) return;
+        hydratedRef.current = true;
+
+        (async () => {
+            const cached = await StorageService.getChatHistory(conversationId);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+                const normalized = normalizeAndSortMessages(
+                    cached as DecryptedMessageEntryResponse[]
+                ).reverse();
+                const oldest =
+                    normalized[normalized.length - 1]?.MessageInfo?.TimestampNanos ?? null;
+
+                queryClient.setQueryData(messageKeys.thread(conversationId), {
+                    pageParams: [{ cursor: null, beforeTimestamp: null, isInitial: true }],
+                    pages: [
+                        {
+                            messages: normalized,
+                            profiles: {},
+                            accessGroups: [],
+                            nextCursor: null,
+                            nextTimestamp: oldest,
+                            hasMore: true,
+                        } as PageData,
+                    ],
+                });
+            }
+        })();
+    }, [conversationId, queryClient]);
+
+    // Persist recent messages to local storage (debounced + capped)
+    useEffect(() => {
+        if (!messages.length) return;
+
+        const maxCachedMessages = Platform.OS === "web" ? 200 : 400;
+        const debounceMs = Platform.OS === "web" ? 1500 : 800;
+        const recentMessages = messages.slice(0, maxCachedMessages);
+
+        if (persistTimeoutRef.current) {
+            clearTimeout(persistTimeoutRef.current);
+        }
+
+        persistTimeoutRef.current = setTimeout(() => {
+            StorageService.saveChatHistory(conversationId, recentMessages);
+        }, debounceMs);
+
+        return () => {
+            if (persistTimeoutRef.current) {
+                clearTimeout(persistTimeoutRef.current);
+            }
+        };
+    }, [conversationId, messages]);
+
+    const setMessagesSafe = useCallback(
+        (
+            updater:
+                | DecryptedMessageEntryResponse[]
+                | ((
+                    prev: DecryptedMessageEntryResponse[]
+                ) => DecryptedMessageEntryResponse[])
+        ) => {
+            queryClient.setQueryData(messageKeys.thread(conversationId), (oldData: any) => {
+                if (!oldData) {
+                    const nextMessages =
+                        typeof updater === "function"
+                            ? updater([])
+                            : updater;
+                    return {
+                        pageParams: [{ cursor: null, beforeTimestamp: null, isInitial: true }],
+                        pages: [
+                            {
+                                messages: nextMessages,
+                                profiles: {},
+                                accessGroups: accessGroupsRef.current,
+                                nextCursor: null,
+                                nextTimestamp: nextMessages[nextMessages.length - 1]?.MessageInfo?.TimestampNanos ?? null,
+                                hasMore: true,
+                            } as PageData,
+                        ],
+                    };
+                }
+
+                const current = oldData.pages.reduce(
+                    (acc: DecryptedMessageEntryResponse[], page: PageData) =>
+                        mergeMessages(acc, page.messages),
+                    []
+                );
+                const next =
+                    typeof updater === "function"
+                        ? updater(current)
+                        : updater;
+
+                const firstPage: PageData = {
+                    ...(oldData.pages[0] as PageData),
+                    messages: next,
+                    profiles: (oldData.pages[0] as PageData).profiles,
+                    accessGroups: accessGroupsRef.current,
+                    nextTimestamp:
+                        next[next.length - 1]?.MessageInfo?.TimestampNanos ?? null,
+                };
+
+                return {
+                    ...oldData,
+                    pages: [firstPage, ...(oldData.pages.slice(1) as PageData[])],
+                };
+            });
+        },
+        [conversationId, mergeMessages, queryClient]
+    );
+
+    const loadMessages = useCallback(
+        async (initial = false, isPullToRefresh = false) => {
+            try {
+                if (initial || isPullToRefresh) {
+                    await refetch();
+                } else if (hasMore) {
+                    await fetchNextPage();
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to load messages");
+            }
+        },
+        [fetchNextPage, hasMore, refetch]
     );
 
     const handleComposerMessageSent = useCallback(
@@ -408,7 +481,7 @@ export const useConversationMessages = ({
                     threadPublicKey: counterPartyPublicKey,
                     threadAccessGroupKeyName,
                     userAccessGroupKeyName,
-                    extraData
+                    extraData,
                 });
                 return;
             }
@@ -426,55 +499,18 @@ export const useConversationMessages = ({
                 ChatType: chatType,
             } as DecryptedMessageEntryResponse;
 
-            setMessages((prev) => {
-                const updated = mergeMessages(prev, [optimisticMessage]);
-                // Cache optimistic message immediately
-                StorageService.saveChatHistory(conversationId, updated);
-                return updated;
-            });
+            setMessagesSafe((prev) => mergeMessages(prev, [optimisticMessage]));
         },
-        [chatType, mergeMessages, userPublicKey, conversationId, counterPartyPublicKey, threadAccessGroupKeyName, userAccessGroupKeyName]
+        [
+            chatType,
+            conversationId,
+            counterPartyPublicKey,
+            mergeMessages,
+            threadAccessGroupKeyName,
+            userAccessGroupKeyName,
+            userPublicKey,
+        ]
     );
-
-    useEffect(() => {
-        let isMounted = true;
-
-        const bootstrap = async () => {
-            setMessages([]);
-            setHasMore(true);
-            setError(null);
-            setIsLoading(true);
-            setIsRefreshing(false);
-
-            accessGroupsRef.current = [];
-            paginationCursorRef.current = null;
-            hasMoreRef.current = true;
-            isLoadingRef.current = false;
-
-            // Fetch fresh messages from network immediately
-            try {
-                await loadMessages(true, false);
-            } catch (err) {
-                if (isMounted) {
-                    setError(
-                        err instanceof Error ? err.message : "Failed to load messages"
-                    );
-                }
-            }
-        };
-
-        bootstrap();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [
-        counterPartyPublicKey,
-        userPublicKey,
-        chatType,
-        threadAccessGroupKeyName,
-        conversationId,
-    ]);
 
     // Subscribe to Supabase broadcasts for instant message delivery
     useEffect(() => {
@@ -485,30 +521,23 @@ export const useConversationMessages = ({
         const supabase = getSupabaseClient();
         const channelName = `messages-${conversationId}`;
 
-        console.log('[useConversationMessages] Subscribing to broadcast channel:', channelName);
-
         const channel = supabase.channel(channelName, {
             config: {
-                broadcast: { self: false }, // Don't receive own messages
+                broadcast: { self: false },
             },
         });
 
-        channel.on('broadcast', { event: 'message' }, async ({ payload }) => {
+        channel.on("broadcast", { event: "message" }, async ({ payload }) => {
             const messagePayload = payload as MessageBroadcastPayload;
-            console.log('🔥 [useConversationMessages] INCOMING BROADCAST RECEIVED:', JSON.stringify(messagePayload, null, 2));
 
-            // Only process messages for this conversation
             if (messagePayload.conversationId !== conversationId) {
-                console.log('⚠️ [useConversationMessages] Ignoring broadcast for different conversation:', messagePayload.conversationId);
                 return;
             }
 
-            // Ignore typing events - they are handled by usePresence
             if (messagePayload.is_typing !== undefined) {
                 return;
             }
 
-            // Construct a NewMessageEntryResponse from the broadcast payload
             const encryptedMessage: NewMessageEntryResponse = {
                 ChatType: messagePayload.metadata?.chatType as ChatType || ChatType.DM,
                 SenderInfo: {
@@ -523,49 +552,36 @@ export const useConversationMessages = ({
                 },
                 MessageInfo: {
                     EncryptedText: messagePayload.EncryptedMessageText || "",
-                    TimestampNanos: messagePayload.timestampNanos,
-                    TimestampNanosString: String(messagePayload.timestampNanos),
+                    TimestampNanos: Number(messagePayload.timestampNanos || Date.now() * 1e6),
+                    TimestampNanosString: messagePayload.timestampNanos?.toString() || "",
                     ExtraData: messagePayload.ExtraData || {},
                 },
             };
 
-            console.log('🔐 [useConversationMessages] Decrypting incoming broadcast...');
-
             try {
-                // Decrypt the message using the existing access groups
                 const [decryptedMessage] = await decryptAccessGroupMessages(
                     [encryptedMessage],
                     accessGroupsRef.current
                 );
 
                 if (decryptedMessage) {
-                    console.log('✅ [useConversationMessages] Decryption successful, appending message:', decryptedMessage.MessageInfo?.TimestampNanosString);
-
-                    setMessages((prev) => {
-                        const updated = mergeMessages(prev, [decryptedMessage]);
-                        // Cache updated messages
-                        StorageService.saveChatHistory(conversationId, updated);
-                        return updated;
-                    });
-                } else {
-                    console.warn('⚠️ [useConversationMessages] Decryption returned null');
+                    setMessagesSafe((prev) => mergeMessages(prev, [decryptedMessage]));
                 }
             } catch (err) {
-                console.error('❌ [useConversationMessages] Failed to decrypt broadcast message:', err);
+                console.error("Failed to decrypt broadcast message:", err);
             }
         });
 
-        channel.subscribe((status) => {
-            console.log('[useConversationMessages] Broadcast subscription status:', status);
-        });
+        channel.subscribe();
 
         return () => {
-            console.log('[useConversationMessages] Unsubscribing from broadcast channel');
             channel.unsubscribe();
         };
-    }, [conversationId, loadMessages]);
+    }, [
+        conversationId,
+        mergeMessages,
+    ]);
 
-    // Create a lookup map for fast message retrieval by ID
     const messageIdMap = useMemo(() => {
         const map = new Map<string, DecryptedMessageEntryResponse>();
         messages.forEach((m) => {
@@ -578,7 +594,7 @@ export const useConversationMessages = ({
 
     return {
         messages,
-        setMessages,
+        setMessages: setMessagesSafe,
         isLoading,
         isRefreshing,
         hasMore,
@@ -591,5 +607,6 @@ export const useConversationMessages = ({
         messageIdMap,
         mergeMessages,
         profileCacheRef,
+        isFetchingNextPage,
     };
 };

@@ -3,8 +3,8 @@ import type { RouteProp, NavigatorScreenParams } from "@react-navigation/native"
 
 export type ConversationRouteParams = {
   threadPublicKey: string;
-  chatType: ChatType;
-  userPublicKey: string;
+  chatType?: ChatType;
+  userPublicKey?: string;
   threadAccessGroupKeyName?: string;
   userAccessGroupKeyName?: string;
   partyGroupOwnerPublicKeyBase58Check?: string;
@@ -14,6 +14,7 @@ export type ConversationRouteParams = {
   recipientInfo?: any;
   initialGroupMembers?: any[];
   initialMessage?: string;
+  initialProfile?: any; // Profile data to avoid loading delay
 };
 
 export type HomeTabParamList = {
@@ -29,6 +30,10 @@ export type RootStackParamList = {
   Conversation: ConversationRouteParams;
   Settings: undefined;
   NewChat: undefined;
+  UserProfile: {
+    username?: string;
+    publicKey?: string;
+  };
 };
 
 export type ConversationScreenRouteProp = RouteProp<

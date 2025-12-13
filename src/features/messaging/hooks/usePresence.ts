@@ -27,6 +27,13 @@ export type UsePresenceReturn = {
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const PRESENCE_TIMEOUT = 45000; // 45 seconds - consider offline if no heartbeat
 
+const devLog = (...args: unknown[]) => {
+    if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.log(...args);
+    }
+};
+
 export function usePresence({
     conversationId,
     userPublicKey,
@@ -45,12 +52,12 @@ export function usePresence({
         const now = Date.now();
         const online = new Set<string>();
 
-        console.log('[usePresence] updateOnlineUsers - raw state:', JSON.stringify(presenceStateRef.current, null, 2));
+        devLog('[usePresence] updateOnlineUsers - raw state:', JSON.stringify(presenceStateRef.current, null, 2));
 
         Object.entries(presenceStateRef.current).forEach(([key, presences]) => {
-            console.log('[usePresence] Key:', key, 'Presences:', JSON.stringify(presences, null, 2));
+            devLog('[usePresence] Key:', key, 'Presences:', JSON.stringify(presences, null, 2));
             presences.forEach((presence: any) => {
-                console.log('[usePresence] Processing presence:', JSON.stringify(presence, null, 2));
+                devLog('[usePresence] Processing presence:', JSON.stringify(presence, null, 2));
 
                 // Supabase presence structure: presence is the actual data object
                 const publicKey = presence.publicKey || presence.user_id || key;
@@ -59,15 +66,15 @@ export function usePresence({
                 // Only consider users online if their last heartbeat was within timeout
                 if (now - timestamp < PRESENCE_TIMEOUT) {
                     online.add(publicKey);
-                    console.log('[usePresence] Added online user:', publicKey);
+                    devLog('[usePresence] Added online user:', publicKey);
                 } else {
-                    console.log('[usePresence] User timed out:', publicKey, 'age:', now - timestamp);
+                    devLog('[usePresence] User timed out:', publicKey, 'age:', now - timestamp);
                 }
             });
         });
 
         const newOnlineUsers = Array.from(online);
-        console.log('[usePresence] Final online users:', newOnlineUsers);
+        devLog('[usePresence] Final online users:', newOnlineUsers);
 
         setOnlineUsers(prev => {
             // Deep comparison to prevent unnecessary re-renders
@@ -153,8 +160,8 @@ export function usePresence({
         const supabase = getSupabaseClient();
         const channelName = `presence:${conversationId}`;
 
-        console.log('[usePresence] Subscribing to channel:', channelName);
-        console.log('[usePresence] Supabase configured:', isSupabaseConfigured());
+        devLog('[usePresence] Subscribing to channel:', channelName);
+        devLog('[usePresence] Supabase configured:', isSupabaseConfigured());
         setConnectionState('connecting');
 
         const channel = supabase.channel(channelName, {
@@ -173,24 +180,24 @@ export function usePresence({
             const state = channel.presenceState() as PresenceState;
             presenceStateRef.current = state;
             updateOnlineUsers();
-            console.log('[usePresence] Presence synced:', Object.keys(state).length, 'users');
+            devLog('[usePresence] Presence synced:', Object.keys(state).length, 'users');
         });
 
         // Handle presence join
         channel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
-            console.log('[usePresence] User joined:', key, newPresences);
+            devLog('[usePresence] User joined:', key, newPresences);
             updateOnlineUsers();
         });
 
         // Handle presence leave
         channel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-            console.log('[usePresence] User left:', key, leftPresences);
+            devLog('[usePresence] User left:', key, leftPresences);
             updateOnlineUsers();
         });
 
         // Subscribe to channel
         channel.subscribe(async (status) => {
-            console.log('[usePresence] Subscription status:', status);
+            devLog('[usePresence] Subscription status:', status);
 
             if (status === 'SUBSCRIBED') {
                 setConnectionState('connected');
@@ -221,7 +228,7 @@ export function usePresence({
 
         // Cleanup
         return () => {
-            console.log('[usePresence] Cleaning up channel:', channelName);
+            devLog('[usePresence] Cleaning up channel:', channelName);
 
             if (heartbeatIntervalRef.current) {
                 clearInterval(heartbeatIntervalRef.current);
@@ -237,8 +244,7 @@ export function usePresence({
             setOnlineUsers([]);
             presenceStateRef.current = {};
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [conversationId, userPublicKey, enabled]);
+    }, [conversationId, userPublicKey, enabled, updateOnlineUsers, broadcastPresence]);
 
     const isOnline = useCallback(
         (publicKey: string) => {
