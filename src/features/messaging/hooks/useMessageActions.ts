@@ -29,6 +29,7 @@ type UseMessageActionsProps = {
   setMessages: React.Dispatch<
     React.SetStateAction<DecryptedMessageEntryResponse[]>
   >;
+  focusInput?: () => void; // For triggering keyboard on web PWA
 };
 
 export const useMessageActions = ({
@@ -38,6 +39,7 @@ export const useMessageActions = ({
   userAccessGroupKeyName,
   recipientInfo,
   setMessages,
+  focusInput,
 }: UseMessageActionsProps) => {
   const [replyToMessage, setReplyToMessage] =
     useState<DecryptedMessageEntryResponse | null>(null);
@@ -87,7 +89,11 @@ export const useMessageActions = ({
   const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReplyToMessage(message);
-  }, []);
+    // Trigger focus synchronously for mobile web keyboard
+    if (focusInput) {
+      focusInput();
+    }
+  }, [focusInput]);
 
   const animateOpenActions = useCallback(() => {
     backdropAnim.value = withTiming(1, { duration: 200 });
@@ -169,8 +175,12 @@ export const useMessageActions = ({
       setEditDraft(draft);
       setEditingMessage(target);
       handleCloseMessageActions();
+      // Trigger focus synchronously for mobile web keyboard
+      if (focusInput) {
+        focusInput();
+      }
     },
-    [selectedMessage, handleCloseMessageActions]
+    [selectedMessage, handleCloseMessageActions, focusInput]
   );
 
   const handleCancelEdit = useCallback(() => {

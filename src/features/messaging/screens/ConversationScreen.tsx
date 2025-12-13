@@ -169,6 +169,10 @@ export function ConversationScreen({ navigation, route }: Props) {
   const { isDark, accentColor, accentSoft, accentStrong } = useAccentColor();
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
+  
+  // Ref to store Composer's focusInput function for synchronous keyboard triggering
+  const focusInputRef = useRef<(() => void) | null>(null);
+  
   const modalIconButtonStyle = useMemo(
     () => ({
       width: 36,
@@ -245,6 +249,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     userAccessGroupKeyName,
     recipientInfo,
     setMessages,
+    focusInput: () => focusInputRef.current?.(),
   });
 
   const selectedShowTail = useMemo(() => {
@@ -1137,6 +1142,9 @@ export function ConversationScreen({ navigation, route }: Props) {
             recipientOnline={recipientOnline}
             onSendEphemeral={sendEphemeralMessage}
             isSendingEphemeral={isSendingEphemeral}
+            onFocusInput={(focusFn) => {
+              focusInputRef.current = focusFn;
+            }}
           />
         </Animated.View>
 

@@ -76,6 +76,7 @@ export type ComposerProps = {
   recipientOnline?: boolean;
   onSendEphemeral?: (content: string) => Promise<void>;
   isSendingEphemeral?: boolean;
+  onFocusInput?: (focusFn: () => void) => void; // Receive the focus function from Composer
 };
 
 const devLog = (...args: unknown[]) => {
@@ -149,6 +150,7 @@ export const Composer = React.memo(function Composer({
   onCancelEdit,
   onSaveEdit,
   isSavingEdit = false,
+  onFocusInput,
 }: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -260,17 +262,14 @@ export const Composer = React.memo(function Composer({
     }
   }, []);
 
-  // Auto-focus when entering edit mode or reply mode (with better timing for web PWA)
+  // Pass focusInput to parent so it can be called synchronously from action handlers
   useEffect(() => {
-    if (editingMessage || replyToMessage) {
-      // Use a longer delay on web to ensure keyboard opens reliably
-      const delay = Platform.OS === 'web' ? 300 : 150;
-      const timer = setTimeout(() => {
-        focusInput();
-      }, delay);
-      return () => clearTimeout(timer);
+    if (onFocusInput) {
+      onFocusInput(focusInput);
     }
-  }, [editingMessage, replyToMessage, focusInput]);
+  }, [focusInput, onFocusInput]);
+
+  // Note: Focus must be triggered synchronously in handleReply/startEditingMessage for mobile web keyboards to work
 
   const handleContentSizeChange = useCallback(
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
