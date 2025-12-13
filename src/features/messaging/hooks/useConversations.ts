@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useMemo } from "react";
+import { useContext, useEffect, useRef, useMemo, useState } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import {
   useInfiniteQuery,
@@ -35,6 +35,8 @@ type UseConversationsResult = {
   error: string | null;
   reload: () => Promise<unknown>;
   loadMore: () => Promise<unknown>;
+  typingStatuses: Record<string, boolean>;
+  latestMessages: Record<string, any>;
 };
 
 export const useConversations = (
@@ -45,6 +47,9 @@ export const useConversations = (
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
+  const [typingStatuses, setTypingStatuses] = useState<Record<string, boolean>>({});
+  const [latestMessages, setLatestMessages] = useState<Record<string, any>>({});
+  const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Hydrate cached conversations immediately for fast paint
   useEffect(() => {
@@ -57,9 +62,9 @@ export const useConversations = (
           cached && typeof cached === "object" && "pages" in cached
             ? cached
             : {
-                pages: [cached],
-                pageParams: [0],
-              };
+              pages: [cached],
+              pageParams: [0],
+            };
         queryClient.setQueryData(
           getConversationsQueryKey(userPk, mailbox),
           hydrated
@@ -153,7 +158,7 @@ export const useConversations = (
     }
 
     const supabase = getSupabaseClient();
-      const channelIdentifier = `messages:${userPublicKey}`;
+    const channelIdentifier = `messages:${userPublicKey}`;
 
     const channel = supabase
       .channel(channelIdentifier)
@@ -180,12 +185,65 @@ export const useConversations = (
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.warn("Supabase realtime subscription status", status);
         }
+      })
+      .on("broadcast", { event: "conversation_viewed" }, (payload) => {
+        // Refetch conversations when a conversation is viewed on another device/tab
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+          void refetch();
+        }, Platform.OS === "web" ? 150 : 75);
+      })
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        const { conversationId, is_typing } = payload;
+        if (!conversationId) return;
+
+        setTypingStatuses((prev) => ({
+          ...prev,
+          [conversationId]: is_typing,
+        }));
+
+        // Clear existing timeout
+        if (typingTimeoutsRef.current[conversationId]) {
+          clearTimeout(typingTimeoutsRef.current[conversationId]);
+        }
+
+        // Auto-clear typing status after 5 seconds if no updates
+        if (is_typing) {
+          typingTimeoutsRef.current[conversationId] = setTimeout(() => {
+            setTypingStatuses((prev) => ({
+              ...prev,
+              [conversationId]: false,
+            }));
+          }, 5000);
+        }
+      })
+      .on("broadcast", { event: "new_message" }, ({ payload }) => {
+        // Optimistically update the latest message for the conversation
+        const { conversationId, message } = payload;
+        if (conversationId && message) {
+          setLatestMessages(prev => ({
+            ...prev,
+            [conversationId]: message
+          }));
+
+          // Also trigger a refetch to ensure consistency
+          if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+          }
+          debounceRef.current = setTimeout(() => {
+            void refetch();
+          }, Platform.OS === "web" ? 150 : 75);
+        }
       });
 
     return () => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
+      // Clear all typing timeouts
+      Object.values(typingTimeoutsRef.current).forEach(clearTimeout);
       void channel.unsubscribe();
     };
   }, [currentUser?.PublicKeyBase58Check, refetch]);
@@ -236,5 +294,7 @@ export const useConversations = (
     error: isError ? (error as Error).message : null,
     reload: refetch,
     loadMore: fetchNextPage,
+    typingStatuses,
+    latestMessages,
   };
 };

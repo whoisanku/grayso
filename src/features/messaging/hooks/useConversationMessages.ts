@@ -323,12 +323,12 @@ export const useConversationMessages = ({
         const baseProfiles = data?.pages?.reduce<PublicKeyToProfileEntryResponseMap>((acc, page) => {
             return { ...acc, ...page.profiles };
         }, {}) ?? {};
-        
+
         // Seed with initialProfile to avoid loading delay
         if (initialProfile && counterPartyPublicKey) {
             return { [counterPartyPublicKey]: initialProfile, ...baseProfiles };
         }
-        
+
         return baseProfiles;
     }, [data?.pages, initialProfile, counterPartyPublicKey]);
 
@@ -574,12 +574,30 @@ export const useConversationMessages = ({
 
         channel.subscribe();
 
+
+        // Emit "viewed" event to global user channel so other devices/tabs can update
+        const globalChannel = supabase.channel(`messages:${userPublicKey}`);
+        globalChannel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                globalChannel.send({
+                    type: "broadcast",
+                    event: "conversation_viewed",
+                    payload: {
+                        conversationId,
+                        timestamp: Date.now(),
+                    },
+                });
+            }
+        });
+
         return () => {
             channel.unsubscribe();
+            globalChannel.unsubscribe();
         };
     }, [
         conversationId,
         mergeMessages,
+        userPublicKey,
     ]);
 
     const messageIdMap = useMemo(() => {

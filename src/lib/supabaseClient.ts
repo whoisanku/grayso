@@ -84,6 +84,7 @@ export type MessageBroadcastPayload = {
   RecipientAccessGroupPublicKeyBase58Check?: string;
   RecipientAccessGroupKeyName?: string;
   is_typing?: boolean;
+  message?: any;
 };
 
 export type PresencePayload = {

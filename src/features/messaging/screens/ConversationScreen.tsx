@@ -68,7 +68,7 @@ import { useConversationMessages } from "@/features/messaging/hooks/useConversat
 import { useMessageActions } from "@/features/messaging/hooks/useMessageActions";
 import { useGroupMembers } from "@/features/messaging/hooks/useGroupMembers";
 import { usePresence } from "@/features/messaging/hooks/usePresence";
-import { useEphemeralMessages } from "@/features/messaging/hooks/useEphemeralMessages";
+
 import { TypingIndicator } from "../components/TypingIndicator";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopShell } from "../components/desktop/DesktopShell";
@@ -257,7 +257,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     const isNextClose =
       nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
         ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) <
-          MESSAGE_GROUPING_WINDOW_NS
+        MESSAGE_GROUPING_WINDOW_NS
         : false;
     return !isNextSameSender || !isNextClose;
   }, [messages, selectedMessage]);
@@ -468,24 +468,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     typingUsers,
   ]);
 
-  // Ephemeral messaging
-  const {
-    messages: ephemeralMessages,
-    sendMessage: sendEphemeralMessage,
-    connectionState: ephemeralConnectionState,
-    isSending: isSendingEphemeral,
-  } = useEphemeralMessages({
-    conversationId,
-    userPublicKey,
-    recipientPublicKey: counterPartyPublicKey,
-    enabled: !isGroupChat, // Only for DMs
-    onMessageReceived: (message) => {
-      devLog(
-        "[ConversationScreen] Ephemeral message received:",
-        message.id
-      );
-    },
-  });
+
 
   // --- UI State & Refs ---
 
@@ -494,11 +477,10 @@ export function ConversationScreen({ navigation, route }: Props) {
     () =>
       Platform.OS === "web"
         ? ({
-            scrollbarWidth: "thin",
-            scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${
-              isDark ? "#0a0f1a" : "#ffffff"
+          scrollbarWidth: "thin",
+          scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${isDark ? "#0a0f1a" : "#ffffff"
             }`,
-          } as any)
+        } as any)
         : undefined,
     [isDark]
   );
@@ -817,37 +799,35 @@ export function ConversationScreen({ navigation, route }: Props) {
               <View className="flex-row items-center">
                 <View className="flex-row">
                   {loadingMembers ||
-                  (groupMembers.length === 0 && !headerAvatarUri)
+                    (groupMembers.length === 0 && !headerAvatarUri)
                     ? // Loading placeholders
-                      [0, 1, 2].map((i) => (
-                        <View
-                          key={`placeholder-${i}`}
-                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                            i > 0 ? "-ml-[15px]" : ""
+                    [0, 1, 2].map((i) => (
+                      <View
+                        key={`placeholder-${i}`}
+                        className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""
                           }`}
-                          style={{ zIndex: 3 - i }}
-                        />
-                      ))
+                        style={{ zIndex: 3 - i }}
+                      />
+                    ))
                     : groupMembers.slice(0, 3).map((member, index) => {
-                        const uri = getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
+                      const uri = getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
 
-                        return (
-                          <View
-                            key={member.publicKey}
-                            className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                              index > 0 ? "-ml-[15px]" : ""
+                      return (
+                        <View
+                          key={member.publicKey}
+                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""
                             }`}
-                            style={{ zIndex: 3 - index }}
-                          >
-                            <UserAvatar
-                              uri={uri}
-                              name={member.username || ""}
-                              size={36}
-                              className="h-full w-full rounded-full"
-                            />
-                          </View>
-                        );
-                      })}
+                          style={{ zIndex: 3 - index }}
+                        >
+                          <UserAvatar
+                            uri={uri}
+                            name={member.username || ""}
+                            size={36}
+                            className="h-full w-full rounded-full"
+                          />
+                        </View>
+                      );
+                    })}
                 </View>
                 {/* Show member count badge if more than 3 members */}
                 {!loadingMembers && groupMembers.length > 3 && (
@@ -1030,11 +1010,11 @@ export function ConversationScreen({ navigation, route }: Props) {
                 }}
               >
                 <TouchableOpacity
-	                  onPress={() => {
-	                    devLog(
-	                      "[ConversationScreen] Scroll-to-latest pressed",
-	                      {
-	                        scrollOffset: scrollOffsetRef.current,
+                  onPress={() => {
+                    devLog(
+                      "[ConversationScreen] Scroll-to-latest pressed",
+                      {
+                        scrollOffset: scrollOffsetRef.current,
                         messageCount: messages.length,
                       }
                     );
@@ -1135,8 +1115,6 @@ export function ConversationScreen({ navigation, route }: Props) {
             onSaveEdit={handleSaveEdit}
             isSavingEdit={isSavingEdit}
             recipientOnline={recipientOnline}
-            onSendEphemeral={sendEphemeralMessage}
-            isSendingEphemeral={isSendingEphemeral}
           />
         </Animated.View>
 
@@ -1159,68 +1137,68 @@ export function ConversationScreen({ navigation, route }: Props) {
 
             {selectedMessage && selectedBubbleLayout
               ? (() => {
-                  const positions = computeModalPositions(
-                    selectedBubbleLayout,
-                    composerBottomInset,
-                    Boolean(selectedMessage?.IsSender),
-                    actualBubbleHeight // Pass actual measured bubble height
-                  );
-                  return (
-                    <>
-                      <Reanimated.View
-                        pointerEvents="none"
-                        style={[
-                          {
-                            position: "absolute",
-                            top: positions.bubbleTop,
-                            left: selectedBubbleLayout.x,
-                            width: selectedBubbleLayout.width,
-                          },
-                          bubblePreviewStyle,
-                        ]}
-                      >
-                        <SelectedBubblePreview
-                          message={selectedMessage}
-                          profiles={profilesForUi}
-                          isDark={isDark}
-                          messageIdMap={messageIdMap}
-                          layout={{
-                            width: selectedBubbleLayout.width,
-                            height: selectedBubbleLayout.height,
-                          }}
-                          onLayout={(event) => {
-                            const { height } = event.nativeEvent.layout;
-                            setActualBubbleHeight(height);
-                          }}
-                          isGroupChat={isGroupChat}
-                          showTail={selectedShowTail}
-                        />
-                      </Reanimated.View>
+                const positions = computeModalPositions(
+                  selectedBubbleLayout,
+                  composerBottomInset,
+                  Boolean(selectedMessage?.IsSender),
+                  actualBubbleHeight // Pass actual measured bubble height
+                );
+                return (
+                  <>
+                    <Reanimated.View
+                      pointerEvents="none"
+                      style={[
+                        {
+                          position: "absolute",
+                          top: positions.bubbleTop,
+                          left: selectedBubbleLayout.x,
+                          width: selectedBubbleLayout.width,
+                        },
+                        bubblePreviewStyle,
+                      ]}
+                    >
+                      <SelectedBubblePreview
+                        message={selectedMessage}
+                        profiles={profilesForUi}
+                        isDark={isDark}
+                        messageIdMap={messageIdMap}
+                        layout={{
+                          width: selectedBubbleLayout.width,
+                          height: selectedBubbleLayout.height,
+                        }}
+                        onLayout={(event) => {
+                          const { height } = event.nativeEvent.layout;
+                          setActualBubbleHeight(height);
+                        }}
+                        isGroupChat={isGroupChat}
+                        showTail={selectedShowTail}
+                      />
+                    </Reanimated.View>
 
-                      <Reanimated.View
-                        style={[
-                          {
-                            position: "absolute",
-                            top: positions.actionTop,
-                            left: positions.actionLeft,
-                          },
-                          actionSheetStyle,
-                        ]}
-                      >
-                        <ActionSheetCard
-                          isDark={isDark}
-                          onReply={handleActionReply}
-                          onEdit={
-                            selectedMessage?.IsSender
-                              ? () => startEditingMessage(selectedMessage)
-                              : undefined
-                          }
-                          onCopy={handleActionCopy}
-                        />
-                      </Reanimated.View>
-                    </>
-                  );
-                })()
+                    <Reanimated.View
+                      style={[
+                        {
+                          position: "absolute",
+                          top: positions.actionTop,
+                          left: positions.actionLeft,
+                        },
+                        actionSheetStyle,
+                      ]}
+                    >
+                      <ActionSheetCard
+                        isDark={isDark}
+                        onReply={handleActionReply}
+                        onEdit={
+                          selectedMessage?.IsSender
+                            ? () => startEditingMessage(selectedMessage)
+                            : undefined
+                        }
+                        onCopy={handleActionCopy}
+                      />
+                    </Reanimated.View>
+                  </>
+                );
+              })()
               : null}
           </View>
         </Modal>
@@ -1244,11 +1222,11 @@ export function ConversationScreen({ navigation, route }: Props) {
                 {/* Conditional header based on which view is active */}
                 {showAddMemberModal ? (
                   // Add Member Header
-                  <View 
+                  <View
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
-                    style={{ 
-                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16), 
-                      paddingBottom: 16 
+                    style={{
+                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16),
+                      paddingBottom: 16
                     }}
                   >
                     <TouchableOpacity
@@ -1269,11 +1247,11 @@ export function ConversationScreen({ navigation, route }: Props) {
                   </View>
                 ) : (
                   // Group Members Header
-                  <View 
+                  <View
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
-                    style={{ 
-                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16), 
-                      paddingBottom: 16 
+                    style={{
+                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16),
+                      paddingBottom: 16
                     }}
                   >
                     <Text className="text-xl font-bold text-[#111] dark:text-white">

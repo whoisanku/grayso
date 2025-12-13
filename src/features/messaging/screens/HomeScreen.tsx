@@ -138,10 +138,18 @@ function ConversationRow({
           <View className="flex-row items-center">
             <Text
               numberOfLines={1}
-              className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+              className={`flex-1 text-[14px] ${
+                /* @ts-ignore */
+                item.isTyping ? "text-green-500 font-medium" : "text-slate-500 dark:text-slate-400"
+                }`}
             >
               {item.preview}
             </Text>
+            {/* Typing Indicator Dot (Optional, if we want a visual dot too) */}
+            {/* @ts-ignore */}
+            {item.isTyping && (
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', marginLeft: 6 }} />
+            )}
           </View>
         </View>
       </Pressable>
@@ -162,24 +170,24 @@ function NewChatResultRow({ item, isDark, onPress }: NewChatResultRowProps) {
       onPress={onPress}
     >
       <View className="flex-row items-center px-5 py-3">
-      <UserAvatar
-        uri={getProfileImageUrl(item.publicKey)}
-        name={item.username || "?"}
-        size={48}
-        className="bg-slate-200 dark:bg-slate-700"
-      />
-      <View style={{ marginLeft: 14, flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "600",
-            color: isDark ? "#ffffff" : "#0f172a",
-          }}
-          numberOfLines={1}
-        >
-          {item.username || "Anonymous"}
-        </Text>
-      </View>
+        <UserAvatar
+          uri={getProfileImageUrl(item.publicKey)}
+          name={item.username || "?"}
+          size={48}
+          className="bg-slate-200 dark:bg-slate-700"
+        />
+        <View style={{ marginLeft: 14, flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "600",
+              color: isDark ? "#ffffff" : "#0f172a",
+            }}
+            numberOfLines={1}
+          >
+            {item.username || "Anonymous"}
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -313,6 +321,8 @@ export function HomeScreen() {
     reload,
     loadMore,
     error,
+    typingStatuses,
+    latestMessages,
   } = useConversationThreads();
 
   const { settings: threadSettings, setThreadMailbox: setThreadMailboxOverride } =
@@ -342,6 +352,22 @@ export function HomeScreen() {
       subscription.remove();
     };
   }, []);
+
+  // Update optimistic previews from global socket "new_message" events
+  useEffect(() => {
+    Object.entries(latestMessages).forEach(([conversationId, message]) => {
+      if (message && message.MessageInfo) {
+        setOptimisticPreviews(prev => ({
+          ...prev,
+          [conversationId]: {
+            messageText: message.DecryptedMessage || "",
+            timestampNanos: message.MessageInfo.TimestampNanos,
+            extraData: message.MessageInfo.ExtraData
+          }
+        }));
+      }
+    });
+  }, [latestMessages]);
 
   // Debounced search for new chat modal
   useEffect(() => {
@@ -429,8 +455,8 @@ export function HomeScreen() {
         const otherPk = isGroup
           ? recipientPk
           : senderPk === userPk
-          ? recipientPk
-          : senderPk;
+            ? recipientPk
+            : senderPk;
         const name = isGroup
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
           : profileMap?.[otherPk]?.Username || formatPublicKey(otherPk);
@@ -575,12 +601,30 @@ export function HomeScreen() {
           lastTimestampNanos: optimistic.timestampNanos,
         };
       })
+      .map((item) => {
+        // Add typing status
+        // For DMs, the typing status is keyed by the other user's public key
+        // For Groups, it's keyed by the conversation ID
+
+        const isTyping = item.chatType === ChatType.DM
+          ? typingStatuses[item.threadPublicKey]
+          : typingStatuses[item.id];
+
+        if (isTyping) {
+          return {
+            ...item,
+            preview: "Typing...",
+            isTyping: true
+          };
+        }
+        return item;
+      })
       .filter((item) => item.mailbox === activeMailbox);
 
     return visible.sort(
       (a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0)
     );
-  }, [activeMailbox, allItems, optimisticPreviews]);
+  }, [activeMailbox, allItems, optimisticPreviews, typingStatuses]);
 
   const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
 
@@ -623,11 +667,11 @@ export function HomeScreen() {
         recipientInfo: item.recipientInfo,
         initialGroupMembers:
           item.isGroup &&
-          item.recipientInfo?.OwnerPublicKeyBase58Check &&
-          item.recipientInfo?.AccessGroupKeyName
+            item.recipientInfo?.OwnerPublicKeyBase58Check &&
+            item.recipientInfo?.AccessGroupKeyName
             ? groupMembers[
-                `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
-              ]
+            `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
+            ]
             : undefined,
         initialProfile: profiles[profileKey], // Pass profile to avoid loading delay
       });
@@ -777,8 +821,8 @@ export function HomeScreen() {
                   backgroundColor: isActive
                     ? accentColor
                     : isDark
-                    ? "rgba(30, 41, 59, 0.6)"
-                    : "rgba(241, 245, 249, 0.9)",
+                      ? "rgba(30, 41, 59, 0.6)"
+                      : "rgba(241, 245, 249, 0.9)",
                   borderWidth: 1,
                   borderColor: isActive
                     ? accentStrong
@@ -792,8 +836,8 @@ export function HomeScreen() {
                     color: isActive
                       ? "#ffffff"
                       : isDark
-                      ? "#94a3b8"
-                      : "#64748b",
+                        ? "#94a3b8"
+                        : "#64748b",
                   }}
                 >
                   {filter.label}
@@ -1022,8 +1066,8 @@ export function HomeScreen() {
                     backgroundColor: isActive
                       ? accentColor
                       : isDark
-                      ? "rgba(30, 41, 59, 0.6)"
-                      : "rgba(241, 245, 249, 0.9)",
+                        ? "rgba(30, 41, 59, 0.6)"
+                        : "rgba(241, 245, 249, 0.9)",
                     borderWidth: 1,
                     borderColor: isActive
                       ? accentStrong
@@ -1037,8 +1081,8 @@ export function HomeScreen() {
                       color: isActive
                         ? "#ffffff"
                         : isDark
-                        ? "#94a3b8"
-                        : "#64748b",
+                          ? "#94a3b8"
+                          : "#64748b",
                     }}
                   >
                     {filter.label}
@@ -1053,13 +1097,13 @@ export function HomeScreen() {
             dataSet={{ virtualizedList: "true" }}
             className="flex-1"
           >
-              <FlashList
-                data={items}
-                keyExtractor={(item) => item.id}
-                extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
-                className="flex-1"
-                showsVerticalScrollIndicator={false}
-                ItemSeparatorComponent={() => null}
+            <FlashList
+              data={items}
+              keyExtractor={(item) => item.id}
+              extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
+              className="flex-1"
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0
                   ? "flex-grow items-center justify-center px-4"
@@ -1069,8 +1113,8 @@ export function HomeScreen() {
                 isDesktopWeb
                   ? { paddingHorizontal: 0 }
                   : items.length === 0
-                  ? { paddingBottom: 80 }
-                  : { paddingBottom: 70 }
+                    ? { paddingBottom: 80 }
+                    : { paddingBottom: 70 }
               }
               refreshControl={
                 <RefreshControl
@@ -1294,12 +1338,12 @@ export function HomeScreen() {
                     </Text>
                   </View>
                 ) : (
-                    <FlashList
-                      data={newChatResults}
-                      keyExtractor={(item) => item.publicKey}
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
-                      renderItem={({ item }) => (
+                  <FlashList
+                    data={newChatResults}
+                    keyExtractor={(item) => item.publicKey}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
                       <NewChatResultRow
                         item={item}
                         isDark={isDark}

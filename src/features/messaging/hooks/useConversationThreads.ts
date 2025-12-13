@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import {
   useInfiniteQuery,
@@ -38,6 +38,8 @@ type UseConversationThreadsResult = {
   error: string | null;
   reload: () => Promise<unknown>;
   loadMore: () => Promise<unknown>;
+  typingStatuses: Record<string, boolean>;
+  latestMessages: Record<string, any>;
 };
 
 export const useConversationThreads = (
@@ -47,6 +49,10 @@ export const useConversationThreads = (
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryClient = useQueryClient();
+  const [typingStatuses, setTypingStatuses] = useState<Record<string, boolean>>({});
+  const [latestMessages, setLatestMessages] = useState<Record<string, any>>({});
+  const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [reconnectKey, setReconnectKey] = useState(0);
 
   // Hydrate cached conversations immediately for fast paint
   useEffect(() => {
@@ -59,9 +65,9 @@ export const useConversationThreads = (
           cached && typeof cached === "object" && "pages" in cached
             ? cached
             : {
-                pages: [cached],
-                pageParams: [0],
-              };
+              pages: [cached],
+              pageParams: [0],
+            };
         queryClient.setQueryData(
           conversationThreadsKeys.all(userPk),
           hydrated
@@ -156,6 +162,7 @@ export const useConversationThreads = (
 
     const supabase = getSupabaseClient();
     const channelIdentifier = `messages:${userPublicKey}`;
+    console.log("[useConversationThreads] Subscribing to global channel:", channelIdentifier);
 
     const channel = supabase
       .channel(channelIdentifier)
@@ -176,21 +183,113 @@ export const useConversationThreads = (
           }, Platform.OS === "web" ? 150 : 75);
         }
       )
+      .on("broadcast", { event: "conversation_viewed" }, (payload) => {
+        // Refetch conversations when a conversation is viewed on another device/tab
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+          void refetch();
+        }, Platform.OS === "web" ? 150 : 75);
+      })
+      .on("broadcast", { event: "typing" }, ({ payload }: { payload: any }) => {
+        console.log("[useConversationThreads] Received typing event:", payload);
+        const { conversationId, is_typing, senderPublicKey, metadata } = payload;
+
+        // Determine the correct key for the conversation map
+        // For DMs, the key is the sender's public key (from the recipient's perspective)
+        // For Groups, it's the conversationId (which should be the group key)
+        const key = metadata?.chatType === 'DM' && senderPublicKey
+          ? senderPublicKey
+          : conversationId;
+
+        console.log("[useConversationThreads] Derived typing key:", key, "is_typing:", is_typing);
+
+        if (!key) return;
+
+        setTypingStatuses((prev) => ({
+          ...prev,
+          [key]: is_typing,
+        }));
+
+        // Clear existing timeout
+        if (typingTimeoutsRef.current[key]) {
+          clearTimeout(typingTimeoutsRef.current[key]);
+        }
+
+        // Auto-clear typing status after 5 seconds if no updates
+        if (is_typing) {
+          typingTimeoutsRef.current[key] = setTimeout(() => {
+            setTypingStatuses((prev) => ({
+              ...prev,
+              [key]: false,
+            }));
+          }, 5000);
+        }
+      })
+      .on("broadcast", { event: "new_message" }, ({ payload }: { payload: any }) => {
+        console.log("[useConversationThreads] Received new_message event:", payload);
+        // Optimistically update the latest message for the conversation
+        const { conversationId, message } = payload;
+
+        // For new messages, we need to find the correct conversation key too
+        // The payload structure for new_message is slightly different, usually doesn't have metadata at top level
+        // But let's check message.SenderInfo
+        const senderPublicKey = message?.SenderInfo?.OwnerPublicKeyBase58Check;
+
+        // We might need to infer chat type or just try both keys?
+        // Actually, for new_message, we want to update the preview.
+        // If it's a DM, conversationId sent by sender is RecipientPK. We want SenderPK.
+        // If it's a Group, conversationId is GroupID.
+
+        // Let's try to use senderPublicKey if it's a DM (implied if conversationId matches our PK?)
+        // Or safer: update both potential keys if we aren't sure, or check if conversationId matches userPublicKey
+
+        let key = conversationId;
+        if (conversationId === userPublicKey && senderPublicKey) {
+          key = senderPublicKey;
+        }
+
+        if (conversationId === userPublicKey && senderPublicKey) {
+          key = senderPublicKey;
+        }
+
+        console.log("[useConversationThreads] Derived new_message key:", key);
+
+        if (key && message) {
+          setLatestMessages(prev => ({
+            ...prev,
+            [key]: message
+          }));
+
+          // Also trigger a refetch to ensure consistency
+          if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+          }
+          debounceRef.current = setTimeout(() => {
+            void refetch();
+          }, Platform.OS === "web" ? 150 : 75);
+        }
+      })
       .subscribe((status, err) => {
-        if (err) {
-          console.warn("Supabase realtime subscription error", err);
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn("Supabase realtime subscription status", status);
+        if (status === "SUBSCRIBED") {
+          console.log("[useConversationThreads] Subscribed to global channel");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          console.warn(`[useConversationThreads] Channel status: ${status}. Attempting to reconnect...`);
+          // Remove the channel to ensure a clean slate
+          supabase.removeChannel(channel);
+          // Trigger re-subscription after a short delay
+          setTimeout(() => {
+            setReconnectKey(prev => prev + 1);
+          }, 1000);
         }
       });
 
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      void channel.unsubscribe();
+      console.log("[useConversationThreads] Cleaning up global channel:", channelIdentifier);
+      channel.unsubscribe();
     };
-  }, [currentUser?.PublicKeyBase58Check, refetch]);
+  }, [currentUser?.PublicKeyBase58Check, refetch, reconnectKey]);
 
   const merged = useMemo(() => {
     if (!data?.pages) {
@@ -240,5 +339,7 @@ export const useConversationThreads = (
     error: isError ? (error as Error).message : null,
     reload: refetch,
     loadMore: fetchNextPage,
+    typingStatuses,
+    latestMessages,
   };
 };
