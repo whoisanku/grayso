@@ -30,7 +30,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-video"
+      "expo-video",
+      "expo-font"
     ],
     "web": {
       "bundler": "metro",

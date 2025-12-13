@@ -24,6 +24,7 @@ import { AppThemeProvider } from "./state/theme/AppThemeProvider";
 import { AppearanceProvider } from "./state/theme/useAppearance";
 import { AppToast } from "./components/ui/Toast";
 import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
+import { useAppFonts } from "@/hooks/useAppFonts";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -57,6 +58,12 @@ configure({
 
 export default function App() {
   const { colorScheme } = useColorScheme();
+  const { fontsLoaded } = useAppFonts();
+
+  // Don't render the app until fonts are loaded
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

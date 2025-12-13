@@ -109,7 +109,6 @@ function ConversationRow({
         className="w-full flex-row items-center px-4 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
         onPress={onPress}
         onLongPress={onLongPress}
-        style={isDesktopWeb ? { borderRadius: 14, overflow: "hidden" } : undefined}
       >
         <View className="mr-3">
           <UserAvatar
