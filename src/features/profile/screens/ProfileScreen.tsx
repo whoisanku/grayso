@@ -2,6 +2,7 @@ import React, { useContext, useMemo, useState, useCallback } from "react";
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Platform } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useColorScheme } from "nativewind";
+import { useNavigation } from "@react-navigation/native";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { ProfileHeader } from "../components/ProfileHeader";
 import { ProfileStats } from "../components/ProfileStats";
@@ -10,6 +11,7 @@ import { Toast } from "@/components/ui/Toast";
 import { FollowListModal } from "../components/FollowListModal";
 
 export function ProfileScreen() {
+  const navigation = useNavigation<any>();
   const { currentUser } = useContext(DeSoIdentityContext);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -116,7 +118,18 @@ export function ProfileScreen() {
         ) : (
           <>
             {/* Profile Header (includes bio) */}
-            <ProfileHeader account={account} onAvatarPress={handleFollowersPress} />
+            <ProfileHeader 
+              account={account} 
+              onAvatarPress={handleFollowersPress}
+              showBackButton={true}
+              onBackPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate("Messages");
+                }
+              }}
+            />
 
             {/* Stats */}
             <View className="px-4 mt-3">

@@ -71,6 +71,16 @@ export const ImageGalleryModal = React.memo(({
                     className="absolute left-0 right-0 top-0 z-50 flex-row items-center justify-between px-4 pb-3"
                     style={{ paddingTop: insets.top + 8 }}
                 >
+                    {images.length > 1 ? (
+                        <View className="rounded-2xl bg-white/15 px-3.5 py-1.5">
+                            <Text className="text-sm font-semibold text-white">
+                                {currentIndex + 1} / {images.length}
+                            </Text>
+                        </View>
+                    ) : (
+                        <View />
+                    )}
+
                     <TouchableOpacity 
                         onPress={onClose} 
                         className="p-1"
@@ -79,14 +89,6 @@ export const ImageGalleryModal = React.memo(({
                             <Feather name="x" size={20} color="#fff" />
                         </View>
                     </TouchableOpacity>
-                    
-                    {images.length > 1 && (
-                        <View className="rounded-2xl bg-white/15 px-3.5 py-1.5">
-                            <Text className="text-sm font-semibold text-white">
-                                {currentIndex + 1} / {images.length}
-                            </Text>
-                        </View>
-                    )}
                 </View>
 
                 {/* Image Container */}
