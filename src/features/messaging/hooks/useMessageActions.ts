@@ -86,11 +86,11 @@ export const useMessageActions = ({
     ],
   }));
 
-  const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
+  const handleReply = useCallback((message: DecryptedMessageEntryResponse, skipFocus?: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReplyToMessage(message);
-    // Trigger focus synchronously for mobile web keyboard
-    if (focusInput) {
+    // Trigger focus synchronously for mobile web keyboard (unless skipped for modal)
+    if (focusInput && !skipFocus) {
       focusInput();
     }
   }, [focusInput]);
@@ -152,9 +152,18 @@ export const useMessageActions = ({
 
   const handleActionReply = useCallback(() => {
     if (!selectedMessage) return;
-    handleReply(selectedMessage);
-    handleCloseMessageActions();
-  }, [selectedMessage, handleReply, handleCloseMessageActions]);
+    const message = selectedMessage;
+    handleReply(message, true); // Skip immediate focus
+    // Close modal and focus after animation completes
+    animateCloseActions(() => {
+      setSelectedMessage(null);
+      setSelectedBubbleLayout(null);
+      // Focus keyboard after modal is closed (synchronous with animation end)
+      if (focusInput) {
+        focusInput();
+      }
+    });
+  }, [selectedMessage, handleReply, animateCloseActions, focusInput]);
 
   const handleActionCopy = useCallback(async () => {
     if (!selectedMessage) return;
@@ -174,13 +183,25 @@ export const useMessageActions = ({
         getDisplayedMessageText(target) || target.DecryptedMessage || "";
       setEditDraft(draft);
       setEditingMessage(target);
-      handleCloseMessageActions();
-      // Trigger focus synchronously for mobile web keyboard
-      if (focusInput) {
-        focusInput();
+      
+      // If modal is open, close it first then focus after animation
+      if (selectedMessage) {
+        animateCloseActions(() => {
+          setSelectedMessage(null);
+          setSelectedBubbleLayout(null);
+          // Focus keyboard after modal is closed (synchronous with animation end)
+          if (focusInput) {
+            focusInput();
+          }
+        });
+      } else {
+        // Direct edit (not from modal), focus immediately
+        if (focusInput) {
+          focusInput();
+        }
       }
     },
-    [selectedMessage, handleCloseMessageActions, focusInput]
+    [selectedMessage, animateCloseActions, focusInput]
   );
 
   const handleCancelEdit = useCallback(() => {
