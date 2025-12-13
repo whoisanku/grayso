@@ -29,6 +29,7 @@ import {
 import { FileAndMessageBubble } from "./FileAndMessageBubble";
 import { VideoMessageBubble } from "./VideoMessageBubble";
 import { ImageGalleryModal } from "./ImageGalleryModal";
+import { VideoPlayerModal } from "./VideoPlayerModal";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
@@ -85,6 +86,20 @@ export const MessageBubble = React.memo(function MessageBubble({
 
     const handleCloseGallery = useCallback(() => {
         setGalleryVisible(false);
+    }, []);
+
+    // Video modal state
+    const [videoModalVisible, setVideoModalVisible] = useState(false);
+    const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
+
+    const handlePlayVideo = useCallback((uri: string) => {
+        setCurrentVideoUri(uri);
+        setVideoModalVisible(true);
+    }, []);
+
+    const handleCloseVideo = useCallback(() => {
+        setVideoModalVisible(false);
+        setCurrentVideoUri(null);
     }, []);
 
     const extraData = item.MessageInfo?.ExtraData || {};
@@ -150,8 +165,8 @@ export const MessageBubble = React.memo(function MessageBubble({
         return (
             <View
                 style={{
-                    backgroundColor: isMine 
-                        ? "rgba(255, 255, 255, 0.15)" 
+                    backgroundColor: isMine
+                        ? "rgba(255, 255, 255, 0.15)"
                         : accentSoft,
                     borderLeftWidth: 3,
                     borderLeftColor: isMine ? "rgba(255, 255, 255, 0.5)" : accentColor,
@@ -176,8 +191,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                     style={{
                         fontSize: 13,
                         lineHeight: 18,
-                        color: isMine 
-                            ? "rgba(255, 255, 255, 0.75)" 
+                        color: isMine
+                            ? "rgba(255, 255, 255, 0.75)"
                             : (isDark ? "#94a3b8" : "#4b5563"),
                     }}
                     numberOfLines={2}
@@ -203,7 +218,7 @@ export const MessageBubble = React.memo(function MessageBubble({
         onReply(item);
     }, [onReply, item]);
 
-    
+
     const panGesture = useMemo(() => Gesture.Pan()
         //.enabled(!hasMedia) // Enabled for all messages now
         .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px horizontal movement
@@ -349,19 +364,19 @@ export const MessageBubble = React.memo(function MessageBubble({
             borderRadiusStyle,
             !isMine && { borderWidth: 0.5, borderColor: bubbleBorderColor },
         ];
-        
+
         if (Platform.OS === 'web') {
             // CSS box-shadow for web
             return [
                 ...baseStyles,
-                { 
-                    boxShadow: isDark 
-                        ? '0 2px 8px rgba(0, 0, 0, 0.3)' 
+                {
+                    boxShadow: isDark
+                        ? '0 2px 8px rgba(0, 0, 0, 0.3)'
                         : '0 1px 4px rgba(0, 0, 0, 0.08)'
                 } as any,
             ];
         }
-        
+
         // React Native shadow for iOS/Android
         return [
             ...baseStyles,
@@ -426,152 +441,153 @@ export const MessageBubble = React.memo(function MessageBubble({
                                 className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
                                     }`}
                             >
-                            {/* Only show profile pic for received messages in GROUP chats */}
-                            {!isMine && isGroupChat ? (
-                                <View className="mr-2" style={{ width: 32 }}>
-                                    {isFirstInGroup && hasAvatar ? (
-                                        <TouchableOpacity
-                                            onPress={() => onAvatarPress?.(senderPk, senderProfile?.Username)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Image
-                                                source={{ uri: avatarUri }}
-                                                className="h-8 w-8 rounded-full bg-gray-200"
-                                                placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
-                                                placeholderContentFit="cover"
-                                                transition={200}
-                                                contentFit="cover"
-                                                cachePolicy="memory-disk"
-                                            />
-                                        </TouchableOpacity>
-                                    ) : isFirstInGroup ? (
-                                        <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                                            <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                                        </View>
-                                    ) : null}
-                                </View>
-                            ) : null}
-                            <View style={{ position: "relative" }}>
-                                <Reanimated.View
-                                    ref={animatedBubbleRef}
-                                    style={[
-                                        bubbleExtraStyle,
-                                        { 
-                                            paddingHorizontal: isMediaOnly ? 0 : 16,
-                                            paddingVertical: isMediaOnly ? 0 : 12,
-                                            maxWidth: Platform.OS === 'web' ? 320 : '80%',
-                                            overflow: 'hidden',
-                                            backgroundColor: bubbleBackgroundColor,
-                                        },
-                                    ]}
-                                >
-                                {/* Only show sender name in GROUP chats */}
-                                {!isMine && isGroupChat && isFirstInGroup && (
-                                    <Text
-                                        className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                                        style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
-                                        numberOfLines={1}
-                                    >
-                                        {displayName}
-                                    </Text>
-                                )}
-                                {renderReplyPreview()}
-                                <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
-                                    <FileAndMessageBubble
-                                        decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
-                                        extraData={extraData}
-                                        isDark={isDark}
-                                        onImagePress={handleImagePress}
-                                        compact={isMediaOnly}
-                                    />
-                                    <VideoMessageBubble
-                                        decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
-                                        extraData={extraData}
-                                        isDark={isDark}
-                                        compact={isMediaOnly}
-                                    />
-                                    {/* WhatsApp-style: text + inline timestamp using nested Text */}
-                                    {(!isMediaOnly) && (
-                                        <Text
-                                            className="text-base leading-[22px]"
-                                            style={{ 
-                                                flexShrink: 1, 
-                                                color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
-                                                paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
-                                                marginBottom: isMediaOnly ? 12 : 0,
-                                            }}
-                                        >
-                                            {messageText}
-                                            {/* Invisible spacer to ensure minimum gap before timestamp */}
-                                            <Text style={{ fontSize: 10, opacity: 0 }}>
-                                                {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
-                                            </Text>
-                                        </Text>
-                                    )}
-                                </View>
-                                
-                                {/* Actual timestamp overlaid at bottom-right */}
-                                {isMediaOnly ? (
-                                    // Media Only: Overlay with gradient
-                                    <View style={{ position: 'absolute', bottom: 0, right: 0, left: 0, height: 40, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-                                        <LinearGradient
-                                            colors={['transparent', 'rgba(0,0,0,0.6)']}
-                                            style={{ position: 'absolute', inset: 0 }}
-                                            pointerEvents="none"
-                                        />
-                                        <Text
-                                            style={{
-                                                fontSize: 10,
-                                                color: "#ffffff",
-                                                fontWeight: '500',
-                                                marginRight: 12,
-                                                marginBottom: 8,
-                                                textShadowColor: 'rgba(0,0,0,0.5)',
-                                                textShadowOffset: { width: 0, height: 1 },
-                                                textShadowRadius: 2,
-                                            }}
-                                        >
-                                            {hasError ? "Failed" : (
-                                                <>
-                                                    {isEditedMessage ? (
-                                                        <Text style={{ fontStyle: "italic" }}>edited </Text>
-                                                    ) : null}
-                                                    {timestamp ? formatTimestamp(timestamp) : ""}
-                                                </>
-                                            )}
-                                        </Text>
+                                {/* Only show profile pic for received messages in GROUP chats */}
+                                {!isMine && isGroupChat ? (
+                                    <View className="mr-2" style={{ width: 32 }}>
+                                        {isFirstInGroup && hasAvatar ? (
+                                            <TouchableOpacity
+                                                onPress={() => onAvatarPress?.(senderPk, senderProfile?.Username)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Image
+                                                    source={{ uri: avatarUri }}
+                                                    className="h-8 w-8 rounded-full bg-gray-200"
+                                                    placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
+                                                    placeholderContentFit="cover"
+                                                    transition={200}
+                                                    contentFit="cover"
+                                                    cachePolicy="memory-disk"
+                                                />
+                                            </TouchableOpacity>
+                                        ) : isFirstInGroup ? (
+                                            <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
+                                                <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
+                                            </View>
+                                        ) : null}
                                     </View>
-                                ) : (
-                                    // Normal Text: Standard position
-                                    <Text
-                                        style={{
-                                            position: 'absolute',
-                                            bottom: 12,
-                                            right: 12,
-                                            fontSize: 10,
-                                            color: hasError
-                                                ? "#ef4444"
-                                                : isMine
-                                                    ? onAccent
-                                                    : (isDark ? "#94a3b8" : "#94a3b8"),
-                                        }}
+                                ) : null}
+                                <View style={{ position: "relative" }}>
+                                    <Reanimated.View
+                                        ref={animatedBubbleRef}
+                                        style={[
+                                            bubbleExtraStyle,
+                                            {
+                                                paddingHorizontal: isMediaOnly ? 0 : 16,
+                                                paddingVertical: isMediaOnly ? 0 : 12,
+                                                maxWidth: Platform.OS === 'web' ? 320 : '80%',
+                                                overflow: 'hidden',
+                                                backgroundColor: bubbleBackgroundColor,
+                                            },
+                                        ]}
                                     >
-                                        {hasError ? "Failed" : (
-                                            <>
-                                                {isEditedMessage ? (
-                                                    <Text style={{ fontStyle: "italic" }}>edited </Text>
-                                                ) : null}
-                                                {timestamp ? formatTimestamp(timestamp) : ""}
-                                            </>
+                                        {/* Only show sender name in GROUP chats */}
+                                        {!isMine && isGroupChat && isFirstInGroup && (
+                                            <Text
+                                                className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                                                style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
+                                                numberOfLines={1}
+                                            >
+                                                {displayName}
+                                            </Text>
                                         )}
-                                    </Text>
-                                )}
-                                </Reanimated.View>
+                                        {renderReplyPreview()}
+                                        <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
+                                            <FileAndMessageBubble
+                                                decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
+                                                extraData={extraData}
+                                                isDark={isDark}
+                                                onImagePress={handleImagePress}
+                                                compact={isMediaOnly}
+                                            />
+                                            <VideoMessageBubble
+                                                decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
+                                                extraData={extraData}
+                                                isDark={isDark}
+                                                compact={isMediaOnly}
+                                                onPlayVideo={handlePlayVideo}
+                                            />
+                                            {/* WhatsApp-style: text + inline timestamp using nested Text */}
+                                            {(!isMediaOnly) && (
+                                                <Text
+                                                    className="text-base leading-[22px]"
+                                                    style={{
+                                                        flexShrink: 1,
+                                                        color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
+                                                        paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
+                                                        marginBottom: isMediaOnly ? 12 : 0,
+                                                    }}
+                                                >
+                                                    {messageText}
+                                                    {/* Invisible spacer to ensure minimum gap before timestamp */}
+                                                    <Text style={{ fontSize: 10, opacity: 0 }}>
+                                                        {"  "}{hasError ? "Failed" : ((isEditedMessage ? "edited " : "") + (timestamp ? formatTimestamp(timestamp) : ""))}
+                                                    </Text>
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        {/* Actual timestamp overlaid at bottom-right */}
+                                        {isMediaOnly ? (
+                                            // Media Only: Overlay with gradient
+                                            <View style={{ position: 'absolute', bottom: 0, right: 0, left: 0, height: 40, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+                                                <LinearGradient
+                                                    colors={['transparent', 'rgba(0,0,0,0.6)']}
+                                                    style={{ position: 'absolute', inset: 0 }}
+                                                    pointerEvents="none"
+                                                />
+                                                <Text
+                                                    style={{
+                                                        fontSize: 10,
+                                                        color: "#ffffff",
+                                                        fontWeight: '500',
+                                                        marginRight: 12,
+                                                        marginBottom: 8,
+                                                        textShadowColor: 'rgba(0,0,0,0.5)',
+                                                        textShadowOffset: { width: 0, height: 1 },
+                                                        textShadowRadius: 2,
+                                                    }}
+                                                >
+                                                    {hasError ? "Failed" : (
+                                                        <>
+                                                            {isEditedMessage ? (
+                                                                <Text style={{ fontStyle: "italic" }}>edited </Text>
+                                                            ) : null}
+                                                            {timestamp ? formatTimestamp(timestamp) : ""}
+                                                        </>
+                                                    )}
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            // Normal Text: Standard position
+                                            <Text
+                                                style={{
+                                                    position: 'absolute',
+                                                    bottom: 12,
+                                                    right: 12,
+                                                    fontSize: 10,
+                                                    color: hasError
+                                                        ? "#ef4444"
+                                                        : isMine
+                                                            ? onAccent
+                                                            : (isDark ? "#94a3b8" : "#94a3b8"),
+                                                }}
+                                            >
+                                                {hasError ? "Failed" : (
+                                                    <>
+                                                        {isEditedMessage ? (
+                                                            <Text style={{ fontStyle: "italic" }}>edited </Text>
+                                                        ) : null}
+                                                        {timestamp ? formatTimestamp(timestamp) : ""}
+                                                    </>
+                                                )}
+                                            </Text>
+                                        )}
+                                    </Reanimated.View>
+                                </View>
                             </View>
-                        </View>
-                    </GestureDetector>
-                </Reanimated.View>
-            </GestureDetector>
+                        </GestureDetector>
+                    </Reanimated.View>
+                </GestureDetector>
             </View>
 
             {/* Fullscreen Image Gallery Modal */}
@@ -580,6 +596,14 @@ export const MessageBubble = React.memo(function MessageBubble({
                 images={galleryImages}
                 initialIndex={galleryInitialIndex}
                 onClose={handleCloseGallery}
+            />
+
+            {/* Fullscreen Video Player Modal */}
+            <VideoPlayerModal
+                visible={videoModalVisible}
+                uri={currentVideoUri}
+                onClose={handleCloseVideo}
+                isDark={isDark}
             />
         </View>
     );

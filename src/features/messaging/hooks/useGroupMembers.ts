@@ -54,12 +54,12 @@ export const useGroupMembers = ({
   });
 
   const safeGroupMembers = useMemo(() => {
-    const result = Array.isArray(groupMembers) 
-      ? groupMembers 
-      : Array.isArray(initialGroupMembers) 
-        ? initialGroupMembers 
+    const result = Array.isArray(groupMembers)
+      ? groupMembers
+      : Array.isArray(initialGroupMembers)
+        ? initialGroupMembers
         : [];
-    
+
     devLog("[useGroupMembers] Current member count:", result.length);
     return result;
   }, [groupMembers, initialGroupMembers]);
@@ -70,7 +70,7 @@ export const useGroupMembers = ({
       devLog("[useGroupMembers] Modal opened - forcing refetch");
       loadGroupMembers();
     }
-  }, [showMembersModal, isGroupChat, ownerKey, loadGroupMembers]);
+  }, [showMembersModal, isGroupChat, ownerKey]);
 
   const addMembers = useCallback(
     async (memberKeys: string[]) => {
