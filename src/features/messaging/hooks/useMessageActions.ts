@@ -153,15 +153,18 @@ export const useMessageActions = ({
   const handleActionReply = useCallback(() => {
     if (!selectedMessage) return;
     const message = selectedMessage;
-    handleReply(message, true); // Skip immediate focus
-    // Close modal and focus after animation completes
+    
+    // CRITICAL: Focus must happen synchronously FIRST for mobile web keyboard
+    // The modal will close with the input already focused underneath
+    if (focusInput) {
+      focusInput();
+    }
+    
+    handleReply(message, true); // Skip the focus in handleReply since we already did it
+    // Close modal - input is already focused so keyboard will be visible when modal disappears
     animateCloseActions(() => {
       setSelectedMessage(null);
       setSelectedBubbleLayout(null);
-      // Focus keyboard after modal is closed (synchronous with animation end)
-      if (focusInput) {
-        focusInput();
-      }
     });
   }, [selectedMessage, handleReply, animateCloseActions, focusInput]);
 
@@ -184,15 +187,16 @@ export const useMessageActions = ({
       setEditDraft(draft);
       setEditingMessage(target);
       
-      // If modal is open, close it first then focus after animation
+      // If modal is open, focus FIRST then close modal
       if (selectedMessage) {
+        // CRITICAL: Focus must happen synchronously FIRST for mobile web keyboard
+        if (focusInput) {
+          focusInput();
+        }
+        // Close modal - input is already focused so keyboard will be visible when modal disappears
         animateCloseActions(() => {
           setSelectedMessage(null);
           setSelectedBubbleLayout(null);
-          // Focus keyboard after modal is closed (synchronous with animation end)
-          if (focusInput) {
-            focusInput();
-          }
         });
       } else {
         // Direct edit (not from modal), focus immediately
