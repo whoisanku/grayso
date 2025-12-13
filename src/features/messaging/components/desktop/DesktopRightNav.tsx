@@ -35,8 +35,6 @@ export function DesktopRightNav() {
           paddingTop: insets.top + 16,
           paddingBottom: insets.bottom + 16,
           // Left border/divider like Bluesky
-          borderLeftWidth: 1,
-          borderLeftColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
           transform: [
             { translateX: translateX },
           ],
@@ -87,6 +85,7 @@ const styles = StyleSheet.create({
       position: 'fixed',
       maxHeight: '100vh',
       overflowY: 'auto',
+      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
     }),
   } as any,
   card: {

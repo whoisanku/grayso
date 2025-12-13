@@ -32,7 +32,11 @@ import Animated, {
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../features/messaging/components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../features/messaging/components/desktop/DesktopRightNav";
-import { CENTER_CONTENT_MAX_WIDTH } from "../alf/breakpoints";
+import {
+  CENTER_CONTENT_MAX_WIDTH,
+  useLayoutBreakpoints,
+  CENTER_COLUMN_OFFSET,
+} from "../alf/breakpoints";
 import { getBorderColor } from "../theme/borders";
 import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
 import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
@@ -222,6 +226,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const [activeTab, setActiveTab] = React.useState<keyof HomeTabParamList>("Messages");
   
   const drawerWidth = useMemo(() => Math.min(280, windowWidth * 0.7), [windowWidth]);
+  const { centerColumnOffset } = useLayoutBreakpoints();
 
   // Fetch profile stats
   const publicKey = currentUser?.PublicKeyBase58Check;
@@ -411,6 +416,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   // Using fixed-position sidebars with content centered in viewport
   if (isDesktopWeb) {
     const tabNavigation = useNavigation<any>();
+
     
     const handleTabChange = (tab: keyof HomeTabParamList) => {
       tabNavigation.navigate(tab);
@@ -437,6 +443,12 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
               borderLeftWidth: 1,
               borderRightWidth: 1,
               borderColor: getBorderColor(isDark, 'contrast_low'),
+              transform: [
+                { translateX: centerColumnOffset ? CENTER_COLUMN_OFFSET : 0 },
+              ],
+              ...(Platform.OS === 'web' && {
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              }),
             }}
           >
             {renderTabNavigator(() => null)}

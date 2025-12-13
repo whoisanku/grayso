@@ -185,8 +185,6 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
           paddingTop: insets.top + 10,
           paddingBottom: insets.bottom + 10,
           backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-          borderRightWidth: 1,
-          borderRightColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
           transform: [
             { translateX: translateX },
             { translateX: -width },
@@ -260,6 +258,7 @@ const styles = StyleSheet.create({
       position: 'fixed',
       maxHeight: '100vh',
       overflowY: 'auto',
+      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
     }),
   } as any,
   containerMinimal: {
