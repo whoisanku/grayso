@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import {
   useInfiniteQuery,
@@ -130,6 +130,10 @@ export const useConversationThreads = (
     refetchOnReconnect: false,
   });
 
+  const stableRefetch = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
   // Persist conversations to storage when updated (debounced)
   useEffect(() => {
     const userPk = currentUser?.PublicKeyBase58Check;
@@ -153,6 +157,7 @@ export const useConversationThreads = (
   }, [currentUser?.PublicKeyBase58Check, data]);
 
   useEffect(() => {
+    let isMounted = true;
     const userPublicKey = currentUser?.PublicKeyBase58Check;
     const supabaseEnabled = isSupabaseConfigured();
 
@@ -174,25 +179,28 @@ export const useConversationThreads = (
           table: "messages",
         },
         () => {
+          if (!isMounted) return;
           // Debounce refetches to avoid flooding when multiple inserts arrive
           if (debounceRef.current) {
             clearTimeout(debounceRef.current);
           }
           debounceRef.current = setTimeout(() => {
-            void refetch();
+            if (isMounted) stableRefetch();
           }, Platform.OS === "web" ? 150 : 75);
         }
       )
       .on("broadcast", { event: "conversation_viewed" }, (payload) => {
+        if (!isMounted) return;
         // Refetch conversations when a conversation is viewed on another device/tab
         if (debounceRef.current) {
           clearTimeout(debounceRef.current);
         }
         debounceRef.current = setTimeout(() => {
-          void refetch();
+          if (isMounted) stableRefetch();
         }, Platform.OS === "web" ? 150 : 75);
       })
       .on("broadcast", { event: "typing" }, ({ payload }: { payload: any }) => {
+        if (!isMounted) return;
         console.log("[useConversationThreads] Received typing event:", payload);
         const { conversationId, is_typing, senderPublicKey, metadata } = payload;
 
@@ -228,6 +236,7 @@ export const useConversationThreads = (
         }
       })
       .on("broadcast", { event: "new_message" }, ({ payload }: { payload: any }) => {
+        if (!isMounted) return;
         console.log("[useConversationThreads] Received new_message event:", payload);
         // Optimistically update the latest message for the conversation
         const { conversationId, message } = payload;
@@ -267,29 +276,29 @@ export const useConversationThreads = (
             clearTimeout(debounceRef.current);
           }
           debounceRef.current = setTimeout(() => {
-            void refetch();
+            stableRefetch();
           }, Platform.OS === "web" ? 150 : 75);
         }
       })
       .subscribe((status, err) => {
+        if (!isMounted) return;
         if (status === "SUBSCRIBED") {
           console.log("[useConversationThreads] Subscribed to global channel");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           console.warn(`[useConversationThreads] Channel status: ${status}. Attempting to reconnect...`);
-          // Remove the channel to ensure a clean slate
-          supabase.removeChannel(channel);
           // Trigger re-subscription after a short delay
           setTimeout(() => {
-            setReconnectKey(prev => prev + 1);
+            if (isMounted) setReconnectKey(prev => prev + 1);
           }, 1000);
         }
       });
 
     return () => {
+      isMounted = false;
       console.log("[useConversationThreads] Cleaning up global channel:", channelIdentifier);
       channel.unsubscribe();
     };
-  }, [currentUser?.PublicKeyBase58Check, refetch, reconnectKey]);
+  }, [currentUser?.PublicKeyBase58Check, stableRefetch, reconnectKey]);
 
   const merged = useMemo(() => {
     if (!data?.pages) {
