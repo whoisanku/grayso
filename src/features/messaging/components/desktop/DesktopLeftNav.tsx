@@ -14,7 +14,6 @@ import {
 import { useNavigation, useNavigationState } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 
 import { RootStackParamList, HomeTabParamList } from '@/navigation/types';
@@ -32,6 +31,7 @@ import UserIcon from '@/assets/navIcons/user.svg';
 import UserIconFilled from '@/assets/navIcons/user-filled.svg';
 import SettingsIcon from '@/assets/navIcons/settings.svg';
 import SettingsIconFilled from '@/assets/navIcons/settings-filled.svg';
+import CreatePostIcon from '@/assets/navIcons/create-post.svg';
 
 const NAV_ICON_WIDTH = 24;
 type NavIconComponent = React.ComponentType<{
@@ -226,7 +226,7 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
               { backgroundColor: accentColor },
             ]}
           >
-            <Feather name="edit-2" size={16} color="#fff" />
+            <CreatePostIcon width={20} height={20} color="white" fill="white" stroke="white" />
             <Text style={styles.newPostText}>Post</Text>
           </TouchableOpacity>
         ) : (
@@ -238,7 +238,7 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
               { backgroundColor: accentColor },
             ]}
           >
-            <Feather name="edit-2" size={18} color="#fff" />
+            <CreatePostIcon width={24} height={24} color="white" fill="white" stroke="white" />
           </TouchableOpacity>
         )}
       </ScrollView>

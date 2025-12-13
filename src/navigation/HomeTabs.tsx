@@ -6,6 +6,7 @@ import MessageIcon from "../assets/navIcons/message.svg";
 import MessageIconFilled from "../assets/navIcons/message-filled.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
+import CreatePostIcon from "../assets/navIcons/create-post.svg";
 
 import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -117,7 +118,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               justifyContent: "center",
             }}
           >
-            <Feather name="edit-2" size={18} color="white" />
+            <CreatePostIcon width={22} height={22} color="white" fill="white" stroke="white" />
           </View>
         </TouchableOpacity>
       );
