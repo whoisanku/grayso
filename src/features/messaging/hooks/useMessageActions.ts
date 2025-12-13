@@ -86,11 +86,11 @@ export const useMessageActions = ({
     ],
   }));
 
-  const handleReply = useCallback((message: DecryptedMessageEntryResponse, skipFocus?: boolean) => {
+  const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setReplyToMessage(message);
-    // Trigger focus synchronously for mobile web keyboard (unless skipped for modal)
-    if (focusInput && !skipFocus) {
+    // Trigger focus synchronously for mobile web keyboard
+    if (focusInput) {
       focusInput();
     }
   }, [focusInput]);
@@ -152,21 +152,9 @@ export const useMessageActions = ({
 
   const handleActionReply = useCallback(() => {
     if (!selectedMessage) return;
-    const message = selectedMessage;
-    
-    // CRITICAL: Focus must happen synchronously FIRST for mobile web keyboard
-    // The modal will close with the input already focused underneath
-    if (focusInput) {
-      focusInput();
-    }
-    
-    handleReply(message, true); // Skip the focus in handleReply since we already did it
-    // Close modal - input is already focused so keyboard will be visible when modal disappears
-    animateCloseActions(() => {
-      setSelectedMessage(null);
-      setSelectedBubbleLayout(null);
-    });
-  }, [selectedMessage, handleReply, animateCloseActions, focusInput]);
+    handleReply(selectedMessage);
+    handleCloseMessageActions();
+  }, [selectedMessage, handleReply, handleCloseMessageActions]);
 
   const handleActionCopy = useCallback(async () => {
     if (!selectedMessage) return;
@@ -186,26 +174,13 @@ export const useMessageActions = ({
         getDisplayedMessageText(target) || target.DecryptedMessage || "";
       setEditDraft(draft);
       setEditingMessage(target);
-      
-      // If modal is open, focus FIRST then close modal
-      if (selectedMessage) {
-        // CRITICAL: Focus must happen synchronously FIRST for mobile web keyboard
-        if (focusInput) {
-          focusInput();
-        }
-        // Close modal - input is already focused so keyboard will be visible when modal disappears
-        animateCloseActions(() => {
-          setSelectedMessage(null);
-          setSelectedBubbleLayout(null);
-        });
-      } else {
-        // Direct edit (not from modal), focus immediately
-        if (focusInput) {
-          focusInput();
-        }
+      handleCloseMessageActions();
+      // Trigger focus synchronously for mobile web keyboard
+      if (focusInput) {
+        focusInput();
       }
     },
-    [selectedMessage, animateCloseActions, focusInput]
+    [selectedMessage, handleCloseMessageActions, focusInput]
   );
 
   const handleCancelEdit = useCallback(() => {
