@@ -1114,7 +1114,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
         <Animated.View
           style={composerAnimatedStyle}
-          pointerEvents={selectedMessage ? "none" : "auto"}
+          pointerEvents={selectedMessage ? "box-none" : "auto"}
         >
           <Composer
             isGroupChat={isGroupChat}
