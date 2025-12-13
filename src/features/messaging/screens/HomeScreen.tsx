@@ -109,7 +109,6 @@ function ConversationRow({
         className="w-full flex-row items-center px-4 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
         onPress={onPress}
         onLongPress={onLongPress}
-        style={isDesktopWeb ? { borderRadius: 14, overflow: "hidden" } : undefined}
       >
         <View className="mr-3">
           <UserAvatar
@@ -307,6 +306,18 @@ export function HomeScreen() {
 
   const { isDesktop } = useLayoutBreakpoints();
   const isDesktopWeb = Platform.OS === "web" && isDesktop;
+
+  const scrollBarStyle = useMemo(
+    () =>
+      Platform.OS === "web"
+        ? ({
+          scrollbarWidth: "thin",
+          scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${isDark ? "#0a0f1a" : "#ffffff"
+            }`,
+        } as any)
+        : undefined,
+    [isDark]
+  );
 
   const {
     conversations,
@@ -1096,13 +1107,14 @@ export function HomeScreen() {
             // @ts-ignore - data attribute for CSS virtualized list
             dataSet={{ virtualizedList: "true" }}
             className="flex-1"
+            style={scrollBarStyle}
           >
             <FlashList
               data={items}
               keyExtractor={(item) => item.id}
               extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
               className="flex-1"
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={Platform.OS === "web"}
               ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0

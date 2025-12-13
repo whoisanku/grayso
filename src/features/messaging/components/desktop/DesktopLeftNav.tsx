@@ -14,7 +14,6 @@ import {
 import { useNavigation, useNavigationState } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 
 import { RootStackParamList, HomeTabParamList } from '@/navigation/types';
@@ -32,6 +31,7 @@ import UserIcon from '@/assets/navIcons/user.svg';
 import UserIconFilled from '@/assets/navIcons/user-filled.svg';
 import SettingsIcon from '@/assets/navIcons/settings.svg';
 import SettingsIconFilled from '@/assets/navIcons/settings-filled.svg';
+import CreatePostIcon from '@/assets/navIcons/create-post.svg';
 
 const NAV_ICON_WIDTH = 24;
 type NavIconComponent = React.ComponentType<{
@@ -185,8 +185,6 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
           paddingTop: insets.top + 10,
           paddingBottom: insets.bottom + 10,
           backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-          borderRightWidth: 1,
-          borderRightColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
           transform: [
             { translateX: translateX },
             { translateX: -width },
@@ -228,7 +226,7 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
               { backgroundColor: accentColor },
             ]}
           >
-            <Feather name="edit-2" size={16} color="#fff" />
+            <CreatePostIcon width={20} height={20} color="white" fill="white" stroke="white" />
             <Text style={styles.newPostText}>Post</Text>
           </TouchableOpacity>
         ) : (
@@ -240,7 +238,7 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
               { backgroundColor: accentColor },
             ]}
           >
-            <Feather name="edit-2" size={18} color="#fff" />
+            <CreatePostIcon width={24} height={24} color="white" fill="white" stroke="white" />
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -260,6 +258,7 @@ const styles = StyleSheet.create({
       position: 'fixed',
       maxHeight: '100vh',
       overflowY: 'auto',
+      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
     }),
   } as any,
   containerMinimal: {

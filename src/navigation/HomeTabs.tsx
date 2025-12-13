@@ -6,6 +6,7 @@ import MessageIcon from "../assets/navIcons/message.svg";
 import MessageIconFilled from "../assets/navIcons/message-filled.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
+import CreatePostIcon from "../assets/navIcons/create-post.svg";
 
 import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,7 +18,7 @@ import { useColorScheme } from "nativewind";
 import { DRAWER_STATE_EVENT } from "../constants/events";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl } from "deso-protocol";
-import { FALLBACK_PROFILE_IMAGE } from "../utils/deso";
+import { FALLBACK_PROFILE_IMAGE, getProfileDisplayName } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -32,10 +33,16 @@ import Animated, {
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../features/messaging/components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../features/messaging/components/desktop/DesktopRightNav";
-import { CENTER_CONTENT_MAX_WIDTH } from "../alf/breakpoints";
+import {
+  CENTER_CONTENT_MAX_WIDTH,
+  useLayoutBreakpoints,
+  CENTER_COLUMN_OFFSET,
+} from "../alf/breakpoints";
 import { getBorderColor } from "../theme/borders";
 import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
 import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
+import { ProfileStats } from "@/features/profile/components/ProfileStats";
+import { useAccountProfile } from "@/features/profile/api/useAccountProfile";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
@@ -111,7 +118,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               justifyContent: "center",
             }}
           >
-            <Feather name="edit-2" size={18} color="white" />
+            <CreatePostIcon width={22} height={22} color="white" fill="white" stroke="white" />
           </View>
         </TouchableOpacity>
       );
@@ -219,7 +226,21 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const drawerProgress = useSharedValue(0);
   const [activeTab, setActiveTab] = React.useState<keyof HomeTabParamList>("Messages");
   
-  const drawerWidth = useMemo(() => Math.min(240, windowWidth * 0.6), [windowWidth]);
+  const drawerWidth = useMemo(() => Math.min(280, windowWidth * 0.7), [windowWidth]);
+  const { centerColumnOffset } = useLayoutBreakpoints();
+
+  // Fetch profile stats
+  const publicKey = currentUser?.PublicKeyBase58Check;
+  const { data: account } = useAccountProfile(publicKey);
+  const followerCount = useMemo(
+    () => account?.followerCounts?.totalFollowers ?? 0,
+    [account?.followerCounts?.totalFollowers]
+  );
+  const followingCount = useMemo(
+    () => account?.followingCounts?.totalFollowing ?? 0,
+    [account?.followingCounts?.totalFollowing]
+  );
+  const displayName = getProfileDisplayName(currentUser?.ProfileEntryResponse, publicKey || "");
 
   // Listen for drawer toggle requests from HomeScreen
   React.useEffect(() => {
@@ -279,8 +300,9 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
         borderRightColor: getBorderColor(isDark, 'contrast_low'),
       }}
     >
-      <View className="px-5 py-6 border-b border-slate-100 dark:border-slate-800">
-        <View className="flex-row items-center">
+      {/* Profile Section */}
+      <View className="px-4 py-5 border-b border-slate-100 dark:border-slate-800">
+        <View className="flex-row items-center mb-3">
           <Image
             source={{
               uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic
@@ -289,40 +311,71 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
                   fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
                 }),
             }}
-            className="h-14 w-14 rounded-full bg-slate-200 dark:bg-slate-700"
+            className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
           />
-          <View className="ml-3 flex-1">
-            <Text className="text-lg font-bold text-slate-900 dark:text-white" numberOfLines={1}>
-              @{currentUser?.ProfileEntryResponse?.Username || "User"}
-            </Text>
-            <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
-              {currentUser?.PublicKeyBase58Check?.slice(0, 12)}...
-            </Text>
-          </View>
         </View>
+        <Text className="text-base font-bold text-slate-900 dark:text-white mb-0.5" numberOfLines={1}>
+          {displayName}
+        </Text>
+        <Text className="text-sm text-slate-500 dark:text-slate-400 mb-3" numberOfLines={1}>
+          @{currentUser?.ProfileEntryResponse?.Username || "User"}
+        </Text>
+        <ProfileStats 
+          followers={followerCount}
+          following={followingCount}
+          posts={0}
+        />
       </View>
 
-      <View className="flex-1 py-4">
+      {/* Navigation Items */}
+      <View className="flex-1 pt-2">
+        {/* Chat */}
         <TouchableOpacity
-          className="flex-row items-center px-5 py-4"
+          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+          activeOpacity={0.7}
+          onPress={() => {
+            setIsDrawerOpen(false);
+            rootNavigation.navigate("Main", { screen: "Messages" });
+          }}
+        >
+          <MessageIcon width={24} height={24} stroke={isDark ? "#e2e8f0" : "#0f172a"} strokeWidth={2} />
+          <Text className="ml-4 text-base text-slate-900 dark:text-white">
+            Chat
+          </Text>
+        </TouchableOpacity>
+
+        {/* Profile */}
+        <TouchableOpacity
+          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+          activeOpacity={0.7}
+          onPress={() => {
+            setIsDrawerOpen(false);
+            rootNavigation.navigate("Main", { screen: "Profile" });
+          }}
+        >
+          <UserIcon width={24} height={24} stroke={isDark ? "#e2e8f0" : "#0f172a"} strokeWidth={2} />
+          <Text className="ml-4 text-base text-slate-900 dark:text-white">
+            Profile
+          </Text>
+        </TouchableOpacity>
+
+        {/* Settings */}
+        <TouchableOpacity
+          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
           activeOpacity={0.7}
           onPress={() => {
             setIsDrawerOpen(false);
             rootNavigation.navigate("Settings");
           }}
         >
-          <View className="w-11 h-11 rounded-xl items-center justify-center bg-slate-100 dark:bg-slate-800">
-            <Feather name="settings" size={22} color={isDark ? "#94a3b8" : "#64748b"} />
-          </View>
-          <Text className="ml-4 text-base font-medium text-slate-900 dark:text-white">
+          <Feather name="settings" size={24} color={isDark ? "#e2e8f0" : "#0f172a"} />
+          <Text className="ml-4 text-base text-slate-900 dark:text-white">
             Settings
           </Text>
-          <View className="flex-1" />
-          <Feather name="chevron-right" size={20} color={isDark ? "#64748b" : "#94a3b8"} />
         </TouchableOpacity>
       </View>
     </View>
-  ), [currentUser, insets.top, insets.bottom, isDark, rootNavigation]);
+  ), [currentUser, insets.top, insets.bottom, isDark, rootNavigation, displayName, followerCount, followingCount]);
 
   const renderTabNavigator = (tabBarOverride?: (props: BottomTabBarProps) => React.ReactNode) => (
     <Tab.Navigator
@@ -364,6 +417,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   // Using fixed-position sidebars with content centered in viewport
   if (isDesktopWeb) {
     const tabNavigation = useNavigation<any>();
+
     
     const handleTabChange = (tab: keyof HomeTabParamList) => {
       tabNavigation.navigate(tab);
@@ -390,6 +444,12 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
               borderLeftWidth: 1,
               borderRightWidth: 1,
               borderColor: getBorderColor(isDark, 'contrast_low'),
+              transform: [
+                { translateX: centerColumnOffset ? CENTER_COLUMN_OFFSET : 0 },
+              ],
+              ...(Platform.OS === 'web' && {
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              }),
             }}
           >
             {renderTabNavigator(() => null)}
