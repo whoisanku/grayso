@@ -18,6 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
+import { uploadImage, uploadVideo } from "@/lib/media";
 import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
@@ -51,12 +52,13 @@ type ComposerScreenProps = {
 
 export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const [text, setText] = useState("");
-  // Track images with their upload status and URLs
-  const [imageItems, setImageItems] = useState<{
+  // Track media with their upload status and URLs
+  const [mediaItems, setMediaItems] = useState<{
     localUri: string;
     uploadedUrl: string | null;
     isUploading: boolean;
     error: boolean;
+    type: 'image' | 'video';
   }[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const insets = useSafeAreaInsets();
@@ -85,79 +87,52 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
   }
 
-  // Upload a single image to DeSo - handles both web and native
-  const uploadImageToDeso = async (uri: string, userPublicKey: string, jwt: string): Promise<string> => {
-    const formData = new FormData();
-    
-    if (Platform.OS === "web") {
-      // On web, fetch the file and create a proper Blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const filename = uri.split('/').pop() || 'image.jpg';
-      formData.append("file", blob, filename);
-    } else {
-      // On native, use the URI-based approach
-      const filename = uri.split('/').pop() || 'image.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-      formData.append("file", { uri, name: filename, type } as any);
-    }
-    
-    formData.append("UserPublicKeyBase58Check", userPublicKey);
-    formData.append("JWT", jwt);
-
-    // Don't set Content-Type - let the browser/fetch set it with the proper boundary
-    const uploadResponse = await fetch("https://node.deso.org/api/v0/upload-image", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-      const errorData = await uploadResponse.text();
-      console.error("Upload failed:", errorData);
-      throw new Error("Failed to upload image");
-    }
-
-    const data = await uploadResponse.json();
-    return data.ImageURL;
-  };
-
-  // Upload image immediately when selected
-  const uploadImageImmediately = async (localUri: string, index: number) => {
+  // Upload media immediately when selected
+  const uploadMediaImmediately = async (localUri: string, type: 'image' | 'video', index: number) => {
     if (!currentUser?.PublicKeyBase58Check) return;
 
     try {
-      const jwt = await identity.jwt();
-      const uploadedUrl = await uploadImageToDeso(localUri, currentUser.PublicKeyBase58Check, jwt);
+      let uploadedUrl;
+      if (type === 'video') {
+        uploadedUrl = await uploadVideo(currentUser.PublicKeyBase58Check, localUri);
+      } else {
+        uploadedUrl = await uploadImage(currentUser.PublicKeyBase58Check, localUri);
+      }
       
-      setImageItems(prev => prev.map((item, i) => 
+      setMediaItems(prev => prev.map((item, i) => 
         i === index ? { ...item, uploadedUrl, isUploading: false, error: false } : item
       ));
     } catch (error) {
-      console.error("Image upload failed:", error);
-      setImageItems(prev => prev.map((item, i) => 
+      console.error("Media upload failed:", error);
+      setMediaItems(prev => prev.map((item, i) => 
         i === index ? { ...item, isUploading: false, error: true } : item
       ));
     }
   };
 
   const onPost = useCallback(async () => {
-    const allUploaded = imageItems.every(item => item.uploadedUrl || item.error);
-    if ((text.length === 0 && imageItems.length === 0) || !currentUser?.PublicKeyBase58Check) return;
+    const allUploaded = mediaItems.every(item => item.uploadedUrl || item.error);
+    if ((text.length === 0 && mediaItems.length === 0) || !currentUser?.PublicKeyBase58Check) return;
     
     // Wait for any pending uploads
     if (!allUploaded) {
       Toast.show({
         type: 'error',
         text1: 'Please wait',
-        text2: 'Images are still uploading',
+        text2: 'Media is still uploading',
       });
       return;
     }
 
-    // Filter out failed uploads
-    const successfulImageUrls = imageItems
-      .filter(item => item.uploadedUrl)
+    // Filter out failed uploads and split by type
+    const successfulItems = mediaItems.filter(item => item.uploadedUrl);
+    
+    const imageUrls = successfulItems
+      .filter(item => item.type === 'image')
+      .map(item => item.uploadedUrl as string);
+      
+    const videoUrls = successfulItems
+      .filter(item => item.type === 'video')
       .map(item => item.uploadedUrl as string);
 
     setIsPosting(true);
@@ -167,8 +142,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
         UpdaterPublicKeyBase58Check: currentUser.PublicKeyBase58Check,
         BodyObj: {
           Body: text,
-          ImageURLs: successfulImageUrls,
-          VideoURLs: [],
+          ImageURLs: imageUrls,
+          VideoURLs: videoUrls,
         },
       });
 
@@ -189,7 +164,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     } finally {
       setIsPosting(false);
     }
-  }, [text, imageItems, navigation, currentUser]);
+  }, [text, mediaItems, navigation, currentUser]);
 
   const onCancel = useCallback(() => {
     navigation.goBack();
@@ -203,7 +178,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
       quality: 0.8,
     });
@@ -211,19 +186,21 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     if (!result.canceled) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       
-      const startIndex = imageItems.length;
+      const startIndex = mediaItems.length;
       const newItems = result.assets.map((asset) => ({
         localUri: asset.uri,
         uploadedUrl: null,
         isUploading: true,
         error: false,
+        type: (asset.type === 'video' ? 'video' : 'image') as 'image' | 'video',
       }));
       
-      setImageItems(prev => [...prev, ...newItems]);
+      setMediaItems(prev => [...prev, ...newItems]);
       
-      // Start uploading each image immediately
+      // Start uploading each media item immediately
       result.assets.forEach((asset, i) => {
-        uploadImageImmediately(asset.uri, startIndex + i);
+        const type = (asset.type === 'video' ? 'video' : 'image') as 'image' | 'video';
+        uploadMediaImmediately(asset.uri, type, startIndex + i);
       });
     }
   };
@@ -242,24 +219,25 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     if (!result.canceled) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      const startIndex = imageItems.length;
+      const startIndex = mediaItems.length;
       const newItem = {
         localUri: result.assets[0].uri,
         uploadedUrl: null,
         isUploading: true,
         error: false,
+        type: 'image' as const,
       };
-      setImageItems(prev => [...prev, newItem]);
-      uploadImageImmediately(result.assets[0].uri, startIndex);
+      setMediaItems(prev => [...prev, newItem]);
+      uploadMediaImmediately(result.assets[0].uri, 'image', startIndex);
     }
   };
 
-  const removeImage = (indexToRemove: number) => {
+  const removeMedia = (indexToRemove: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setImageItems(prev => prev.filter((_, index) => index !== indexToRemove));
+    setMediaItems(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
-  const canPost = text.trim().length > 0 || imageItems.length > 0;
+  const canPost = text.trim().length > 0 || mediaItems.length > 0;
 
   // Toolbar action button component
   const ToolbarButton = ({ 
@@ -305,7 +283,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     const toolbarContent = (
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
-          <ToolbarButton icon="image" onPress={pickImage} label="Choose photo from library" />
+          <ToolbarButton icon="image" onPress={pickImage} label="Choose media from library" />
           <ToolbarButton icon="camera" onPress={takePhoto} label="Take a photo" />
         </View>
         <View
@@ -453,46 +431,54 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
               </View>
             </View>
 
-            {/* Image Previews */}
-            {imageItems.length > 0 && (
+            {/* Media Previews */}
+            {mediaItems.length > 0 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 className="mt-4 pl-12"
                 contentContainerStyle={{ paddingRight: 16 }}
               >
-                {imageItems.map((item, index) => (
+                {mediaItems.map((item, index) => (
                   <View key={index} className="relative mr-3">
                     <Image
                       source={{ uri: item.localUri }}
                       className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
                       resizeMode="cover"
                     />
+                    {/* Video Indicator */}
+                    {item.type === 'video' && (
+                      <View className="absolute inset-0 items-center justify-center z-10 pointer-events-none">
+                        <View className="bg-black/50 rounded-full p-3">
+                            <Feather name="play" size={24} color="white" style={{ marginLeft: 2 }} />
+                        </View>
+                      </View>
+                    )}
                     {/* Upload progress indicator */}
                     {item.isUploading && (
-                      <View className="absolute inset-0 items-center justify-center bg-black/40 rounded-2xl">
+                      <View className="absolute inset-0 items-center justify-center bg-black/40 rounded-2xl z-20">
                         <ActivityIndicator size="large" color="white" />
                         <Text className="text-white text-xs mt-2">Uploading...</Text>
                       </View>
                     )}
                     {/* Error indicator */}
                     {item.error && (
-                      <View className="absolute inset-0 items-center justify-center bg-red-500/40 rounded-2xl">
+                      <View className="absolute inset-0 items-center justify-center bg-red-500/40 rounded-2xl z-20">
                         <Feather name="alert-circle" size={32} color="white" />
                         <Text className="text-white text-xs mt-2">Upload failed</Text>
                       </View>
                     )}
                     {/* Success indicator */}
                     {item.uploadedUrl && !item.isUploading && (
-                      <View className="absolute bottom-2 left-2 bg-green-500 rounded-full p-1">
+                      <View className="absolute bottom-2 left-2 bg-green-500 rounded-full p-1 z-20">
                         <Feather name="check" size={14} color="white" />
                       </View>
                     )}
                     <TouchableOpacity
-                      onPress={() => removeImage(index)}
-                      className="absolute right-2 top-2 rounded-full p-2"
+                      onPress={() => removeMedia(index)}
+                      className="absolute right-2 top-2 rounded-full p-2 z-30"
                       accessibilityRole="button"
-                      accessibilityLabel="Remove image"
+                      accessibilityLabel="Remove media"
                       style={{
                         backgroundColor: "rgba(0,0,0,0.6)",
                       }}
