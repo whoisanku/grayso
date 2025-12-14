@@ -22,7 +22,7 @@ import {
 } from "@/lib/deso/api";
 import {
   buildDefaultProfileEntry,
-  fetchAccessGroupMembers,
+
   fetchDmMessagesViaGraphql,
   fetchGroupMessagesViaGraphql,
   GroupMember,
@@ -160,7 +160,7 @@ export const getAllConversationsFromFocusGraphql = async (
 
   const groupMembersMap: Record<string, GroupMember[]> = {};
   const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
-  const memberFetchPromises: Promise<void>[] = [];
+
 
   const rawMessages: NewMessageEntryResponse[] = threadNodes
     .map((thread) => {
@@ -237,42 +237,6 @@ export const getAllConversationsFromFocusGraphql = async (
         }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
-      if (isGroupChat) {
-        const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
-
-        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
-          const fetchPromise = fetchAccessGroupMembers({
-            accessGroupKeyName: recipientGroup.keyName,
-            accessGroupOwnerPublicKey: recipientGroup.owner,
-            limit: 10,
-          })
-            .then(({ members, extraData }) => {
-              if (!groupExtraDataMap[groupKey] && extraData) {
-                groupExtraDataMap[groupKey] = extraData;
-              }
-
-              const hasCustomImageNow = Boolean(
-                pickGroupImageFromExtraData(extraData)
-              );
-
-              if (
-                !hasCustomImageNow &&
-                members?.length &&
-                !groupMembersMap[groupKey]
-              ) {
-                groupMembersMap[groupKey] = members.slice(0, 3);
-              }
-            })
-            .catch((err) => {
-              console.warn("[FocusGraphql] Failed to fetch group members", {
-                groupKey,
-                error: err,
-              });
-            });
-
-          memberFetchPromises.push(fetchPromise);
-        }
-      }
 
       const recipientAccessGroupPublicKey =
         findAccessGroupPublicKey(
@@ -323,7 +287,7 @@ export const getAllConversationsFromFocusGraphql = async (
     };
   }
 
-  await Promise.allSettled(memberFetchPromises);
+
 
   const { decrypted, updatedAllAccessGroups } =
     await decryptAccessGroupMessagesWithRetry(
@@ -331,6 +295,14 @@ export const getAllConversationsFromFocusGraphql = async (
       rawMessages,
       allAccessGroups
     );
+
+  // Populate groupExtraDataMap from updatedAllAccessGroups
+  updatedAllAccessGroups.forEach((group) => {
+    const key = `${group.AccessGroupOwnerPublicKeyBase58Check}-${group.AccessGroupKeyName}`;
+    if (group.ExtraData) {
+      groupExtraDataMap[key] = group.ExtraData;
+    }
+  });
 
   const conversations = buildConversationMapFromMessages(decrypted);
 
@@ -523,7 +495,7 @@ export const getConversationsFromFocusGraphql = async (
   // Store per-group metadata so the home screen can render avatars immediately.
   const groupMembersMap: Record<string, GroupMember[]> = {};
   const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
-  const memberFetchPromises: Promise<void>[] = [];
+
 
   const rawMessages: NewMessageEntryResponse[] = threadNodes
     .map((thread) => {
@@ -595,43 +567,7 @@ export const getConversationsFromFocusGraphql = async (
         }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
-      if (isGroupChat) {
-        const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
 
-        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
-          // Fetch access group extraData (for groupImage) + a small member sample.
-          const fetchPromise = fetchAccessGroupMembers({
-            accessGroupKeyName: recipientGroup.keyName,
-            accessGroupOwnerPublicKey: recipientGroup.owner,
-            limit: 10,
-          })
-            .then(({ members, extraData }) => {
-              if (!groupExtraDataMap[groupKey] && extraData) {
-                groupExtraDataMap[groupKey] = extraData;
-              }
-
-              const hasCustomImageNow = Boolean(
-                pickGroupImageFromExtraData(extraData)
-              );
-
-              if (
-                !hasCustomImageNow &&
-                members?.length &&
-                !groupMembersMap[groupKey]
-              ) {
-                groupMembersMap[groupKey] = members.slice(0, 3);
-              }
-            })
-            .catch((err) => {
-              console.warn("[FocusGraphql] Failed to fetch group members", {
-                groupKey,
-                error: err,
-              });
-            });
-
-          memberFetchPromises.push(fetchPromise);
-        }
-      }
 
       const recipientAccessGroupPublicKey =
         findAccessGroupPublicKey(
@@ -680,7 +616,7 @@ export const getConversationsFromFocusGraphql = async (
   }
 
   // Wait for any member fetches to complete in parallel with decryption.
-  await Promise.allSettled(memberFetchPromises);
+
 
   const { decrypted, updatedAllAccessGroups } =
     await decryptAccessGroupMessagesWithRetry(
@@ -745,7 +681,7 @@ export const getSpamConversationsFromFocusGraphql = async (
 
   const groupMembersMap: Record<string, GroupMember[]> = {};
   const groupExtraDataMap: Record<string, Record<string, string> | null> = {};
-  const memberFetchPromises: Promise<void>[] = [];
+
 
   const rawMessages: NewMessageEntryResponse[] = threadNodes
     .map((thread) => {
@@ -827,42 +763,7 @@ export const getSpamConversationsFromFocusGraphql = async (
         }
         : pickDefaultAccessGroup(receiverAccount || undefined, receiverPublicKey);
 
-      if (isGroupChat) {
-        const groupKey = `${recipientGroup.owner}-${recipientGroup.keyName}`;
 
-        if (!groupMembersMap[groupKey] || !groupExtraDataMap[groupKey]) {
-          const fetchPromise = fetchAccessGroupMembers({
-            accessGroupKeyName: recipientGroup.keyName,
-            accessGroupOwnerPublicKey: recipientGroup.owner,
-            limit: 10,
-          })
-            .then(({ members, extraData }) => {
-              if (!groupExtraDataMap[groupKey] && extraData) {
-                groupExtraDataMap[groupKey] = extraData;
-              }
-
-              const hasCustomImageNow = Boolean(
-                pickGroupImageFromExtraData(extraData)
-              );
-
-              if (
-                !hasCustomImageNow &&
-                members?.length &&
-                !groupMembersMap[groupKey]
-              ) {
-                groupMembersMap[groupKey] = members.slice(0, 3);
-              }
-            })
-            .catch((err) => {
-              console.warn("[FocusGraphql:Spam] Failed to fetch group members", {
-                groupKey,
-                error: err,
-              });
-            });
-
-          memberFetchPromises.push(fetchPromise);
-        }
-      }
 
       const recipientAccessGroupPublicKey =
         findAccessGroupPublicKey(
@@ -916,7 +817,7 @@ export const getSpamConversationsFromFocusGraphql = async (
     };
   }
 
-  await Promise.allSettled(memberFetchPromises);
+
 
   const { decrypted, updatedAllAccessGroups } =
     await decryptAccessGroupMessagesWithRetry(

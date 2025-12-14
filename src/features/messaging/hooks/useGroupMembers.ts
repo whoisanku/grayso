@@ -1,11 +1,8 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+
 import { GroupMember } from "@/lib/deso/graphql";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "@/constants/messaging";
-import {
-  fetchGroupMembers,
-  getGroupMembersQueryKey,
-} from "@/state/queries/messages/members";
+
 import {
   addMembersToGroup,
   removeMembersFromGroup,
@@ -42,16 +39,9 @@ export const useGroupMembers = ({
   const ownerKey = recipientOwnerKey ?? counterPartyPublicKey;
   const isOwner = userPublicKey === ownerKey;
 
-  const {
-    data: groupMembers = initialGroupMembers || [],
-    isLoading: loadingMembers,
-    refetch: loadGroupMembers,
-  } = useQuery({
-    queryKey: getGroupMembersQueryKey(threadAccessGroupKeyName, ownerKey),
-    queryFn: () => fetchGroupMembers(threadAccessGroupKeyName, ownerKey),
-    enabled: isGroupChat && !!ownerKey,
-    staleTime: 1000 * 30, // 30 seconds - reduced to ensure fresh data
-  });
+  const groupMembers = initialGroupMembers || [];
+  const loadingMembers = false;
+  const loadGroupMembers = async () => { };
 
   const safeGroupMembers = useMemo(() => {
     const result = Array.isArray(groupMembers)

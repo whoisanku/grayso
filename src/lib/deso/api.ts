@@ -33,14 +33,14 @@ export type GetAllUserMessageThreadsResponse = {
   PublicKeyToProfileEntryResponse: PublicKeyToProfileEntryResponseMap;
 };
 
-export function getAllUserMessageThreads(
-  payload: GetAllUserMessageThreadsRequest
-): Promise<GetAllUserMessageThreadsResponse> {
-  return postJson<GetAllUserMessageThreadsResponse>(
-    "get-all-user-message-threads",
-    payload
-  );
-}
+// export function getAllUserMessageThreads(
+//   payload: GetAllUserMessageThreadsRequest
+// ): Promise<GetAllUserMessageThreadsResponse> {
+//   return postJson<GetAllUserMessageThreadsResponse>(
+//     "get-all-user-message-threads",
+//     payload
+//   );
+// }
 
 export type GetPaginatedMessagesForDmThreadRequest = {
   UserGroupOwnerPublicKeyBase58Check: string;

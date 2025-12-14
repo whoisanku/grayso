@@ -666,7 +666,14 @@ export function HomeScreen() {
     profiles,
   ]);
 
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
+
+  const handleRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    await reload();
+    setIsManualRefreshing(false);
+  }, [reload]);
 
   const handlePress = useCallback(
     (item: MockConversation) => {
@@ -927,33 +934,6 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {!isLoading && isRefreshingMailbox && (
-            <View
-              style={{
-                width: "100%",
-                backgroundColor: isDark
-                  ? "rgba(51, 65, 85, 0.55)"
-                  : "rgba(226, 232, 240, 0.98)",
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-              }}
-            >
-              <View className="flex-row items-center justify-center">
-                <ActivityIndicator size="small" color={accentColor} />
-                <Text
-                  style={{
-                    marginLeft: 12,
-                    fontSize: 14,
-                    color: isDark ? "#e2e8f0" : "#0f172a",
-                    fontWeight: "700",
-                  }}
-                >
-                  Refreshing…
-                </Text>
-              </View>
-            </View>
-          )}
-
           {/* Header */}
           <View
             // @ts-ignore - data attribute for CSS scroll lock
@@ -1159,8 +1139,8 @@ export function HomeScreen() {
               }
               refreshControl={
                 <RefreshControl
-                  refreshing={isRefreshingMailbox}
-                  onRefresh={reload}
+                  refreshing={isManualRefreshing}
+                  onRefresh={handleRefresh}
                   tintColor={isDark ? accentColor : accentColor}
                   colors={[accentColor]}
                 />
