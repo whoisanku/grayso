@@ -137,10 +137,18 @@ function ConversationRow({
           <View className="flex-row items-center">
             <Text
               numberOfLines={1}
-              className="flex-1 text-[14px] text-slate-500 dark:text-slate-400"
+              className={`flex-1 text-[14px] ${
+                /* @ts-ignore */
+                item.isTyping ? "text-green-500 font-medium" : "text-slate-500 dark:text-slate-400"
+                }`}
             >
               {item.preview}
             </Text>
+            {/* Typing Indicator Dot (Optional, if we want a visual dot too) */}
+            {/* @ts-ignore */}
+            {item.isTyping && (
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22c55e', marginLeft: 6 }} />
+            )}
           </View>
         </View>
       </Pressable>
@@ -161,24 +169,24 @@ function NewChatResultRow({ item, isDark, onPress }: NewChatResultRowProps) {
       onPress={onPress}
     >
       <View className="flex-row items-center px-5 py-3">
-      <UserAvatar
-        uri={getProfileImageUrl(item.publicKey)}
-        name={item.username || "?"}
-        size={48}
-        className="bg-slate-200 dark:bg-slate-700"
-      />
-      <View style={{ marginLeft: 14, flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "600",
-            color: isDark ? "#ffffff" : "#0f172a",
-          }}
-          numberOfLines={1}
-        >
-          {item.username || "Anonymous"}
-        </Text>
-      </View>
+        <UserAvatar
+          uri={getProfileImageUrl(item.publicKey)}
+          name={item.username || "?"}
+          size={48}
+          className="bg-slate-200 dark:bg-slate-700"
+        />
+        <View style={{ marginLeft: 14, flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "600",
+              color: isDark ? "#ffffff" : "#0f172a",
+            }}
+            numberOfLines={1}
+          >
+            {item.username || "Anonymous"}
+          </Text>
+        </View>
       </View>
     </Pressable>
   );
@@ -303,11 +311,10 @@ export function HomeScreen() {
     () =>
       Platform.OS === "web"
         ? ({
-            scrollbarWidth: "thin",
-            scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${
-              isDark ? "#0a0f1a" : "#ffffff"
+          scrollbarWidth: "thin",
+          scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${isDark ? "#0a0f1a" : "#ffffff"
             }`,
-          } as any)
+        } as any)
         : undefined,
     [isDark]
   );
@@ -325,6 +332,8 @@ export function HomeScreen() {
     reload,
     loadMore,
     error,
+    typingStatuses,
+    latestMessages,
   } = useConversationThreads();
 
   const { settings: threadSettings, setThreadMailbox: setThreadMailboxOverride } =
@@ -354,6 +363,7 @@ export function HomeScreen() {
       subscription.remove();
     };
   }, []);
+
 
   // Debounced search for new chat modal
   useEffect(() => {
@@ -441,8 +451,8 @@ export function HomeScreen() {
         const otherPk = isGroup
           ? recipientPk
           : senderPk === userPk
-          ? recipientPk
-          : senderPk;
+            ? recipientPk
+            : senderPk;
         const name = isGroup
           ? last?.RecipientInfo?.AccessGroupKeyName || "Group"
           : profileMap?.[otherPk]?.Username || formatPublicKey(otherPk);
@@ -559,32 +569,86 @@ export function HomeScreen() {
   const items = useMemo(() => {
     const visible = allItems
       .map((item) => {
+        // Add typing status and latest message previews
+        const isTyping = item.chatType === ChatType.DM
+          ? typingStatuses[item.threadPublicKey]
+          : typingStatuses[item.id];
+
+        const latestMessageKey = item.isGroup ? item.id : item.threadPublicKey;
+        const latestMessage = latestMessageKey ? latestMessages[latestMessageKey] : null;
+
+        if (isTyping) {
+          return {
+            ...item,
+            preview: "Typing...",
+            isTyping: true
+          };
+        }
+
+        let previewText = item.preview;
+        let lastTimestamp = item.lastTimestampNanos ?? 0;
+        let timeLabel = item.time;
+
         const optimistic = optimisticPreviews[item.id];
-        if (!optimistic) {
-          return item;
+        if (optimistic && optimistic.timestampNanos > lastTimestamp) {
+          const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
+          const hasImages = Boolean(optimistic.extraData?.decryptedImageURLs);
+          const hasVideos = Boolean(optimistic.extraData?.decryptedVideoURLs);
+          let optimisticPreview = "";
+          if (hasVideos) optimisticPreview = "You sent a video";
+          else if (hasImages) optimisticPreview = "You sent an image";
+          if (optimistic.messageText.trim()) {
+            optimisticPreview = optimisticPreview
+              ? `${optimisticPreview}: ${optimistic.messageText.trim()}`
+              : `You: ${optimistic.messageText.trim()}`;
+          }
+          previewText = optimisticPreview || previewText;
+          timeLabel = formatTimestamp(optimisticTimestampMs);
+          lastTimestamp = optimistic.timestampNanos;
         }
 
-        if (optimistic.timestampNanos <= (item.lastTimestampNanos ?? 0)) {
-          return item;
-        }
+        if (latestMessage) {
+          const messageTimestamp = latestMessage.MessageInfo?.TimestampNanos ?? 0;
+          if (messageTimestamp >= lastTimestamp) {
+            const messageTimestampMs = messageTimestamp / 1e6;
+            const senderPk = latestMessage.SenderInfo?.OwnerPublicKeyBase58Check;
+            const isCurrentUserSender = senderPk === currentUser?.PublicKeyBase58Check;
+            const senderName = isCurrentUserSender
+              ? "You"
+              : senderPk
+                ? profiles[senderPk]?.Username || formatPublicKey(senderPk)
+                : item.name;
+            const messageExtraData = latestMessage.MessageInfo?.ExtraData as
+              | Record<string, any>
+              | undefined;
+            const mediaPreview = getMediaPreviewText(messageExtraData, senderName);
+            const rawDecrypted = latestMessage.DecryptedMessage ?? "";
+            const decrypted = rawDecrypted.trim();
+            let messagePreview = mediaPreview ?? (decrypted || rawDecrypted);
 
-        const optimisticTimestampMs = optimistic.timestampNanos / 1e6;
-        const hasImages = Boolean(optimistic.extraData?.decryptedImageURLs);
-        const hasVideos = Boolean(optimistic.extraData?.decryptedVideoURLs);
-        let previewText = "";
-        if (hasVideos) previewText = "You sent a video";
-        else if (hasImages) previewText = "You sent an image";
-        if (optimistic.messageText.trim()) {
-          previewText = previewText
-            ? `${previewText}: ${optimistic.messageText.trim()}`
-            : `You: ${optimistic.messageText.trim()}`;
+            if (!messagePreview) {
+              messagePreview = isCurrentUserSender
+                ? "You sent a message"
+                : `${senderName} sent a message`;
+            } else if (!mediaPreview) {
+              if (isCurrentUserSender && !messagePreview.startsWith("You:")) {
+                messagePreview = `You: ${messagePreview}`;
+              } else if (!isCurrentUserSender && !messagePreview.startsWith(`${senderName}:`)) {
+                messagePreview = `${senderName}: ${messagePreview}`;
+              }
+            }
+
+            previewText = messagePreview;
+            timeLabel = formatTimestamp(messageTimestampMs);
+            lastTimestamp = messageTimestamp;
+          }
         }
 
         return {
           ...item,
-          preview: previewText || item.preview,
-          time: formatTimestamp(optimisticTimestampMs),
-          lastTimestampNanos: optimistic.timestampNanos,
+          preview: previewText,
+          time: timeLabel,
+          lastTimestampNanos: lastTimestamp,
         };
       })
       .filter((item) => item.mailbox === activeMailbox);
@@ -592,9 +656,24 @@ export function HomeScreen() {
     return visible.sort(
       (a, b) => (b.lastTimestampNanos ?? 0) - (a.lastTimestampNanos ?? 0)
     );
-  }, [activeMailbox, allItems, optimisticPreviews]);
+  }, [
+    activeMailbox,
+    allItems,
+    typingStatuses,
+    latestMessages,
+    optimisticPreviews,
+    currentUser?.PublicKeyBase58Check,
+    profiles,
+  ]);
 
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
+
+  const handleRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    await reload();
+    setIsManualRefreshing(false);
+  }, [reload]);
 
   const handlePress = useCallback(
     (item: MockConversation) => {
@@ -635,11 +714,11 @@ export function HomeScreen() {
         recipientInfo: item.recipientInfo,
         initialGroupMembers:
           item.isGroup &&
-          item.recipientInfo?.OwnerPublicKeyBase58Check &&
-          item.recipientInfo?.AccessGroupKeyName
+            item.recipientInfo?.OwnerPublicKeyBase58Check &&
+            item.recipientInfo?.AccessGroupKeyName
             ? groupMembers[
-                `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
-              ]
+            `${item.recipientInfo.OwnerPublicKeyBase58Check}-${item.recipientInfo.AccessGroupKeyName}`
+            ]
             : undefined,
         initialProfile: profiles[profileKey], // Pass profile to avoid loading delay
       });
@@ -789,8 +868,8 @@ export function HomeScreen() {
                   backgroundColor: isActive
                     ? accentColor
                     : isDark
-                    ? "rgba(30, 41, 59, 0.6)"
-                    : "rgba(241, 245, 249, 0.9)",
+                      ? "rgba(30, 41, 59, 0.6)"
+                      : "rgba(241, 245, 249, 0.9)",
                   borderWidth: 1,
                   borderColor: isActive
                     ? accentStrong
@@ -804,8 +883,8 @@ export function HomeScreen() {
                     color: isActive
                       ? "#ffffff"
                       : isDark
-                      ? "#94a3b8"
-                      : "#64748b",
+                        ? "#94a3b8"
+                        : "#64748b",
                   }}
                 >
                   {filter.label}
@@ -855,33 +934,6 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {!isLoading && isRefreshingMailbox && (
-            <View
-              style={{
-                width: "100%",
-                backgroundColor: isDark
-                  ? "rgba(51, 65, 85, 0.55)"
-                  : "rgba(226, 232, 240, 0.98)",
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-              }}
-            >
-              <View className="flex-row items-center justify-center">
-                <ActivityIndicator size="small" color={accentColor} />
-                <Text
-                  style={{
-                    marginLeft: 12,
-                    fontSize: 14,
-                    color: isDark ? "#e2e8f0" : "#0f172a",
-                    fontWeight: "700",
-                  }}
-                >
-                  Refreshing…
-                </Text>
-              </View>
-            </View>
-          )}
-
           {/* Header */}
           <View
             // @ts-ignore - data attribute for CSS scroll lock
@@ -1034,8 +1086,8 @@ export function HomeScreen() {
                     backgroundColor: isActive
                       ? accentColor
                       : isDark
-                      ? "rgba(30, 41, 59, 0.6)"
-                      : "rgba(241, 245, 249, 0.9)",
+                        ? "rgba(30, 41, 59, 0.6)"
+                        : "rgba(241, 245, 249, 0.9)",
                     borderWidth: 1,
                     borderColor: isActive
                       ? accentStrong
@@ -1049,8 +1101,8 @@ export function HomeScreen() {
                       color: isActive
                         ? "#ffffff"
                         : isDark
-                        ? "#94a3b8"
-                        : "#64748b",
+                          ? "#94a3b8"
+                          : "#64748b",
                     }}
                   >
                     {filter.label}
@@ -1066,13 +1118,13 @@ export function HomeScreen() {
             className="flex-1"
             style={scrollBarStyle}
           >
-              <FlashList
-                data={items}
-                keyExtractor={(item) => item.id}
-                extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
-                className="flex-1"
-                showsVerticalScrollIndicator={Platform.OS === "web"}
-                ItemSeparatorComponent={() => null}
+            <FlashList
+              data={items}
+              keyExtractor={(item) => item.id}
+              extraData={{ activeMailbox, optimisticPreviews, threadSettings }}
+              className="flex-1"
+              showsVerticalScrollIndicator={Platform.OS === "web"}
+              ItemSeparatorComponent={() => null}
               contentContainerClassName={
                 items.length === 0
                   ? "flex-grow items-center justify-center px-4"
@@ -1082,13 +1134,13 @@ export function HomeScreen() {
                 isDesktopWeb
                   ? { paddingHorizontal: 0 }
                   : items.length === 0
-                  ? { paddingBottom: 80 }
-                  : { paddingBottom: 70 }
+                    ? { paddingBottom: 80 }
+                    : { paddingBottom: 70 }
               }
               refreshControl={
                 <RefreshControl
-                  refreshing={isRefreshingMailbox}
-                  onRefresh={reload}
+                  refreshing={isManualRefreshing}
+                  onRefresh={handleRefresh}
                   tintColor={isDark ? accentColor : accentColor}
                   colors={[accentColor]}
                 />
@@ -1307,12 +1359,12 @@ export function HomeScreen() {
                     </Text>
                   </View>
                 ) : (
-                    <FlashList
-                      data={newChatResults}
-                      keyExtractor={(item) => item.publicKey}
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
-                      renderItem={({ item }) => (
+                  <FlashList
+                    data={newChatResults}
+                    keyExtractor={(item) => item.publicKey}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
                       <NewChatResultRow
                         item={item}
                         isDark={isDark}

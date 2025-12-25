@@ -190,12 +190,29 @@ export const Composer = React.memo(function Composer({
               timestampNanos: Date.now() * 1e6,
               senderPublicKey: userPublicKey,
               is_typing: true,
+              metadata: { chatType },
             },
-            `messages-${conversationId}`,
-            undefined,
+            `messages:${counterPartyPublicKey}`, // Broadcast to recipient's global channel
+            "typing",
             { keepAlive: true }
           ).catch((err) =>
             console.warn("[Composer] Failed to broadcast typing:", err)
+          );
+
+          // Also broadcast to the conversation channel for the active chat screen
+          broadcastMessageUpdate(
+            {
+              conversationId,
+              timestampNanos: Date.now() * 1e6,
+              senderPublicKey: userPublicKey,
+              is_typing: true,
+              metadata: { chatType },
+            },
+            `messages-${conversationId}`, // Broadcast to conversation channel
+            "typing",
+            { keepAlive: true }
+          ).catch((err) =>
+            console.warn("[Composer] Failed to broadcast typing to conversation:", err)
           );
         }
 
@@ -212,12 +229,29 @@ export const Composer = React.memo(function Composer({
               timestampNanos: Date.now() * 1e6,
               senderPublicKey: userPublicKey,
               is_typing: false,
+              metadata: { chatType },
             },
-            `messages-${conversationId}`,
-            undefined,
+            `messages:${counterPartyPublicKey}`, // Broadcast to recipient's global channel
+            "typing",
             { keepAlive: true }
           ).catch((err) =>
             console.warn("[Composer] Failed to broadcast stop typing:", err)
+          );
+
+          // Also broadcast stop to conversation channel
+          broadcastMessageUpdate(
+            {
+              conversationId,
+              timestampNanos: Date.now() * 1e6,
+              senderPublicKey: userPublicKey,
+              is_typing: false,
+              metadata: { chatType },
+            },
+            `messages-${conversationId}`, // Broadcast to conversation channel
+            "typing",
+            { keepAlive: true }
+          ).catch((err) =>
+            console.warn("[Composer] Failed to broadcast stop typing to conversation:", err)
           );
         }, 2000); // Consider stopped after 2 seconds of inactivity
       } else {
@@ -231,16 +265,33 @@ export const Composer = React.memo(function Composer({
             timestampNanos: Date.now() * 1e6,
             senderPublicKey: userPublicKey,
             is_typing: false,
+            metadata: { chatType },
           },
-          `messages-${conversationId}`,
-          undefined,
+          `messages:${counterPartyPublicKey}`, // Broadcast to recipient's global channel
+          "typing",
           { keepAlive: true }
         ).catch((err) =>
           console.warn("[Composer] Failed to broadcast stop typing:", err)
         );
+
+        // Also broadcast stop to conversation channel
+        broadcastMessageUpdate(
+          {
+            conversationId,
+            timestampNanos: Date.now() * 1e6,
+            senderPublicKey: userPublicKey,
+            is_typing: false,
+            metadata: { chatType },
+          },
+          `messages-${conversationId}`, // Broadcast to conversation channel
+          "typing",
+          { keepAlive: true }
+        ).catch((err) =>
+          console.warn("[Composer] Failed to broadcast stop typing to conversation:", err)
+        );
       }
     },
-    [conversationId, userPublicKey, sending, editingMessage, onEditDraftChange]
+    [conversationId, userPublicKey, sending, editingMessage, onEditDraftChange, counterPartyPublicKey]
   );
 
   // Keyboard avoidance is now handled by ScreenWrapper's KeyboardAvoidingView
@@ -344,11 +395,11 @@ export const Composer = React.memo(function Composer({
         prev.map((img) =>
           img.uri === item.uri
             ? {
-                ...img,
-                uploadStatus: "completed",
-                uploadedUrl: url,
-                progress: 1,
-              }
+              ...img,
+              uploadStatus: "completed",
+              uploadedUrl: url,
+              progress: 1,
+            }
             : img
         )
       );
@@ -398,7 +449,7 @@ export const Composer = React.memo(function Composer({
           SenderAccessGroupPublicKeyBase58Check,
           SenderAccessGroupKeyName,
           RecipientAccessGroupPublicKeyBase58Check:
-            RecipientAccessGroupPublicKey,
+          RecipientAccessGroupPublicKey,
           RecipientAccessGroupKeyName,
         } = await encryptAndSendNewMessage(
           textToSend,
@@ -414,8 +465,9 @@ export const Composer = React.memo(function Composer({
 
         // Broadcast message via Supabase for instant delivery when both users are online
         try {
-          const broadcastChannel = `messages-${conversationId}`;
-          devLog("[Composer] Broadcasting to channel:", broadcastChannel);
+          // 1. Broadcast to conversation channel (for open chat screen)
+          const conversationChannel = `messages-${conversationId}`;
+          devLog("[Composer] Broadcasting to conversation channel:", conversationChannel);
 
           await broadcastMessageUpdate(
             {
@@ -434,10 +486,30 @@ export const Composer = React.memo(function Composer({
                 RecipientAccessGroupPublicKey,
               RecipientAccessGroupKeyName,
             },
-            broadcastChannel, // Use conversation-specific channel
-            undefined, // default event
-            { keepAlive: true } // Keep channel open for useConversationMessages
+            conversationChannel,
+            undefined, // default event 'message'
+            { keepAlive: true }
           );
+
+          // 2. Broadcast to recipient's global channel (for chat list preview)
+          const globalChannel = `messages:${counterPartyPublicKey}`;
+          devLog("[Composer] Broadcasting to global channel:", globalChannel);
+
+          await broadcastMessageUpdate(
+            {
+              conversationId,
+              timestampNanos,
+              message: {
+                DecryptedMessage: textToSend,
+                SenderInfo: { OwnerPublicKeyBase58Check: userPublicKey },
+                MessageInfo: { TimestampNanos: timestampNanos, EncryptedText: EncryptedMessageText }
+              }
+            },
+            globalChannel,
+            "new_message",
+            { keepAlive: true }
+          );
+
           devLog("[Composer] Message broadcast via Supabase successfully");
         } catch (broadcastError) {
           console.warn(
@@ -775,7 +847,7 @@ export const Composer = React.memo(function Composer({
           SenderAccessGroupPublicKeyBase58Check,
           SenderAccessGroupKeyName,
           RecipientAccessGroupPublicKeyBase58Check:
-            RecipientAccessGroupPublicKey,
+          RecipientAccessGroupPublicKey,
           RecipientAccessGroupKeyName,
         } = await encryptAndSendNewMessage(
           currentText.trim(), // Can be empty string if only sending images
@@ -817,6 +889,25 @@ export const Composer = React.memo(function Composer({
             undefined,
             { keepAlive: true }
           );
+
+          // Also broadcast to the recipient's global channel for the list preview
+          const globalChannel = `messages:${counterPartyPublicKey}`;
+          devLog("[Composer] Broadcasting to global channel:", globalChannel);
+          await broadcastMessageUpdate(
+            {
+              conversationId,
+              timestampNanos,
+              message: {
+                SenderInfo: { OwnerPublicKeyBase58Check: userPublicKey },
+                MessageInfo: { TimestampNanos: timestampNanos, EncryptedText: EncryptedMessageText },
+                ChatType: chatType
+              }
+            },
+            globalChannel,
+            "new_message",
+            { keepAlive: true }
+          );
+
           devLog("[Composer] Message broadcast via Supabase successfully");
         } catch (broadcastError) {
           console.warn(
@@ -1020,8 +1111,8 @@ export const Composer = React.memo(function Composer({
               isEditMode
                 ? "Update your message"
                 : isGroupChat
-                ? "Message the group…"
-                : "Write a message"
+                  ? "Message the group…"
+                  : "Write a message"
             }
             placeholderTextColor={isDark ? "#94a3b8" : "#64748b"}
             value={currentText}
@@ -1071,8 +1162,8 @@ export const Composer = React.memo(function Composer({
                     ? "#334155"
                     : "#e2e8f0"
                   : isEditMode
-                  ? "#f59e0b"
-                  : accentColor,
+                    ? "#f59e0b"
+                    : accentColor,
               }}
             >
               {sending || isSavingEdit ? (

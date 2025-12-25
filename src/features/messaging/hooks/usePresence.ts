@@ -128,7 +128,7 @@ export function usePresence({
             }
         };
 
-        channel.on('broadcast', { event: 'message' }, handleBroadcast);
+        channel.on('broadcast', { event: 'typing' }, handleBroadcast);
 
         // Cleanup timeouts on unmount
         return () => {
@@ -221,8 +221,8 @@ export function usePresence({
                 console.error('[usePresence] TIMED_OUT');
             } else if (status === 'CLOSED') {
                 setConnectionState('disconnected');
-                setError(new Error('Presence channel closed'));
-                console.error('[usePresence] CLOSED - Connection was closed');
+                // CLOSED is a normal state when unsubscribing or disconnected
+                devLog('[usePresence] CLOSED - Connection was closed');
             }
         });
 

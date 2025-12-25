@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { identity } from 'deso-protocol';
-import { getSupabaseClient, isSupabaseConfigured } from '../../../lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured, broadcastMessageUpdate } from '../../../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
 export type EphemeralMessage = {
@@ -86,10 +86,9 @@ export function useEphemeralMessages({
         setMessages([]);
     }, []);
 
-    // Send ephemeral message
     const sendMessage = useCallback(async (content: string) => {
-        if (!channelRef.current || !content.trim()) {
-            throw new Error('Cannot send message: channel not ready or empty content');
+        if (!content.trim()) {
+            throw new Error('Cannot send message: empty content');
         }
 
         setIsSending(true);
@@ -113,12 +112,16 @@ export function useEphemeralMessages({
 
             devLog('[useEphemeralMessages] Sending message:', payload.id);
 
-            // Broadcast message
-            await channelRef.current.send({
-                type: 'broadcast',
-                event: 'ephemeral_message',
+            // Broadcast message to recipient's global channel
+            const recipientChannel = `messages:${recipientPublicKey}`;
+            devLog('[useEphemeralMessages] Broadcasting to recipient channel:', recipientChannel);
+
+            await broadcastMessageUpdate(
+                // @ts-ignore - Payload type mismatch, but it works for broadcast
                 payload,
-            });
+                recipientChannel,
+                'ephemeral_message'
+            );
 
             // Add own message to local state (optimistic update)
             const ownMessage: EphemeralMessage = {
@@ -151,7 +154,8 @@ export function useEphemeralMessages({
         }
 
         const supabase = getSupabaseClient();
-        const channelName = `ephemeral:${conversationId}`;
+        // Subscribe to own global channel to receive messages
+        const channelName = `messages:${userPublicKey}`;
 
         devLog('[useEphemeralMessages] Subscribing to channel:', channelName);
         setConnectionState('connecting');
@@ -239,9 +243,10 @@ export function useEphemeralMessages({
                 setError(new Error('Ephemeral message channel connection timed out'));
                 console.error('[useEphemeralMessages] TIMED_OUT');
             } else if (status === 'CLOSED') {
+                // It's okay if it closes, we might be reconnecting or unmounting
                 setConnectionState('disconnected');
-                setError(new Error('Ephemeral message channel closed'));
-                console.error('[useEphemeralMessages] CLOSED - Connection was closed. Check Supabase URL and key');
+                // Don't set error for CLOSED as it might be intentional or transient
+                devLog('[useEphemeralMessages] CLOSED - Connection was closed.');
             }
         });
 

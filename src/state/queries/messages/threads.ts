@@ -25,6 +25,7 @@ export const fetchConversationThreads = async (
   threadMeta: ThreadMetaMap;
   hasMore: boolean;
   nextOffset: number | null;
+  accessGroups: AccessGroupEntryResponse[];
 }> => {
   if (!userPublicKey) {
     throw new Error("User public key is required");
@@ -51,6 +52,7 @@ export const fetchConversationThreads = async (
     threadMeta: result.threadMeta,
     hasMore: result.hasMore,
     nextOffset: result.hasMore ? offset + limit : null,
+    accessGroups: allAccessGroups,
   };
 };
 

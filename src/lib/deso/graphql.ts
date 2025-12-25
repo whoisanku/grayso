@@ -54,38 +54,7 @@ const GRAPHQL_QUERY = `
   }
 `;
 
-const ACCESS_GROUPS_QUERY = `
-  query AccessGroups(
-    $filter: AccessGroupFilter
-    $first: Int
-    $after: Cursor
-    $membersFirst: Int
-    $membersAfter: Cursor
-  ) {
-    accessGroups(filter: $filter, first: $first, after: $after) {
-      nodes {
-        accessGroupMembers(first: $membersFirst, after: $membersAfter) {
-          nodes {
-            member {
-              username
-              publicKey
-              profilePic
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-        extraData
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-  }
-`;
+
 
 type GraphqlMessageNode = {
   id: string;
@@ -124,20 +93,9 @@ export type GroupMember = {
   profilePic?: string | null;
 };
 
-type AccessGroupMembersNode = {
-  member: GroupMember;
-};
 
-type AccessGroupNode = {
-  accessGroupMembers?: {
-    nodes?: AccessGroupMembersNode[];
-    pageInfo?: {
-      hasNextPage?: boolean;
-      endCursor?: string | null;
-    };
-  };
-  extraData?: Record<string, string> | null;
-};
+
+
 
 export function normalizeTimestampToNanos(
   value: string | number | null | undefined
@@ -497,131 +455,7 @@ export async function fetchGroupMessagesViaGraphql({
   };
 }
 
-export async function fetchAccessGroupMembers({
-  accessGroupKeyName,
-  accessGroupOwnerPublicKey,
-  limit = 1000,
-  afterCursor,
-  graphqlEndpoint = process.env.EXPO_PUBLIC_DESO_GRAPHQL_URL ??
-  DEFAULT_GRAPHQL_URL,
-}: {
-  accessGroupKeyName: string;
-  accessGroupOwnerPublicKey: string;
-  limit?: number;
-  afterCursor?: string | null;
-  graphqlEndpoint?: string;
-}): Promise<{
-  members: GroupMember[];
-  pageInfo: { hasNextPage: boolean; endCursor: string | null };
-  extraData?: Record<string, string> | null;
-}> {
-  const filter: Record<string, unknown> = {
-    accessGroupKeyName: { equalTo: accessGroupKeyName },
-    accessGroupOwnerPublicKey: { equalTo: accessGroupOwnerPublicKey },
-  };
 
-  const variables: Record<string, unknown> = {
-    filter,
-    first: 1, // We only need one access group
-    membersFirst: limit,
-  };
-
-  if (afterCursor) {
-    variables.membersAfter = afterCursor;
-  }
-
-  const body = {
-    query: ACCESS_GROUPS_QUERY,
-    variables,
-  };
-
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-    console.log("[fetchAccessGroupMembers] request payload", {
-      accessGroupKeyName,
-      accessGroupOwnerPublicKey,
-      variables,
-    });
-  }
-
-  const response = await performGraphqlRequest(body, graphqlEndpoint);
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    const text = await response.text().catch(() => "");
-    throw new Error(
-      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
-        0,
-        120
-      )}…`
-    );
-  }
-
-  const json = (await response.json()) as {
-    data?: {
-      accessGroups?: {
-        nodes?: AccessGroupNode[];
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-      } | null;
-    } | null;
-    errors?: Array<{ message?: string }>;
-  };
-
-  if (json.errors?.length) {
-    throw new Error(
-      json.errors.map((entry) => entry.message).filter(Boolean).join("\n") ||
-      "GraphQL query failed"
-    );
-  }
-
-  const accessGroupsConnection = json.data?.accessGroups;
-  const firstAccessGroup = accessGroupsConnection?.nodes?.[0];
-
-  if (!firstAccessGroup?.accessGroupMembers) {
-    return {
-      members: [],
-      pageInfo: { hasNextPage: false, endCursor: null },
-    };
-  }
-
-  const membersConnection = firstAccessGroup.accessGroupMembers;
-  const memberNodes = membersConnection.nodes ?? [];
-
-  let members = memberNodes
-    .map((node) => node.member)
-    .filter((member): member is GroupMember => Boolean(member?.publicKey));
-
-  let currentCursor = membersConnection.pageInfo?.endCursor;
-  let hasMore = membersConnection.pageInfo?.hasNextPage ?? false;
-
-  while (hasMore && currentCursor) {
-    const nextPage = await fetchAccessGroupMembers({
-      accessGroupKeyName,
-      accessGroupOwnerPublicKey,
-      limit,
-      afterCursor: currentCursor,
-      graphqlEndpoint,
-    });
-
-    members = [...members, ...nextPage.members];
-    currentCursor = nextPage.pageInfo.endCursor;
-    hasMore = nextPage.pageInfo.hasNextPage;
-  }
-
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-    // eslint-disable-next-line no-console
-    console.log("[fetchAccessGroupMembers] fetched members", {
-      count: members.length,
-    });
-  }
-
-  return {
-    members,
-    pageInfo: {
-      hasNextPage: false,
-      endCursor: null,
-    },
-    extraData: firstAccessGroup.extraData || null,
-  };
-}
 
 export function buildDefaultProfileEntry(
   publicKey: string,
