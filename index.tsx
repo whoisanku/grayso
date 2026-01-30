@@ -1,10 +1,13 @@
 import "./shims";
-import "./font.css";
 import "./global.css";
 import { registerRootComponent } from "expo";
-import { inject } from "@vercel/analytics";
+import { Platform } from "react-native";
 import App from "./src/App";
 
-inject();
+if (Platform.OS === "web") {
+  require("./font.css");
+  const { inject } = require("@vercel/analytics");
+  inject();
+}
 
 registerRootComponent(App);

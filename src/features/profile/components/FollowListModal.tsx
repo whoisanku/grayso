@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  SafeAreaView,
   Text,
   TouchableOpacity,
   View,
   KeyboardAvoidingView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";

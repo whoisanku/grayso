@@ -6,13 +6,13 @@ import {
     TextInput,
     TouchableOpacity,
     ActivityIndicator,
-    SafeAreaView,
     ScrollView,
     Alert,
     Platform,
     Keyboard,
     KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';

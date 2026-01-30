@@ -1,4 +1,4 @@
-import React, { useContext, useCallback, useMemo } from "react";
+import React, { useContext, useCallback, useMemo, useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { HomeScreen } from "../features/messaging/screens/HomeScreen";
 import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
@@ -9,6 +9,7 @@ import UserIconFilled from "../assets/navIcons/user-filled.svg";
 import CreatePostIcon from "../assets/navIcons/create-post.svg";
 
 import { View, TouchableOpacity, Platform, DeviceEventEmitter, Text, useWindowDimensions, Pressable } from "react-native";
+import { Gesture } from "react-native-gesture-handler";
 import { Image } from "expo-image";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -23,14 +24,7 @@ import { FALLBACK_PROFILE_IMAGE, getProfileDisplayName } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import Animated, {
-  Easing,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../features/messaging/components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../features/messaging/components/desktop/DesktopRightNav";
@@ -44,6 +38,7 @@ import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
 import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
 import { ProfileStats } from "@/features/profile/components/ProfileStats";
 import { useAccountProfile } from "@/features/profile/api/useAccountProfile";
+import { useIsDrawerOpen, useSetDrawerOpen, useIsDrawerSwipeDisabled } from "@/state/shell";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
@@ -199,9 +194,12 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const { width: windowWidth } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-  const [isDrawerVisible, setIsDrawerVisible] = React.useState(false);
-  const drawerProgress = useSharedValue(0);
+  // Use context-based drawer state management
+  const isDrawerOpen = useIsDrawerOpen();
+  const setDrawerOpen = useSetDrawerOpen();
+  const isDrawerSwipeDisabled = useIsDrawerSwipeDisabled();
+  
+  const [trendingScrollGesture] = useState(() => Gesture.Native());
   const [activeTab, setActiveTab] = React.useState<keyof HomeTabParamList>("Messages");
   
   const drawerWidth = useMemo(() => Math.min(280, windowWidth * 0.7), [windowWidth]);
@@ -226,45 +224,14 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
       DRAWER_STATE_EVENT,
       (payload: { requestOpen?: boolean }) => {
         if (payload.requestOpen !== undefined) {
-          setIsDrawerOpen(payload.requestOpen);
+          setDrawerOpen(payload.requestOpen);
         }
       }
     );
     return () => subscription.remove();
-  }, []);
+  }, [setDrawerOpen]);
 
-  // Smooth drawer progress for web
-  React.useEffect(() => {
-    if (isDrawerOpen) {
-      setIsDrawerVisible(true);
-      drawerProgress.value = withTiming(1, {
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-      });
-      return;
-    }
 
-    drawerProgress.value = withTiming(
-      0,
-      { duration: 200, easing: Easing.out(Easing.cubic) },
-      (finished) => {
-        if (finished) {
-          runOnJS(setIsDrawerVisible)(false);
-        }
-      }
-    );
-  }, [drawerProgress, isDrawerOpen]);
-
-  const overlayAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(drawerProgress.value, [0, 1], [0, isDark ? 0.85 : 0.7]),
-  }));
-
-  const drawerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: interpolate(drawerProgress.value, [0, 1], [-drawerWidth, 0]) },
-    ],
-    shadowOpacity: interpolate(drawerProgress.value, [0, 1], [0.05, 0.2]),
-  }));
 
   const renderDrawerContent = useCallback(() => (
     <View
@@ -314,7 +281,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
           activeOpacity={0.7}
           onPress={() => {
-            setIsDrawerOpen(false);
+            setDrawerOpen(false);
             rootNavigation.navigate("Main", { screen: "Messages" });
           }}
         >
@@ -329,7 +296,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
           activeOpacity={0.7}
           onPress={() => {
-            setIsDrawerOpen(false);
+            setDrawerOpen(false);
             rootNavigation.navigate("Main", { screen: "Profile" });
           }}
         >
@@ -344,7 +311,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
           activeOpacity={0.7}
           onPress={() => {
-            setIsDrawerOpen(false);
+            setDrawerOpen(false);
             rootNavigation.navigate("Settings");
           }}
         >
@@ -443,57 +410,38 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
 
 
 
-  // Web: Custom drawer implementation (non-desktop)
-  if (Platform.OS === "web") {
-    return (
-      <View className="flex-1">
-        {renderTabNavigator()}
-        {isDrawerVisible && (
-          <View className="absolute inset-0 z-50" pointerEvents="box-none">
-            <Pressable
-              onPress={() => setIsDrawerOpen(false)}
-              className="absolute inset-0"
-            >
-              <Animated.View
-                style={[
-                  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-                  overlayAnimatedStyle,
-                  { backgroundColor: isDark ? '#000000' : '#000000' },
-                ]}
-                pointerEvents="none"
-              />
-            </Pressable>
-            <Animated.View
-              style={[
-                { 
-                  width: drawerWidth, 
-                  height: "100%", 
-                  position: "absolute", 
-                  top: 0, 
-                  left: 0,
-                  borderRightWidth: 0.5,
-                  borderRightColor: getBorderColor(isDark, 'contrast_low'),
-                },
-                drawerAnimatedStyle,
-              ]}
-              className="bg-white dark:bg-[#0a0f1a] shadow-2xl"
-              pointerEvents="box-none"
-            >
-              {renderDrawerContent()}
-            </Animated.View>
-          </View>
-        )}
-      </View>
-    );
-  }
 
-  // Native: Use Drawer component wrapping the tab navigator
+
+  // Native: Use Drawer component wrapping the tab navigator with optimized gesture handling
+  const swipeEnabled = !isDrawerSwipeDisabled;
+  
   return (
     <Drawer
       open={isDrawerOpen}
-      onOpen={() => setIsDrawerOpen(true)}
-      onClose={() => setIsDrawerOpen(false)}
+      onOpen={() => setDrawerOpen(true)}
+      onClose={() => setDrawerOpen(false)}
       renderDrawerContent={renderDrawerContent}
+      configureGestureHandler={(handler) => {
+        handler = handler.requireExternalGestureToFail(trendingScrollGesture);
+
+        if (swipeEnabled) {
+          if (isDrawerOpen) {
+            // When drawer is open, any touch can close it
+            return handler.activeOffsetX([-1, 1]);
+          } else {
+            return (
+              handler
+                // Any movement to the left is blocked (prevents conflicts)
+                .failOffsetX(-1)
+                // Don't rush declaring drawer swipe - wait for horizontal movement
+                .activeOffsetX(5)
+            );
+          }
+        } else {
+          // Fail the gesture immediately when swipe is disabled
+          return handler.failOffsetX([0, 0]).failOffsetY([0, 0]);
+        }
+      }}
       drawerType={Platform.OS === "ios" ? "slide" : "front"}
       drawerStyle={{ width: drawerWidth }}
       overlayStyle={{ 
@@ -501,7 +449,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           ? "rgba(10, 13, 16, 0.8)" 
           : "rgba(0, 57, 117, 0.1)" 
       }}
-      swipeEnabled
+
       swipeEdgeWidth={windowWidth}
       swipeMinVelocity={100}
       swipeMinDistance={10}

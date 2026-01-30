@@ -25,6 +25,7 @@ import { AppearanceProvider } from "./state/theme/useAppearance";
 import { AppToast } from "./components/ui/Toast";
 import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
 import { useAppFonts } from "@/hooks/useAppFonts";
+import { DrawerOpenProvider, DrawerSwipeDisabledProvider } from "@/state/shell";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -73,19 +74,23 @@ export default function App() {
             <DeSoIdentityProvider>
               <CryptoPolyfill />
               <SafeAreaProvider>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                    <StatusBar
-                      style={colorScheme === "dark" ? "light" : "dark"}
-                    />
-                    <NavigationContainer
-                      theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                    >
-                      <RootNavigator />
-                    </NavigationContainer>
-                  </KeyboardProvider>
-                  <AppToast />
-                </GestureHandlerRootView>
+                <DrawerOpenProvider>
+                  <DrawerSwipeDisabledProvider>
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+                        <StatusBar
+                          style={colorScheme === "dark" ? "light" : "dark"}
+                        />
+                        <NavigationContainer
+                          theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                        >
+                          <RootNavigator />
+                        </NavigationContainer>
+                      </KeyboardProvider>
+                      <AppToast />
+                    </GestureHandlerRootView>
+                  </DrawerSwipeDisabledProvider>
+                </DrawerOpenProvider>
               </SafeAreaProvider>
             </DeSoIdentityProvider>
           </AppThemeProvider>

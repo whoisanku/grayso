@@ -23,6 +23,7 @@ import { AppearanceProvider } from "./state/theme/useAppearance";
 import { RootStackParamList } from "./navigation/types";
 import { AppToast } from "./components/ui/Toast";
 import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
+import { DrawerOpenProvider, DrawerSwipeDisabledProvider } from "@/state/shell";
 
 // Web specific config if needed
 configure({
@@ -39,7 +40,7 @@ const linking: LinkingOptions<RootStackParamList> = {
       Main: {
         screens: {
           Messages: "",
-          Profile: "profile",
+          Profile: "u/:username?",
         },
       },
       Settings: "settings",
@@ -47,7 +48,6 @@ const linking: LinkingOptions<RootStackParamList> = {
       Conversation: "conversation/:threadPublicKey",
       NewChat: "new-chat",
       Login: "login",
-      UserProfile: "profile/:username",
     },
   },
 };
@@ -63,17 +63,21 @@ export default function App() {
             <DeSoIdentityProvider>
               <CryptoPolyfill />
               <SafeAreaProvider>
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-                  <NavigationContainer
-                    linking={linking}
-                    theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                    documentTitle={{ formatter: () => "Grayso" }}
-                  >
-                    <RootNavigator />
-                  </NavigationContainer>
-                  <AppToast />
-                </GestureHandlerRootView>
+                <DrawerOpenProvider>
+                  <DrawerSwipeDisabledProvider>
+                    <GestureHandlerRootView style={{ flex: 1 }}>
+                      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                      <NavigationContainer
+                        linking={linking}
+                        theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                        documentTitle={{ formatter: () => "Grayso" }}
+                      >
+                        <RootNavigator />
+                      </NavigationContainer>
+                      <AppToast />
+                    </GestureHandlerRootView>
+                  </DrawerSwipeDisabledProvider>
+                </DrawerOpenProvider>
               </SafeAreaProvider>
             </DeSoIdentityProvider>
           </AppThemeProvider>

@@ -66,6 +66,7 @@ import {
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
+import { useSetDrawerOpen } from "@/state/shell";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
@@ -317,9 +318,10 @@ export function HomeScreen() {
   );
 
   // Helper to open drawer (controlled by HomeTabs)
+  const setDrawerOpen = useSetDrawerOpen();
   const openDrawer = useCallback(() => {
-    DeviceEventEmitter.emit(DRAWER_STATE_EVENT, { requestOpen: true });
-  }, []);
+    setDrawerOpen(true);
+  }, [setDrawerOpen]);
 
   const { isDesktop } = useLayoutBreakpoints();
   const isDesktopWeb = Platform.OS === "web" && isDesktop;
