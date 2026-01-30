@@ -573,9 +573,12 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   const handleAvatarPress = useCallback(
     (publicKey: string, username?: string) => {
-      navigation.navigate("UserProfile", {
-        username: username || undefined,
-        publicKey: publicKey,
+      navigation.navigate("Main", {
+        screen: "Profile",
+        params: {
+          username: username || undefined,
+          publicKey: publicKey,
+        },
       });
     },
     [navigation]
@@ -790,9 +793,12 @@ export function ConversationScreen({ navigation, route }: Props) {
                 setShowMembersModal(true);
               } else {
                 // Navigate to DM partner's profile
-                navigation.navigate("UserProfile", {
-                  username: headerProfile?.Username || undefined,
-                  publicKey: counterPartyPublicKey,
+                navigation.navigate("Main", {
+                  screen: "Profile",
+                  params: {
+                    username: headerProfile?.Username || undefined,
+                    publicKey: counterPartyPublicKey,
+                  },
                 });
               }
             }}
@@ -1370,9 +1376,12 @@ export function ConversationScreen({ navigation, route }: Props) {
                             <TouchableOpacity
                               onPress={() => {
                                 setShowAddMemberModal(false);
-                                navigation.navigate("UserProfile", {
-                                  username: user.username || undefined,
-                                  publicKey: user.publicKey,
+                                navigation.navigate("Main", {
+                                  screen: "Profile",
+                                  params: {
+                                    username: user.username || undefined,
+                                    publicKey: user.publicKey,
+                                  },
                                 });
                               }}
                               activeOpacity={0.7}
@@ -1532,9 +1541,12 @@ export function ConversationScreen({ navigation, route }: Props) {
                           <TouchableOpacity
                             onPress={() => {
                               setShowMembersModal(false);
-                              navigation.navigate("UserProfile", {
-                                username: member.username || undefined,
-                                publicKey: member.publicKey,
+                              navigation.navigate("Main", {
+                                screen: "Profile",
+                                params: {
+                                  username: member.username || undefined,
+                                  publicKey: member.publicKey,
+                                },
                               });
                             }}
                             activeOpacity={0.7}

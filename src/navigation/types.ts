@@ -20,7 +20,10 @@ export type ConversationRouteParams = {
 export type HomeTabParamList = {
   Messages: undefined;
   Post: undefined;
-  Profile: undefined;
+  Profile: {
+    username?: string;
+    publicKey?: string;
+  } | undefined;
 };
 
 export type RootStackParamList = {
@@ -30,10 +33,6 @@ export type RootStackParamList = {
   Conversation: ConversationRouteParams;
   Settings: undefined;
   NewChat: undefined;
-  UserProfile: {
-    username?: string;
-    publicKey?: string;
-  };
 };
 
 export type ConversationScreenRouteProp = RouteProp<

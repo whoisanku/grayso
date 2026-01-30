@@ -118,7 +118,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               justifyContent: "center",
             }}
           >
-            <CreatePostIcon width={22} height={22} color="white" fill="white" stroke="white" />
+            <CreatePostIcon width={18} height={18} color="white" fill="white" stroke="white" />
           </View>
         </TouchableOpacity>
       );

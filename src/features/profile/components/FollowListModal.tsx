@@ -108,9 +108,12 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
     // Close modal
     onClose();
     // Navigate to user profile
-    navigation.navigate('UserProfile', {
-      username: account.username || undefined,
-      publicKey: account.publicKey,
+    navigation.navigate('Main', {
+      screen: 'Profile',
+      params: {
+        username: account.username || undefined,
+        publicKey: account.publicKey,
+      }
     });
   }, [navigation, onClose]);
 

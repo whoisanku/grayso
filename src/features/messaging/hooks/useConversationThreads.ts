@@ -58,6 +58,7 @@ export const useConversationThreads = (
   const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [reconnectKey, setReconnectKey] = useState(0);
   const accessGroupsRef = useRef<AccessGroupEntryResponse[]>([]);
+  const hasLoggedErrorRef = useRef(false);
 
   // Hydrate cached conversations immediately for fast paint
   useEffect(() => {
@@ -414,12 +415,16 @@ export const useConversationThreads = (
         if (!isMounted) return;
         if (status === "SUBSCRIBED") {
           console.log("[useConversationThreads] Subscribed to global channel");
+          hasLoggedErrorRef.current = false; // Reset on successful connection
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          console.warn(`[useConversationThreads] Channel status: ${status}. Attempting to reconnect...`);
+          if (!hasLoggedErrorRef.current) {
+            console.warn(`[useConversationThreads] Channel ${status}. Will attempt reconnects silently.`);
+            hasLoggedErrorRef.current = true;
+          }
           // Trigger re-subscription after a short delay
           setTimeout(() => {
             if (isMounted) setReconnectKey(prev => prev + 1);
-          }, 1000);
+          }, 3000); // Increased delay to reduce reconnect frequency
         }
       });
 

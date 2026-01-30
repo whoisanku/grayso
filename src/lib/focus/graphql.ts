@@ -432,7 +432,7 @@ const focusAccountSchema = z.object({
   publicKey: z.string(),
   username: z.string().nullish(),
   description: z.string().nullish(),
-  extraData: z.record(z.any()).nullish(),
+  extraData: z.record(z.string(), z.unknown()).nullish(),
   pkid: z.string().nullish(),
   isVerified: z.boolean().nullish(),
   creatorBasisPoints: z.string().nullish(),

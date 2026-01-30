@@ -2,24 +2,37 @@ import React, { useContext, useMemo, useState, useCallback } from "react";
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Platform } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useColorScheme } from "nativewind";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { ProfileHeader } from "../components/ProfileHeader";
 import { ProfileStats } from "../components/ProfileStats";
 import { useAccountProfile } from "../api/useAccountProfile";
 import { Toast } from "@/components/ui/Toast";
 import { FollowListModal } from "../components/FollowListModal";
+import { HomeTabParamList } from "@/navigation/types";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+type ProfileScreenRouteProp = RouteProp<HomeTabParamList, "Profile">;
 
 export function ProfileScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<ProfileScreenRouteProp>();
   const { currentUser } = useContext(DeSoIdentityContext);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
 
   const [isModalVisible, setModalVisible] = useState(false);
   const [listTab, setListTab] = useState<"followers" | "following">("followers");
 
-  const publicKey = currentUser?.PublicKeyBase58Check;
+  // Get params from route (for other users) or fallback to current user
+  const { username, publicKey: routePublicKey } = route.params || {};
+  
+  // Prioritize route params, then fallback to current user
+  const publicKey = routePublicKey || currentUser?.PublicKeyBase58Check;
+  
+  // Check if viewing own profile
+  const isOwnProfile = publicKey === currentUser?.PublicKeyBase58Check;
 
   const {
     data: account,
@@ -50,6 +63,19 @@ export function ProfileScreen() {
 
   const handleCloseModal = useCallback(() => setModalVisible(false), []);
 
+  // Update header title based on username
+  React.useEffect(() => {
+    if (account?.username) {
+      navigation.setOptions({
+        title: `@${account.username}`,
+      });
+    } else if (username) {
+      navigation.setOptions({
+        title: `@${username}`,
+      });
+    }
+  }, [account?.username, username, navigation]);
+
   if (!publicKey) {
     return (
       <ScreenWrapper backgroundColor={isDark ? "#0a0f1a" : "#ffffff"} edges={['top', 'left', 'right']}>
@@ -69,7 +95,9 @@ export function ProfileScreen() {
       edges={['top', 'left', 'right']}
     >
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ 
+          paddingBottom: isOwnProfile ? 32 : (32 + 70 + Math.max(insets.bottom, 15))
+        }}
         refreshControl={
           Platform.OS !== "web" ? (
             <RefreshControl
@@ -121,14 +149,8 @@ export function ProfileScreen() {
             <ProfileHeader 
               account={account} 
               onAvatarPress={handleFollowersPress}
-              showBackButton={true}
-              onBackPress={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                } else {
-                  navigation.navigate("Messages");
-                }
-              }}
+              showBackButton={!isOwnProfile}
+              onBackPress={() => navigation.goBack()}
             />
 
             {/* Stats */}
