@@ -34,7 +34,7 @@ const USER_TO_SEND_MESSAGE_TO = ""; // Add a public key here
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 };
@@ -444,11 +444,11 @@ const pickProfilePicFromExtraData = (
 const pickDefaultAccessGroup = (
   account?: {
     accessGroupsOwned?: {
-      nodes?: Array<{
+      nodes?: {
         accessGroupPublicKey?: string | null;
         accessGroupKeyName?: string | null;
         accessGroupOwnerPublicKey?: string | null;
-      }> | null;
+      }[] | null;
     } | null;
   },
   fallbackOwner?: string | null

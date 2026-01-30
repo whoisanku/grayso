@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { getSupabaseClient, isSupabaseConfigured, getPresenceChannel, getBroadcastChannel, MessageBroadcastPayload } from '../../../lib/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured, getBroadcastChannel, MessageBroadcastPayload } from '../../../lib/supabaseClient';
 
 export type PresenceState = {
     [key: string]: {
@@ -29,7 +29,7 @@ const PRESENCE_TIMEOUT = 45000; // 45 seconds - consider offline if no heartbeat
 
 const devLog = (...args: unknown[]) => {
     if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
+         
         console.log(...args);
     }
 };

@@ -1,6 +1,5 @@
 import {
   AccessGroupEntryResponse,
-  ChatType,
   PublicKeyToProfileEntryResponseMap,
 } from "deso-protocol";
 import {

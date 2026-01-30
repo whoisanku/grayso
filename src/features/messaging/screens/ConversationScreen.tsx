@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Platform,
   StyleSheet,
@@ -79,11 +78,10 @@ import {
   useLayoutBreakpoints,
 } from "@/alf/breakpoints";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
-import UserGroupIconFilled from "@/assets/navIcons/user-group-filled.svg";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 };
@@ -172,6 +170,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   // Ref to store Composer's focusInput function for synchronous keyboard triggering
   const focusInputRef = useRef<(() => void) | null>(null);
+  const didInitialScrollRef = useRef(false);
 
   const modalIconButtonStyle = useMemo(
     () => ({
@@ -536,7 +535,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     }),
   };
 
-  // No need to scrollToEnd with inverted list - newest messages automatically at bottom
+  // Keep non-inverted list so newest messages appear at the bottom
 
   // --- Render Helpers ---
 
@@ -571,6 +570,10 @@ export function ConversationScreen({ navigation, route }: Props) {
   // Supabase is only used for broadcast notifications, not message storage
   const displayMessages = messages;
 
+  useEffect(() => {
+    didInitialScrollRef.current = false;
+  }, [conversationId]);
+
   const handleAvatarPress = useCallback(
     (publicKey: string, username?: string) => {
       navigation.navigate("Main", {
@@ -584,6 +587,36 @@ export function ConversationScreen({ navigation, route }: Props) {
     [navigation]
   );
 
+  const handleBubbleMeasure = useCallback(
+    (id: string, layout: { x: number; y: number; width: number; height: number }) => {
+      bubbleLayoutsRef.current.set(id, layout);
+    },
+    [bubbleLayoutsRef]
+  );
+
+  const listData = useMemo(() => {
+    if (!displayMessages.length) return [];
+    return [...displayMessages].sort((a, b) => {
+      const aTs = a.MessageInfo?.TimestampNanos ?? 0;
+      const bTs = b.MessageInfo?.TimestampNanos ?? 0;
+      return aTs - bTs; // oldest first for non-inverted list
+    });
+  }, [displayMessages]);
+
+  useEffect(() => {
+    if (isLoading || !listData.length) return;
+    if (didInitialScrollRef.current) return;
+
+    didInitialScrollRef.current = true;
+    requestAnimationFrame(() => {
+      try {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      } catch (err) {
+        console.warn("[ConversationScreen] initial scrollToEnd failed", err);
+      }
+    });
+  }, [isLoading, listData.length]);
+
   const renderItem = useCallback(
     ({
       item,
@@ -592,8 +625,8 @@ export function ConversationScreen({ navigation, route }: Props) {
       item: DecryptedMessageEntryResponse;
       index: number;
     }) => {
-      const previousMessage = messages[index + 1];
-      const nextMessage = messages[index - 1];
+      const previousMessage = listData[index - 1];
+      const nextMessage = listData[index + 1];
       const previousTimestamp = previousMessage?.MessageInfo?.TimestampNanos;
 
       return (
@@ -606,9 +639,7 @@ export function ConversationScreen({ navigation, route }: Props) {
           isGroupChat={isGroupChat}
           onReply={handleReply}
           onLongPress={handleMessageLongPress}
-          onBubbleMeasure={(id, layout) => {
-            bubbleLayoutsRef.current.set(id, layout);
-          }}
+          onBubbleMeasure={handleBubbleMeasure}
           messageIdMap={messageIdMap}
           isDark={isDark}
           onAvatarPress={handleAvatarPress}
@@ -622,9 +653,9 @@ export function ConversationScreen({ navigation, route }: Props) {
       isGroupChat,
       messageIdMap,
       profilesForUi,
-      bubbleLayoutsRef,
-      messages,
+      listData,
       handleAvatarPress,
+      handleBubbleMeasure,
     ]
   );
 
@@ -645,10 +676,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     []
   );
 
-  const flashListData = useMemo(
-    () => (enableFlashListChat ? [...displayMessages].reverse() : displayMessages),
-    [displayMessages, enableFlashListChat]
-  );
+  const flashListData = listData;
 
   const handleListScroll = useCallback(
     (e: any) => {
@@ -657,21 +685,10 @@ export function ConversationScreen({ navigation, route }: Props) {
 
       scrollOffsetRef.current = rawOffsetY;
 
-      if (enableFlashListChat) {
-        const distanceToBottom =
-          contentSize.height - layoutMeasurement.height - rawOffsetY;
-        if (distanceToBottom > SCROLL_TO_BOTTOM_THRESHOLD) {
-          if (!showScrollToBottom) {
-            scrollToBottomAnim.setValue(1);
-            setShowScrollToBottom(true);
-          }
-        } else {
-          if (showScrollToBottom) setShowScrollToBottom(false);
-        }
-        return;
-      }
+      const distanceToBottom =
+        contentSize.height - layoutMeasurement.height - rawOffsetY;
 
-      if (rawOffsetY > SCROLL_TO_BOTTOM_THRESHOLD) {
+      if (distanceToBottom > SCROLL_TO_BOTTOM_THRESHOLD) {
         if (!showScrollToBottom) {
           scrollToBottomAnim.setValue(1);
           setShowScrollToBottom(true);
@@ -680,12 +697,7 @@ export function ConversationScreen({ navigation, route }: Props) {
         if (showScrollToBottom) setShowScrollToBottom(false);
       }
     },
-    [
-      enableFlashListChat,
-      scrollToBottomAnim,
-      showScrollToBottom,
-      setShowScrollToBottom,
-    ]
+    [scrollToBottomAnim, showScrollToBottom, setShowScrollToBottom]
   );
 
   const isPaginating = useMemo(() => {
@@ -706,7 +718,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     );
   }, [hasMore, isDark]);
 
-  // Typing indicator and error footer (appears at visual BOTTOM for inverted list)
+  // Typing indicator and error footer (visual bottom)
   const bottomListFooter = useMemo(() => {
     if (error) {
       return (
@@ -893,8 +905,6 @@ export function ConversationScreen({ navigation, route }: Props) {
                   contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingTop: 12,
-                    flexGrow: 1,
-                    justifyContent: "flex-end",
                   }}
                   onStartReached={() => {
                     if (!isLoading && hasMore) {
@@ -902,12 +912,6 @@ export function ConversationScreen({ navigation, route }: Props) {
                     }
                   }}
                   onStartReachedThreshold={0.3}
-                  maintainVisibleContentPosition={{
-                    autoscrollToTopThreshold: 40,
-                    autoscrollToBottomThreshold: 80,
-                    animateAutoScrollToBottom: true,
-                    startRenderingFromBottom: true,
-                  }}
                   onScroll={handleListScroll}
                   scrollEventThrottle={16}
                   keyboardShouldPersistTaps="handled"
@@ -944,42 +948,33 @@ export function ConversationScreen({ navigation, route }: Props) {
                   )}
                 />
               ) : (
-                <FlatList<DecryptedMessageEntryResponse>
+                <FlashList<DecryptedMessageEntryResponse>
                   ref={flatListRef}
-                  data={displayMessages}
+                  data={flashListData}
                   keyExtractor={keyExtractor}
                   renderItem={renderItem}
-                  inverted={true}
-                  // With inverted list: Footer appears at visual TOP, Header at visual BOTTOM
-                  ListFooterComponent={topListHeader}
-                  ListHeaderComponent={bottomListFooter}
+                  ListHeaderComponent={topListHeader}
+                  ListFooterComponent={bottomListFooter}
                   showsVerticalScrollIndicator={Platform.OS === "web"}
                   style={scrollBarStyle}
                   contentContainerStyle={{
                     paddingHorizontal: 16,
                     paddingTop: 12,
                   }}
-                  // Load older messages when scrolling toward the "end" (visually = top)
-                  onEndReached={() => {
+                  onStartReached={() => {
                     if (!isLoading && hasMore) {
                       loadMessages(false);
                     }
                   }}
-                  onEndReachedThreshold={0.3}
+                  onStartReachedThreshold={0.3}
                   onScroll={handleListScroll}
                   scrollEventThrottle={16}
                   keyboardShouldPersistTaps="handled"
                   keyboardDismissMode="interactive"
-                  // Performance optimizations - especially important for web
-                  windowSize={Platform.OS === "web" ? 21 : 11}
-                  maxToRenderPerBatch={Platform.OS === "web" ? 5 : 10}
-                  initialNumToRender={Platform.OS === "web" ? 15 : 20}
-                  removeClippedSubviews={Platform.OS !== "web"}
-                  updateCellsBatchingPeriod={Platform.OS === "web" ? 100 : 50}
                   ListEmptyComponent={() => (
                     <View
                       className="items-center justify-center px-6 py-10"
-                      style={{ minHeight: 400, transform: [{ scaleY: -1 }] }}
+                      style={{ minHeight: 400 }}
                     >
                       {isLoading ? (
                         <View className="items-center">
@@ -1035,18 +1030,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                       useNativeDriver: true,
                     }).start(() => setShowScrollToBottom(false));
                     try {
-                      if (enableFlashListChat) {
-                        flatListRef.current?.scrollToEnd({ animated: true });
-                      } else {
-                        // With inverted list, offset 0 = visual bottom (newest messages)
-                        flatListRef.current?.scrollToOffset({
-                          offset: 0,
-                          animated: true,
-                        });
-                      }
+                      flatListRef.current?.scrollToEnd({ animated: true });
                     } catch (err) {
                       console.warn(
-                        "[ConversationScreen] scrollToOffset failed",
+                        "[ConversationScreen] scrollToEnd failed",
                         err
                       );
                     }
@@ -1349,7 +1336,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       </View>
                     </View>
 
-                    <FlatList
+                    <FlashList
                       data={searchResults}
                       extraData={addingMemberKey}
                       keyExtractor={(item) => item.publicKey}
@@ -1522,7 +1509,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                   </>
                 ) : (
                   // Group Members Content
-                  <FlatList
+                  <FlashList
                     data={[...groupMembers].sort((a, b) => {
                       // Put admin (owner) at the top
                       if (a.publicKey === recipientOwnerKey) return -1;

@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import {
   DecryptedMessageEntryResponse,
-  PublicKeyToProfileEntryResponseMap,
 } from "deso-protocol";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";

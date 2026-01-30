@@ -17,7 +17,7 @@ import { type RootStackParamList } from "@/navigation/types";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { buildProfilePictureUrl, submitPost, identity } from "deso-protocol";
+import { buildProfilePictureUrl, submitPost } from "deso-protocol";
 import { uploadImage, uploadVideo } from "@/lib/media";
 import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, Dimensions, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +12,7 @@ export type ImageGalleryModalProps = {
 };
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 export const ImageGalleryModal = React.memo(({
     visible,
@@ -111,7 +113,9 @@ export const ImageGalleryModal = React.memo(({
                             maxWidth: SCREEN_WIDTH * 0.9,
                             maxHeight: SCREEN_HEIGHT * 0.75,
                         }}
-                        resizeMode="contain"
+                        contentFit="contain"
+                        placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
+                        transition={500}
                     />
 
                     {/* Next Button */}
@@ -138,6 +142,9 @@ export const ImageGalleryModal = React.memo(({
                                     <Image 
                                         source={{ uri }} 
                                         className="h-full w-full"
+                                        contentFit="cover"
+                                        placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
+                                        transition={500}
                                     />
                                 </TouchableOpacity>
                             ))}

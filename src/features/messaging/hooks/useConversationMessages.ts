@@ -8,7 +8,6 @@ import {
 } from "deso-protocol";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
-    encryptAndSendNewMessage,
     fetchPaginatedDmThreadMessages,
     fetchPaginatedGroupThreadMessages,
     decryptAccessGroupMessages,
@@ -18,7 +17,7 @@ import {
     MESSAGE_PAGE_SIZE,
     DEFAULT_KEY_MESSAGING_GROUP_NAME,
 } from "@/constants/messaging";
-import { getDisplayedMessageText, getMessageId, normalizeAndSortMessages } from "../../../utils/messageUtils";
+import { normalizeAndSortMessages } from "../../../utils/messageUtils";
 import { DeviceEventEmitter, Platform } from "react-native";
 import { OUTGOING_MESSAGE_EVENT } from "@/constants/events";
 import { StorageService } from "@/lib/storage";

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Modal, TouchableOpacity, StyleSheet, ActivityIndicator, Text, Platform, StatusBar } from 'react-native';
+import { View, Modal, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';

@@ -110,6 +110,8 @@ export const useConversationThreads = (
         });
       } catch (e: any) {
         const message: string = e?.message ?? "";
+        
+        // Log decryption errors but don't show UI error
         if (message.includes("Cannot decrypt messages")) {
           console.warn("Unable to decrypt conversations for current user", {
             publicKey: currentUser?.PublicKeyBase58Check,
@@ -121,7 +123,21 @@ export const useConversationThreads = (
             console.warn("Failed to logout after decryption error", logoutError);
           }
         }
-        throw e;
+        
+        // Log all fetch errors to console but return empty structure to prevent UI error
+        console.error("[useConversationThreads] Fetch error:", e);
+        
+        // Return empty structure instead of throwing
+        return {
+          conversations: {},
+          profiles: {},
+          groupMembers: {},
+          groupExtraData: {},
+          threadMeta: {},
+          hasMore: false,
+          nextOffset: null,
+          accessGroups: [],
+        };
       }
     },
     getNextPageParam: (lastPage) =>

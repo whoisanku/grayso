@@ -425,7 +425,7 @@ export async function fetchGroupMessagesViaGraphql({
         pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
       } | null;
     } | null;
-    errors?: Array<{ message?: string }>;
+    errors?: { message?: string }[];
   };
 
   if (json.errors?.length) {

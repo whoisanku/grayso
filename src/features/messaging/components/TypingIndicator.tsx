@@ -9,11 +9,15 @@ interface TypingIndicatorProps {
 export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ 
   isDark = true 
 }) => {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const dot1Ref = useRef(new Animated.Value(0));
+  const dot2Ref = useRef(new Animated.Value(0));
+  const dot3Ref = useRef(new Animated.Value(0));
 
   useEffect(() => {
+    const dot1 = dot1Ref.current;
+    const dot2 = dot2Ref.current;
+    const dot3 = dot3Ref.current;
+
     const createBounce = (dot: Animated.Value, delay: number) => {
       return Animated.loop(
         Animated.sequence([
@@ -42,7 +46,7 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
     animation.start();
 
     return () => animation.stop();
-  }, [dot1, dot2, dot3]);
+  }, []);
 
   // Chat bubble styling matching MessageBubble for received messages
   const bubbleBackgroundColor = isDark ? '#1e2738' : '#f8fafc';
@@ -80,19 +84,19 @@ export const TypingIndicator: React.FC<TypingIndicatorProps> = ({
         <Animated.View
           style={[
             styles.dot,
-            { backgroundColor: dotColor, transform: [{ translateY: dot1 }] },
+            { backgroundColor: dotColor, transform: [{ translateY: dot1Ref.current }] },
           ]}
         />
         <Animated.View
           style={[
             styles.dot,
-            { backgroundColor: dotColor, transform: [{ translateY: dot2 }] },
+            { backgroundColor: dotColor, transform: [{ translateY: dot2Ref.current }] },
           ]}
         />
         <Animated.View
           style={[
             styles.dot,
-            { backgroundColor: dotColor, transform: [{ translateY: dot3 }] },
+            { backgroundColor: dotColor, transform: [{ translateY: dot3Ref.current }] },
           ]}
         />
       </View>

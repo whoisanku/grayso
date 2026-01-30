@@ -3,14 +3,14 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
-  FlatList,
-  Image,
+  Pressable,
   ActivityIndicator,
   Keyboard,
   Platform,
 } from "react-native";
-import { BlurView } from "expo-blur";
+import { FlashList } from "@shopify/flash-list";
+import { Image } from "expo-image";
+import { Pressable as GesturePressable } from "react-native-gesture-handler";
 import { Feather } from "@expo/vector-icons";
 import { buildProfilePictureUrl } from "deso-protocol";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,7 +18,6 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ChatType } from "deso-protocol";
-import { LiquidGlassView } from "../../../utils/liquidGlass";
 import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey } from "@/utils/deso";
 import { RootStackParamList } from "@/navigation/types";
@@ -27,7 +26,9 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 
 type NewChatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-function ProfileItem({
+const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
+
+const ProfileItem = React.memo(function ProfileItem({
   item,
   onSelect,
   isDark,
@@ -43,34 +44,41 @@ function ProfileItem({
     : FALLBACK_PROFILE_IMAGE;
 
   return (
-    <TouchableOpacity
-      className="flex-row items-center px-4 py-3"
+    <GesturePressable
       onPress={() => onSelect(item)}
-      activeOpacity={0.7}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.8 : 1,
+      })}
     >
-      <Image
-        source={{ uri: avatarUrl }}
-        className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
-      />
-      <View className="ml-3 flex-1">
-        <Text
-          className="text-base font-semibold text-slate-900 dark:text-white"
-          numberOfLines={1}
-        >
-          {item.username || formatPublicKey(item.publicKey)}
-        </Text>
-        {item.username && (
+      <View className="flex-row items-center px-4 py-3">
+        <Image
+          source={{ uri: avatarUrl }}
+          className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
+          placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
+          transition={500}
+        />
+        <View className="ml-3 flex-1">
           <Text
-            className="text-sm text-slate-500 dark:text-slate-400"
+            className="text-base font-semibold text-slate-900 dark:text-white"
             numberOfLines={1}
           >
-            {formatPublicKey(item.publicKey)}
+            {item.username || formatPublicKey(item.publicKey)}
           </Text>
-        )}
+          {item.username && (
+            <Text
+              className="text-sm text-slate-500 dark:text-slate-400"
+              numberOfLines={1}
+            >
+              {formatPublicKey(item.publicKey)}
+            </Text>
+          )}
+        </View>
       </View>
-    </TouchableOpacity>
+    </GesturePressable>
   );
-}
+});
+
+ProfileItem.displayName = "ProfileItem";
 
 export function NewChatScreen() {
   const { isDark, accentColor } = useAccentColor();
@@ -146,6 +154,13 @@ export function NewChatScreen() {
     navigation.goBack();
   }, [navigation]);
 
+  const renderItem = useCallback(
+    ({ item }: { item: UserSearchResult }) => (
+      <ProfileItem item={item} onSelect={handleSelectProfile} isDark={isDark} />
+    ),
+    [handleSelectProfile, isDark]
+  );
+
   return (
     <View 
       className="flex-1 bg-white dark:bg-[#0a0f1a]"
@@ -156,9 +171,9 @@ export function NewChatScreen() {
         <Text className="text-xl font-bold text-[#111] dark:text-white">
           New Message
         </Text>
-        <TouchableOpacity onPress={handleClose} className="p-1">
+        <Pressable onPress={handleClose} className="p-1 active:opacity-80">
           <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Search Input */}
@@ -216,16 +231,10 @@ export function NewChatScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={results}
           keyExtractor={(item) => item.publicKey}
-          renderItem={({ item }) => (
-            <ProfileItem
-              item={item}
-              onSelect={handleSelectProfile}
-              isDark={isDark}
-            />
-          )}
+          renderItem={renderItem}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         />

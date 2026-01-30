@@ -8,7 +8,6 @@ import React, {
 import {
   Text,
   Pressable,
-  TouchableOpacity,
   View,
   ActivityIndicator,
   RefreshControl,
@@ -19,6 +18,7 @@ import {
 } from "react-native";
 import { UserAvatar } from "@/components/UserAvatar";
 import { FlashList } from "@shopify/flash-list";
+import { Pressable as GesturePressable } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import { MenuProvider } from "react-native-popup-menu";
@@ -69,7 +69,7 @@ import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 };
@@ -92,24 +92,28 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
 
 type ConversationRowProps = {
   item: MockConversation;
-  isDesktopWeb: boolean;
-  onPress: () => void;
-  onLongPress: () => void;
+  onPress: (item: MockConversation) => void;
+  onLongPress: (item: MockConversation) => void;
 };
 
-function ConversationRow({
+const ConversationRow = React.memo(function ConversationRow({
   item,
-  isDesktopWeb,
   onPress,
   onLongPress,
 }: ConversationRowProps) {
+  const handlePress = useCallback(() => onPress(item), [item, onPress]);
+  const handleLongPress = useCallback(() => onLongPress(item), [item, onLongPress]);
+
   return (
     <View className="w-full bg-white dark:bg-[#0a0f1a]">
-      <Pressable
-        className="w-full flex-row items-center px-4 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
-        onPress={onPress}
-        onLongPress={onLongPress}
+      <GesturePressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        style={({ pressed }) => ({
+          opacity: pressed ? 0.8 : 1,
+        })}
       >
+        <View className="w-full flex-row items-center px-4 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
         <View className="mr-3">
           <UserAvatar
             uri={item.avatarUri}
@@ -151,24 +155,35 @@ function ConversationRow({
             )}
           </View>
         </View>
-      </Pressable>
+        </View>
+      </GesturePressable>
     </View>
   );
-}
+});
+
+ConversationRow.displayName = "ConversationRow";
 
 type NewChatResultRowProps = {
   item: UserSearchResult;
   isDark: boolean;
-  onPress: () => void;
+  onPress: (item: UserSearchResult) => void;
 };
 
-function NewChatResultRow({ item, isDark, onPress }: NewChatResultRowProps) {
+const NewChatResultRow = React.memo(function NewChatResultRow({
+  item,
+  isDark,
+  onPress,
+}: NewChatResultRowProps) {
+  const handlePress = useCallback(() => onPress(item), [item, onPress]);
+
   return (
-    <Pressable
-      className="transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
-      onPress={onPress}
+    <GesturePressable
+      onPress={handlePress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.8 : 1,
+      })}
     >
-      <View className="flex-row items-center px-5 py-3">
+      <View className="flex-row items-center px-5 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
         <UserAvatar
           uri={getProfileImageUrl(item.publicKey)}
           name={item.username || "?"}
@@ -188,9 +203,11 @@ function NewChatResultRow({ item, isDark, onPress }: NewChatResultRowProps) {
           </Text>
         </View>
       </View>
-    </Pressable>
+    </GesturePressable>
   );
-}
+});
+
+NewChatResultRow.displayName = "NewChatResultRow";
 
 // UI-only mock data
 type MockConversation = {
@@ -726,6 +743,49 @@ export function HomeScreen() {
     [currentUser?.PublicKeyBase58Check, navigation, profiles, groupMembers]
   );
 
+  const handleConversationPress = useCallback(
+    (item: MockConversation) => {
+      handlePress(item);
+    },
+    [handlePress]
+  );
+
+  const handleConversationLongPress = useCallback(
+    (item: MockConversation) => {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      setSelectedItem(item);
+      setShowActionModal(true);
+    },
+    [setSelectedItem, setShowActionModal]
+  );
+
+  const renderConversationItem = useCallback(
+    ({ item }: { item: MockConversation }) => (
+      <ConversationRow
+        item={item}
+        onPress={handleConversationPress}
+        onLongPress={handleConversationLongPress}
+      />
+    ),
+    [handleConversationPress, handleConversationLongPress]
+  );
+
+  const handleNewChatResultPress = useCallback(
+    (user: UserSearchResult) => {
+      handleSelectNewChatProfile(user);
+    },
+    [handleSelectNewChatProfile]
+  );
+
+  const renderNewChatResultItem = useCallback(
+    ({ item }: { item: UserSearchResult }) => (
+      <NewChatResultRow item={item} isDark={isDark} onPress={handleNewChatResultPress} />
+    ),
+    [handleNewChatResultPress, isDark]
+  );
+
   const handleCompose = useCallback(() => {
     navigation.navigate("Composer");
   }, [navigation]);
@@ -785,10 +845,9 @@ export function HomeScreen() {
         <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
           <View className="flex-row items-center">
             {!isDesktopWeb && (
-              <TouchableOpacity
+              <Pressable
                 onPress={openDrawer}
-                activeOpacity={0.7}
-                className="mr-3"
+                className="mr-3 active:opacity-80"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
                   <Feather
@@ -797,7 +856,7 @@ export function HomeScreen() {
                     color={isDark ? "#f8fafc" : "#0f172a"}
                   />
                 </View>
-              </TouchableOpacity>
+              </Pressable>
             )}
             <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
               Chats
@@ -807,10 +866,9 @@ export function HomeScreen() {
           {/* Header Right Icons */}
           <View className="flex-row items-center">
             {/* New Group Chat Button */}
-            <TouchableOpacity
+            <Pressable
               onPress={() => setShowGroupComposerModal(true)}
-              activeOpacity={0.7}
-              className="mr-1"
+              className="mr-1 active:opacity-80"
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
                 <UserGroupIcon
@@ -820,12 +878,12 @@ export function HomeScreen() {
                   strokeWidth={2}
                 />
               </View>
-            </TouchableOpacity>
+            </Pressable>
 
             {/* New Chat Button */}
-            <TouchableOpacity
+            <Pressable
               onPress={() => setShowNewChatModal(true)}
-              activeOpacity={0.7}
+              className="active:opacity-80"
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
                 <Feather
@@ -834,7 +892,7 @@ export function HomeScreen() {
                   color={isDark ? "#f8fafc" : "#0f172a"}
                 />
               </View>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
 
@@ -857,10 +915,10 @@ export function HomeScreen() {
             const isActive = activeMailbox === filter.key;
 
             return (
-              <TouchableOpacity
+              <Pressable
                 key={filter.key}
                 onPress={() => setActiveMailbox(filter.key)}
-                activeOpacity={0.8}
+                className="active:opacity-90"
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 6,
@@ -889,7 +947,7 @@ export function HomeScreen() {
                 >
                   {filter.label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
@@ -912,13 +970,12 @@ export function HomeScreen() {
           <Text className="mt-2 text-center text-sm text-red-700">
             {error}
           </Text>
-          <TouchableOpacity
-            className="mt-6 rounded-full bg-red-500 px-6 py-2"
-            activeOpacity={0.8}
+          <Pressable
+            className="mt-6 rounded-full bg-red-500 px-6 py-2 active:opacity-90"
             onPress={() => reload()}
           >
             <Text className="text-sm font-semibold text-white">Try again</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -943,10 +1000,9 @@ export function HomeScreen() {
             <View className="flex-row items-center">
               {/* Hamburger Menu Button - hidden on desktop */}
               {!isDesktopWeb && (
-                <TouchableOpacity
+                <Pressable
                   onPress={openDrawer}
-                  activeOpacity={0.7}
-                  className="mr-3"
+                  className="mr-3 active:opacity-80"
                 >
                   {LiquidGlassView ? (
                     <LiquidGlassView
@@ -974,7 +1030,7 @@ export function HomeScreen() {
                       />
                     </View>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               )}
               <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
                 Chats
@@ -984,10 +1040,9 @@ export function HomeScreen() {
             {/* Header Right Icons */}
             <View className="flex-row items-center">
               {/* New Group Chat Button */}
-              <TouchableOpacity
+              <Pressable
                 onPress={() => setShowGroupComposerModal(true)}
-                activeOpacity={0.7}
-                className="mr-1"
+                className="mr-1 active:opacity-80"
               >
                 {LiquidGlassView ? (
                   <LiquidGlassView
@@ -1017,12 +1072,12 @@ export function HomeScreen() {
                     />
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
 
               {/* New Chat Button - opens new chat modal */}
-              <TouchableOpacity
+              <Pressable
                 onPress={() => setShowNewChatModal(true)}
-                activeOpacity={0.7}
+                className="active:opacity-80"
               >
                 {LiquidGlassView ? (
                   <LiquidGlassView
@@ -1050,7 +1105,7 @@ export function HomeScreen() {
                     />
                   </View>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
 
@@ -1075,10 +1130,10 @@ export function HomeScreen() {
               const isActive = activeMailbox === filter.key;
 
               return (
-                <TouchableOpacity
+                <Pressable
                   key={filter.key}
                   onPress={() => setActiveMailbox(filter.key)}
-                  activeOpacity={0.8}
+                  className="active:opacity-90"
                   style={{
                     paddingHorizontal: 14,
                     paddingVertical: 6,
@@ -1098,16 +1153,16 @@ export function HomeScreen() {
                     style={{
                       fontSize: 13,
                       fontWeight: "500",
-                      color: isActive
-                        ? "#ffffff"
-                        : isDark
+                    color: isActive
+                      ? "#ffffff"
+                      : isDark
                           ? "#94a3b8"
                           : "#64748b",
-                    }}
-                  >
-                    {filter.label}
-                  </Text>
-                </TouchableOpacity>
+                  }}
+                >
+                  {filter.label}
+                </Text>
+                </Pressable>
               );
             })}
           </View>
@@ -1158,20 +1213,7 @@ export function HomeScreen() {
                   </View>
                 ) : null
               }
-              renderItem={({ item }) => (
-                <ConversationRow
-                  item={item}
-                  isDesktopWeb={isDesktopWeb}
-                  onPress={() => handlePress(item)}
-                  onLongPress={() => {
-                    if (Platform.OS !== "web") {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    }
-                    setSelectedItem(item);
-                    setShowActionModal(true);
-                  }}
-                />
-              )}
+              renderItem={renderConversationItem}
               ListEmptyComponent={() => (
                 <View className="flex-1 items-center justify-center px-6 py-20">
                   <Feather
@@ -1190,25 +1232,23 @@ export function HomeScreen() {
                       : "Start a new conversation and it will show up here right away."}
                   </Text>
                   {activeMailbox === "spam" ? (
-                    <TouchableOpacity
-                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3"
-                      activeOpacity={0.85}
+                    <Pressable
+                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3 active:opacity-90"
                       onPress={() => setActiveMailbox("inbox")}
                     >
                       <Text className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                         Go to Inbox
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   ) : (
-                    <TouchableOpacity
-                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3"
-                      activeOpacity={0.85}
+                    <Pressable
+                      className="mt-8 rounded-full bg-slate-100 dark:bg-slate-800 px-6 py-3 active:opacity-90"
                       onPress={handleCompose}
                     >
                       <Text className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                         Start a new chat
                       </Text>
-                    </TouchableOpacity>
+                    </Pressable>
                   )}
                 </View>
               )}
@@ -1266,17 +1306,17 @@ export function HomeScreen() {
                   <Text className="text-xl font-bold text-[#111] dark:text-white">
                     New Message
                   </Text>
-                  <TouchableOpacity
+                  <Pressable
                     onPress={() => setShowNewChatModal(false)}
-                    activeOpacity={0.8}
                     style={closeButtonStyle}
+                    className="active:opacity-80"
                   >
                     <Feather
                       name="x"
                       size={20}
                       color={isDark ? "#94a3b8" : "#64748b"}
                     />
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
 
                 {/* Search Input */}
@@ -1364,13 +1404,7 @@ export function HomeScreen() {
                     keyExtractor={(item) => item.publicKey}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
-                    renderItem={({ item }) => (
-                      <NewChatResultRow
-                        item={item}
-                        isDark={isDark}
-                        onPress={() => handleSelectNewChatProfile(item)}
-                      />
-                    )}
+                    renderItem={renderNewChatResultItem}
                   />
                 )}
               </>

@@ -6,9 +6,7 @@ import {
   View,
   Text,
   Pressable,
-  TouchableOpacity,
   ScrollView,
-  StyleSheet,
   Platform,
 } from 'react-native';
 import { useNavigation, useNavigationState } from '@react-navigation/native';
@@ -90,13 +88,11 @@ function NavItem({
       </View>
       {!minimal && (
         <Text
-          style={[
-            styles.navLabel,
-            {
-              fontWeight: isActive ? '700' : '400',
-              color: isActive ? activeColor : (isDark ? '#e2e8f0' : '#475569'),
-            },
-          ]}
+          className="text-[15px]"
+          style={{
+            fontWeight: isActive ? '700' : '400',
+            color: isActive ? activeColor : (isDark ? '#e2e8f0' : '#475569'),
+          }}
         >
           {label}
         </Text>
@@ -130,14 +126,14 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
   const isSettingsActive = currentRouteName === 'Settings';
   const isChatsActive = !isProfileActive && !isSettingsActive && (activeTab === 'Messages' || currentRouteName === 'Main');
 
-  const navItems: Array<{
+  const navItems: {
     key: string;
     label: string;
     Icon: NavIconComponent;
     ActiveIcon: NavIconComponent;
     isActive: boolean;
     onPress: () => void;
-  }> = [
+  }[] = [
     {
       key: 'Messages',
       label: 'Chats',
@@ -178,27 +174,31 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
 
   return (
     <View
-      style={[
-        styles.container,
-        {
-          width,
-          paddingTop: insets.top + 10,
-          paddingBottom: insets.bottom + 10,
-          backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-          transform: [
-            { translateX: translateX },
-            { translateX: -width },
-          ],
-        },
-        leftNavMinimal && styles.containerMinimal,
-      ]}
+      className={[
+        "absolute top-0 h-full z-10",
+        leftNavMinimal ? "items-center px-3" : "px-4",
+      ].join(" ")}
+      style={{
+        left: "50%",
+        width,
+        paddingTop: insets.top + 10,
+        paddingBottom: insets.bottom + 10,
+        backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+        transform: [
+          { translateX: translateX },
+          { translateX: -width },
+        ],
+        ...(Platform.OS === 'web' && ({
+          position: 'fixed',
+          maxHeight: '100vh',
+          overflowY: 'auto',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        } as any)),
+      }}
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          leftNavMinimal && styles.scrollContentMinimal,
-        ]}
+        contentContainerClassName={leftNavMinimal ? "items-center pb-6" : "pb-6"}
       >
         <WalletSwitcher minimal={leftNavMinimal} />
 
@@ -218,105 +218,24 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
 
         {/* Post Button - using accent color */}
         {!leftNavMinimal ? (
-          <TouchableOpacity
+          <Pressable
             onPress={() => rootNavigation.navigate('Composer')}
-            activeOpacity={0.8}
-            style={[
-              styles.newPostButton,
-              { backgroundColor: accentColor },
-            ]}
+            className="mt-4 flex-row items-center justify-center rounded-full px-5 py-2.5 active:opacity-90"
+            style={{ backgroundColor: accentColor }}
           >
             <CreatePostIcon width={20} height={20} color="white" fill="white" stroke="white" />
-            <Text style={styles.newPostText}>Post</Text>
-          </TouchableOpacity>
+            <Text className="ml-2 text-sm font-semibold text-white">Post</Text>
+          </Pressable>
         ) : (
-          <TouchableOpacity
+          <Pressable
             onPress={() => rootNavigation.navigate('Composer')}
-            activeOpacity={0.8}
-            style={[
-              styles.newPostButtonMinimal,
-              { backgroundColor: accentColor },
-            ]}
+            className="mt-4 h-11 w-11 items-center justify-center rounded-full active:opacity-90"
+            style={{ backgroundColor: accentColor }}
           >
             <CreatePostIcon width={24} height={24} color="white" fill="white" stroke="white" />
-          </TouchableOpacity>
+          </Pressable>
         )}
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute' as const,
-    top: 0,
-    left: '50%' as unknown as number,
-    height: '100%',
-    paddingHorizontal: 16,
-    zIndex: 10,
-    ...(Platform.OS === 'web' && {
-      position: 'fixed',
-      maxHeight: '100vh',
-      overflowY: 'auto',
-      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-    }),
-  } as any,
-  containerMinimal: {
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  scrollContentMinimal: {
-    alignItems: 'center',
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    gap: 10,
-  },
-  navItemMinimal: {
-    paddingHorizontal: 8,
-    justifyContent: 'center',
-  },
-  iconContainer: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconContainerMinimal: {
-    width: 36,
-    height: 36,
-  },
-  navLabel: {
-    fontSize: 15,
-  },
-  newPostButton: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 9999,
-  },
-  newPostText: {
-    marginLeft: 8,
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  newPostButtonMinimal: {
-    marginTop: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

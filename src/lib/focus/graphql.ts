@@ -419,7 +419,7 @@ type FocusInboxResponse = {
       pageInfo?: FocusPageInfo | null;
     } | null;
   } | null;
-  errors?: Array<{ message?: string }> | null;
+  errors?: { message?: string }[] | null;
 };
 
 const numberLike = z.union([z.number(), z.string()]).transform((value) => {

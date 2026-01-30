@@ -1,4 +1,4 @@
-import { createUserAssociation, identity } from "deso-protocol";
+import { createUserAssociation } from "deso-protocol";
 
 const APP_PUBLIC_KEY = "BC1YLjEayZDjAPitJJX4Boy7LsEfN3sWAkYb3hgE9kGBirztsc2re1N";
 

@@ -40,7 +40,12 @@ const getExtraString = (
   return typeof value === "string" && value.trim().length ? value : undefined;
 };
 
-function AccountRow({ account, onPress }: { account: FocusAccount; onPress?: () => void }) {
+type AccountRowProps = {
+  account: FocusAccount;
+  onPress?: (account: FocusAccount) => void;
+};
+
+const AccountRow = React.memo(function AccountRow({ account, onPress }: AccountRowProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   
@@ -57,17 +62,15 @@ function AccountRow({ account, onPress }: { account: FocusAccount; onPress?: () 
     account.username ||
     (account.publicKey ? formatPublicKey(account.publicKey) : "");
 
+  const handlePress = useCallback(() => {
+    onPress?.(account);
+  }, [account, onPress]);
+
   return (
-    <TouchableOpacity 
-      onPress={onPress}
+    <TouchableOpacity
+      onPress={handlePress}
       activeOpacity={0.7}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        gap: 12,
-      }}
+      className="flex-row items-center gap-3 px-4 py-3"
     >
       <UserAvatar
         uri={avatarUrl}
@@ -93,7 +96,9 @@ function AccountRow({ account, onPress }: { account: FocusAccount; onPress?: () 
       {account.isVerified ? <Feather name="check-circle" size={18} color="#2563eb" /> : null}
     </TouchableOpacity>
   );
-}
+});
+
+AccountRow.displayName = "AccountRow";
 
 export function FollowListModal({ visible, publicKey, initialTab = "followers", onClose }: FollowListModalProps) {
   const { isDark, accentColor } = useAccentColor();
@@ -135,10 +140,17 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
     }
   }, [activeQuery]);
 
+  const renderAccountItem = useCallback(
+    ({ item }: { item: FocusAccount }) => (
+      <AccountRow account={item} onPress={handleAccountPress} />
+    ),
+    [handleAccountPress]
+  );
+
   const renderFooter = () => {
     if (activeQuery.isFetchingNextPage) {
       return (
-        <View style={{ paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}>
+        <View className="items-center justify-center py-3">
           <ActivityIndicator size="small" color={accentColor} />
         </View>
       );
@@ -149,14 +161,9 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
           onPress={() => activeQuery.fetchNextPage()}
           disabled={activeQuery.isFetchingNextPage}
           activeOpacity={0.8}
-          style={{ paddingVertical: 12 }}
+          className="py-3"
         >
-          <Text style={{
-            fontSize: 14,
-            textAlign: 'center',
-            color: accentColor,
-            fontWeight: '600',
-          }}>
+          <Text className="text-center text-sm font-semibold" style={{ color: accentColor }}>
             Load more
           </Text>
         </TouchableOpacity>
@@ -168,48 +175,34 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
   const body = () => {
     if (activeQuery.isLoading) {
       return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="small" color={accentColor} />
-          <Text style={{
-            marginTop: 8,
-            fontSize: 14,
-            color: isDark ? '#94a3b8' : '#64748b',
-          }}>Loading…</Text>
+          <Text className="mt-2 text-sm" style={{ color: isDark ? '#94a3b8' : '#64748b' }}>
+            Loading…
+          </Text>
         </View>
       );
     }
 
     if (activeQuery.isError) {
       return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-          <Text style={{
-            fontSize: 16,
-            fontWeight: '600',
-            color: isDark ? '#ffffff' : '#0f172a',
-            marginBottom: 4,
-          }}>Unable to load</Text>
-          <Text style={{
-            fontSize: 14,
-            textAlign: 'center',
-            color: isDark ? '#64748b' : '#94a3b8',
-            marginBottom: 12,
-          }}>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="mb-1 text-base font-semibold" style={{ color: isDark ? '#ffffff' : '#0f172a' }}>
+            Unable to load
+          </Text>
+          <Text
+            className="mb-3 text-center text-sm"
+            style={{ color: isDark ? '#64748b' : '#94a3b8' }}
+          >
             {(activeQuery.error as Error)?.message || "Something went wrong."}
           </Text>
           <TouchableOpacity
             onPress={() => activeQuery.refetch()}
             activeOpacity={0.8}
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderRadius: 20,
-              backgroundColor: accentColor,
-            }}
+            className="rounded-full px-4 py-2"
+            style={{ backgroundColor: accentColor }}
           >
-            <Text style={{
-              color: '#ffffff',
-              fontWeight: '600',
-            }}>Retry</Text>
+            <Text className="font-semibold text-white">Retry</Text>
           </TouchableOpacity>
         </View>
       );
@@ -217,20 +210,11 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
 
     if (!data.length) {
       return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-          <Text style={{
-            fontSize: 16,
-            fontWeight: '600',
-            color: isDark ? '#ffffff' : '#0f172a',
-            marginBottom: 4,
-          }}>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="mb-1 text-base font-semibold" style={{ color: isDark ? '#ffffff' : '#0f172a' }}>
             {tab === "followers" ? "No followers yet" : "Not following anyone"}
           </Text>
-          <Text style={{
-            fontSize: 14,
-            textAlign: 'center',
-            color: isDark ? '#64748b' : '#94a3b8',
-          }}>
+          <Text className="text-center text-sm" style={{ color: isDark ? '#64748b' : '#94a3b8' }}>
             {tab === "followers"
               ? "Followers will appear here once people start following this account."
               : "Accounts you follow will show up here."}
@@ -242,17 +226,13 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
       return (
       <FlashList
         data={data}
-        renderItem={({ item }) => (
-          <AccountRow 
-            account={item} 
-            onPress={() => handleAccountPress(item)}
-          />
-        )}
+        keyExtractor={(item) => item.publicKey}
+        renderItem={renderAccountItem}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
         ListFooterComponent={renderFooter}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 16 }}
+        contentContainerClassName="pb-4"
       />
     );
   };
@@ -261,50 +241,45 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
   const renderContent = () => (
     <>
       {/* Header */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
-      }}>
+      <View
+        className="flex-row items-center justify-between border-b px-5 py-4"
+        style={{
+          borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
+        }}
+      >
         {/* Tab Switcher */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View className="flex-row items-center gap-2">
           <TouchableOpacity
             onPress={() => setTab("followers")}
             activeOpacity={0.8}
+            className="rounded-full px-3 py-2"
             style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 20,
-              backgroundColor: tab === "followers" ? accentColor : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
+              backgroundColor: tab === "followers"
+                ? accentColor
+                : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
             }}
           >
-            <Text style={{
-              fontSize: 14,
-              fontWeight: '600',
-              color: tab === "followers" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155'),
-            }}>
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: tab === "followers" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155') }}
+            >
               Followers
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setTab("following")}
             activeOpacity={0.8}
+            className="rounded-full px-3 py-2"
             style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 20,
-              backgroundColor: tab === "following" ? accentColor : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
+              backgroundColor: tab === "following"
+                ? accentColor
+                : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
             }}
           >
-            <Text style={{
-              fontSize: 14,
-              fontWeight: '600',
-              color: tab === "following" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155'),
-            }}>
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: tab === "following" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155') }}
+            >
               Following
             </Text>
           </TouchableOpacity>
@@ -314,13 +289,9 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
         <TouchableOpacity
           onPress={onClose}
           activeOpacity={0.7}
+          className="h-9 w-9 items-center justify-center rounded-full"
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
             backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
-            alignItems: 'center',
-            justifyContent: 'center',
           }}
         >
           <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
@@ -328,7 +299,7 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
       </View>
 
       {/* Body */}
-      <View style={{ flex: 1 }}>
+      <View className="flex-1">
         {body()}
       </View>
     </>
@@ -345,26 +316,30 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {isWebDesktop ? (
           // Desktop: Show with sidebars visible
-          <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}>
+          <View
+            className="flex-1"
+            style={{ backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}
+          >
             {/* Left sidebar */}
             <DesktopLeftNav />
 
             {/* Center content area */}
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={{
-                flex: 1,
-                width: '100%',
-                maxWidth: CENTER_CONTENT_MAX_WIDTH,
-                backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-                borderLeftWidth: 1,
-                borderRightWidth: 1,
-                borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
-              }}>
+            <View className="flex-1 items-center">
+              <View
+                className="flex-1 w-full"
+                style={{
+                  maxWidth: CENTER_CONTENT_MAX_WIDTH,
+                  backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
+                  borderLeftWidth: 1,
+                  borderRightWidth: 1,
+                  borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
+                }}
+              >
                 {renderContent()}
               </View>
             </View>
@@ -374,7 +349,10 @@ export function FollowListModal({ visible, publicKey, initialTab = "followers", 
           </View>
         ) : (
           // Mobile: Standard page sheet
-          <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
+          <SafeAreaView
+            className="flex-1"
+            style={{ backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}
+          >
             {renderContent()}
           </SafeAreaView>
         )}

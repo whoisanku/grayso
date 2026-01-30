@@ -44,7 +44,7 @@ const DEFAULT_MESSAGE_LIFETIME = 30000; // 30 seconds
 
 const devLog = (...args: unknown[]) => {
     if (process.env.NODE_ENV !== "production") {
-        // eslint-disable-next-line no-console
+         
         console.log(...args);
     }
 };

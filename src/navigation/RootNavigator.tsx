@@ -23,7 +23,7 @@ export function RootNavigator() {
   const { isTransitioning, reason } = useAuthTransition();
   const [showSplash, setShowSplash] = useState(true);
   const [hasShownLoginToast, setHasShownLoginToast] = useState(false);
-  const fadeAnim = React.useRef(new Animated.Value(1)).current;
+  const fadeAnimRef = React.useRef(new Animated.Value(1));
   const isInitialLoadRef = React.useRef(true);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function RootNavigator() {
 
       // Small delay to ensure smooth transition
       const timer = setTimeout(() => {
-        Animated.timing(fadeAnim, {
+        Animated.timing(fadeAnimRef.current, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
@@ -51,7 +51,7 @@ export function RootNavigator() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, showSplash, fadeAnim, currentUser]);
+  }, [isLoading, showSplash, currentUser]);
 
   // Show login success toast when user logs in (only for subsequent logins, not initial restore)
   useEffect(() => {
@@ -76,7 +76,7 @@ export function RootNavigator() {
       <Animated.View
         style={{
           flex: 1,
-          opacity: fadeAnim,
+          opacity: fadeAnimRef.current,
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: colorScheme === "dark" ? "#0a0f1a" : "#ffffff"

@@ -8,7 +8,8 @@ import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
 import CreatePostIcon from "../assets/navIcons/create-post.svg";
 
-import { View, TouchableOpacity, Platform, StyleSheet, DeviceEventEmitter, Image, Text, useWindowDimensions, Pressable } from "react-native";
+import { View, TouchableOpacity, Platform, DeviceEventEmitter, Text, useWindowDimensions, Pressable } from "react-native";
+import { Image } from "expo-image";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { type HomeTabParamList, type RootStackParamList } from "./types";
@@ -46,6 +47,7 @@ import { useAccountProfile } from "@/features/profile/api/useAccountProfile";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
+const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { colorScheme } = useColorScheme();
@@ -100,23 +102,11 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           key={route.key}
           onPress={() => navigation.navigate("Composer")}
           activeOpacity={0.8}
-          style={{
-            flex: 1,
-            paddingTop: 13,
-            paddingBottom: 4,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="flex-1 items-center justify-center pt-[13px] pb-1"
         >
           <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: accentColor,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="h-8 w-8 items-center justify-center rounded-full"
+            style={{ backgroundColor: accentColor }}
           >
             <CreatePostIcon width={18} height={18} color="white" fill="white" stroke="white" />
           </View>
@@ -131,13 +121,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         onLongPress={onLongPress}
         delayLongPress={250}
         activeOpacity={0.7}
-        style={{
-          flex: 1,
-          paddingTop: 13,
-          paddingBottom: 4,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        className="flex-1 items-center justify-center pt-[13px] pb-1"
       >
         {route.name === "Messages" ? (
           isFocused ? (
@@ -180,17 +164,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <View
         // @ts-ignore - data attribute for CSS scroll lock
         dataSet={{ scrollLock: "true" }}
+        className="absolute bottom-0 left-0 right-0 flex-row border-t pl-[5px] pr-[10px]"
         style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          flexDirection: "row",
           backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
-          borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: getBorderColor(isDark, "contrast_low"),
-          paddingLeft: 5,
-          paddingRight: 10,
           paddingBottom: Math.max(insets.bottom, 15),
         }}
       >
@@ -218,6 +195,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const tabNavigation = useNavigation<any>();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   
@@ -290,9 +268,8 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
 
   const renderDrawerContent = useCallback(() => (
     <View
+      className="flex-1 h-full"
       style={{
-        flex: 1,
-        height: '100%',
         paddingTop: insets.top,
         paddingBottom: insets.bottom,
         backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
@@ -312,6 +289,9 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
                 }),
             }}
             className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
+            contentFit="cover"
+            placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
+            transition={500}
           />
         </View>
         <Text className="text-base font-bold text-slate-900 dark:text-white mb-0.5" numberOfLines={1}>
@@ -416,15 +396,15 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   // Desktop web: show side navigation similar to Bluesky
   // Using fixed-position sidebars with content centered in viewport
   if (isDesktopWeb) {
-    const tabNavigation = useNavigation<any>();
-
-    
     const handleTabChange = (tab: keyof HomeTabParamList) => {
       tabNavigation.navigate(tab);
     };
 
     return (
-      <View style={{ flex: 1, backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}>
+      <View
+        className="flex-1"
+        style={{ backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}
+      >
         {/* Fixed Left Navigation */}
         <DesktopLeftNav 
           activeTab={activeTab} 
@@ -432,11 +412,10 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
         />
         
         {/* Main Content Area - centered with borders like Bluesky */}
-        <View style={{ flex: 1, alignItems: 'center' }}>
+        <View className="flex-1 items-center">
           <View
+            className="flex-1 w-full"
             style={{
-              flex: 1,
-              width: '100%',
               maxWidth: CENTER_CONTENT_MAX_WIDTH,
               paddingTop: insets.top,
               paddingBottom: insets.bottom,
@@ -467,15 +446,13 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   // Web: Custom drawer implementation (non-desktop)
   if (Platform.OS === "web") {
     return (
-      <View style={{ flex: 1 }}>
+      <View className="flex-1">
         {renderTabNavigator()}
         {isDrawerVisible && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50 }} pointerEvents="box-none">
+          <View className="absolute inset-0 z-50" pointerEvents="box-none">
             <Pressable
               onPress={() => setIsDrawerOpen(false)}
-              style={[
-                { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
-              ]}
+              className="absolute inset-0"
             >
               <Animated.View
                 style={[

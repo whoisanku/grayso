@@ -100,7 +100,7 @@ export function MobileNav({ activeTab }: MobileNavProps) {
           ),
       },
     ],
-    [accentColor, isDark, navigation]
+    [accentColor, isDark, navigation, handleProfileLongPress]
   );
 
   return (

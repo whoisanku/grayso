@@ -1,5 +1,5 @@
 import React from "react";
-import { View, TouchableOpacity } from "react-native";
+import { View } from "react-native";
 import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
 

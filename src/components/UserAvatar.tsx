@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, ViewStyle, ImageStyle } from "react-native";
+import { View, Text, ImageStyle } from "react-native";
 import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";

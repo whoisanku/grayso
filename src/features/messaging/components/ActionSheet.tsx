@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Dimensions, Image, Platform } from "react-native";
+import { View, Text, TouchableOpacity, Dimensions, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {

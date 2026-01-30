@@ -1,12 +1,7 @@
 import React from "react";
 import { View, Text } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import Animated, {
-  useAnimatedProps,
-  withTiming,
-  useDerivedValue,
-  interpolateColor,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { useAccentColor } from "../state/theme/useAccentColor";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);

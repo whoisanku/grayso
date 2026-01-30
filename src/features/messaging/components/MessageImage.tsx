@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TouchableOpacity, Platform, DimensionValue } from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { ActivityIndicator } from "react-native";
 
@@ -21,6 +21,7 @@ const DEFAULT_ASPECT_RATIO = 1;
 const MIN_ASPECT_RATIO = 0.5; // Don't let it get too tall
 const MAX_ASPECT_RATIO = 3;   // Don't let it get too wide/short
 const MIN_HEIGHT_RATIO = 0.55; // Keep thumbnails visually uniform
+const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 export const MessageImage = React.memo(({
   uri,
@@ -77,7 +78,8 @@ export const MessageImage = React.memo(({
         source={{ uri }}
         style={{ width: '100%', height: '100%' }}
         contentFit={contentFit}
-        transition={200}
+        placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
+        transition={500}
         cachePolicy="memory-disk"
         onLoad={() => setIsLoading(false)}
       />

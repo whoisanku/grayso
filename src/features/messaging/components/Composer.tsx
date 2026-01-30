@@ -9,16 +9,16 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Keyboard,
   NativeSyntheticEvent,
   TextInputContentSizeChangeEventData,
   TextInputSelectionChangeEventData,
   DeviceEventEmitter,
-  Image,
   ScrollView,
 } from "react-native";
+import { Image } from "expo-image";
 import Reanimated, { FadeInDown, FadeOutUp } from "react-native-reanimated";
 // Keyboard animation now handled by ScreenWrapper's KeyboardAvoidingView
 import { Platform } from "react-native";
@@ -81,10 +81,12 @@ export type ComposerProps = {
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 };
+
+const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 const extractVideoId = (url: string): string | null => {
   try {
@@ -620,10 +622,10 @@ export const Composer = React.memo(function Composer({
             {messageText}
           </Text>
         </View>
-        <TouchableOpacity
+        <Pressable
           onPress={handleCancelReply}
-          activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          className="active:opacity-80"
           style={{
             width: 36,
             height: 36,
@@ -636,7 +638,7 @@ export const Composer = React.memo(function Composer({
           }}
         >
           <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
-        </TouchableOpacity>
+        </Pressable>
       </Reanimated.View>
     );
   }, [replyToMessage, handleCancelReply, isDark, profiles]);
@@ -697,10 +699,10 @@ export const Composer = React.memo(function Composer({
             {messageText}
           </Text>
         </View>
-        <TouchableOpacity
+        <Pressable
           onPress={handleCancelEdit}
-          activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          className="active:opacity-80"
           style={{
             width: 36,
             height: 36,
@@ -713,7 +715,7 @@ export const Composer = React.memo(function Composer({
           }}
         >
           <Feather name="x" size={18} color={isDark ? "#9ca3af" : "#6b7280"} />
-        </TouchableOpacity>
+        </Pressable>
       </Reanimated.View>
     );
   }, [editingMessage, handleCancelEdit, isDark]);
@@ -1005,7 +1007,9 @@ export const Composer = React.memo(function Composer({
                   backgroundColor: isDark ? "#1e2738" : "#f1f5f9",
                   opacity: image.uploadStatus === "uploading" ? 0.7 : 1,
                 }}
-                resizeMode="cover"
+                contentFit="cover"
+                placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
+                transition={500}
               />
 
               {/* Progress Overlay */}
@@ -1028,9 +1032,9 @@ export const Composer = React.memo(function Composer({
                 </View>
               )}
 
-              <TouchableOpacity
+              <Pressable
                 onPress={() => handleRemoveImage(index)}
-                activeOpacity={0.8}
+                className="active:opacity-80"
                 style={{
                   position: "absolute",
                   top: -6,
@@ -1050,7 +1054,7 @@ export const Composer = React.memo(function Composer({
                   size={12}
                   color={isDark ? "#94a3b8" : "#64748b"}
                 />
-              </TouchableOpacity>
+              </Pressable>
             </View>
           ))}
         </ScrollView>
@@ -1068,10 +1072,10 @@ export const Composer = React.memo(function Composer({
       >
         {/* Image Picker Button - only show when not editing */}
         {!isEditMode && (
-          <TouchableOpacity
+          <Pressable
             onPress={handlePickImages}
-            activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            className="active:opacity-80"
             style={{ alignSelf: "center", marginRight: 8 }}
           >
             <View
@@ -1090,7 +1094,7 @@ export const Composer = React.memo(function Composer({
                 color={isDark ? "#94a3b8" : "#64748b"}
               />
             </View>
-          </TouchableOpacity>
+          </Pressable>
         )}
 
         <View
@@ -1144,10 +1148,10 @@ export const Composer = React.memo(function Composer({
               } as any
             }
           />
-          <TouchableOpacity
+          <Pressable
             onPress={handleSendOrSave}
             disabled={isDisabled}
-            activeOpacity={0.85}
+            className="active:opacity-90"
             style={{ marginLeft: 8 }}
           >
             <View
@@ -1178,7 +1182,7 @@ export const Composer = React.memo(function Composer({
                 />
               )}
             </View>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </View>
     </View>
