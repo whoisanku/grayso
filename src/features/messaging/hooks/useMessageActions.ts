@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { Platform } from "react-native";
 import {
   DecryptedMessageEntryResponse,
 } from "deso-protocol";
@@ -40,6 +41,7 @@ export const useMessageActions = ({
   setMessages,
   focusInput,
 }: UseMessageActionsProps) => {
+  const isWeb = Platform.OS === "web";
   const [replyToMessage, setReplyToMessage] =
     useState<DecryptedMessageEntryResponse | null>(null);
   const [selectedMessage, setSelectedMessage] =
@@ -86,15 +88,23 @@ export const useMessageActions = ({
   }));
 
   const handleReply = useCallback((message: DecryptedMessageEntryResponse) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!isWeb) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     setReplyToMessage(message);
     // Trigger focus synchronously for mobile web keyboard
     if (focusInput) {
       focusInput();
     }
-  }, [focusInput]);
+  }, [focusInput, isWeb]);
 
   const animateOpenActions = useCallback(() => {
+    if (isWeb) {
+      backdropAnim.value = 1;
+      blurAnim.value = 1;
+      actionSheetAnim.value = 1;
+      return;
+    }
     backdropAnim.value = withTiming(1, { duration: 200 });
     blurAnim.value = withTiming(1, { duration: 250 }); // Blur fade-in
     actionSheetAnim.value = withSpring(1, {
@@ -102,9 +112,18 @@ export const useMessageActions = ({
       stiffness: 200,
       mass: 0.8,
     });
-  }, []);
+  }, [isWeb, actionSheetAnim, backdropAnim, blurAnim]);
 
   const animateCloseActions = useCallback((onFinished?: () => void) => {
+    if (isWeb) {
+      backdropAnim.value = 0;
+      blurAnim.value = 0;
+      actionSheetAnim.value = 0;
+      if (onFinished) {
+        onFinished();
+      }
+      return;
+    }
     backdropAnim.value = withTiming(0, { duration: 150 });
     blurAnim.value = withTiming(0, { duration: 150 }); // Blur fade-out
     actionSheetAnim.value = withTiming(0, { duration: 150 }, (finished) => {
@@ -112,14 +131,16 @@ export const useMessageActions = ({
         runOnJS(onFinished)();
       }
     });
-  }, []);
+  }, [isWeb, actionSheetAnim, backdropAnim, blurAnim]);
 
   const handleMessageLongPress = useCallback(
     (
       message: DecryptedMessageEntryResponse,
       layout?: { x: number; y: number; width: number; height: number }
     ) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+      if (!isWeb) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+      }
 
       const messageId = getMessageId(message);
       let bubbleLayout = layout;
@@ -142,12 +163,14 @@ export const useMessageActions = ({
   );
 
   const handleCloseMessageActions = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!isWeb) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     animateCloseActions(() => {
       setSelectedMessage(null);
       setSelectedBubbleLayout(null);
     });
-  }, [animateCloseActions]);
+  }, [animateCloseActions, isWeb]);
 
   const handleActionReply = useCallback(() => {
     if (!selectedMessage) return;
@@ -160,9 +183,11 @@ export const useMessageActions = ({
     const text = getDisplayedMessageText(selectedMessage) || "";
     if (!text.trim()) return;
     await Clipboard.setStringAsync(text);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (!isWeb) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     handleCloseMessageActions();
-  }, [selectedMessage, handleCloseMessageActions]);
+  }, [selectedMessage, handleCloseMessageActions, isWeb]);
 
   const startEditingMessage = useCallback(
     (message?: DecryptedMessageEntryResponse | null) => {

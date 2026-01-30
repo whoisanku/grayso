@@ -161,6 +161,7 @@ export const Composer = React.memo(function Composer({
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const textInputRef = useRef<TextInput>(null);
   const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
+  const shouldAnimate = Platform.OS !== "web";
 
   // Typing indicator throttling
   const lastTypingSentRef = useRef<number>(0);
@@ -419,7 +420,9 @@ export const Composer = React.memo(function Composer({
 
   // Remove image handler
   const handleRemoveImage = useCallback((index: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
@@ -428,7 +431,9 @@ export const Composer = React.memo(function Composer({
       const textToSend = messageText || text.trim();
       if (!textToSend || sending) return;
       try {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
         setSending(true);
         onSendingChange?.(true);
 
@@ -560,7 +565,9 @@ export const Composer = React.memo(function Composer({
 
   // Handle cancel reply with keyboard dismiss and haptic
   const handleCancelReply = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     Keyboard.dismiss();
     onCancelReply?.();
   }, [onCancelReply]);
@@ -579,8 +586,8 @@ export const Composer = React.memo(function Composer({
     return (
       <Reanimated.View
         key="reply-preview"
-        entering={FadeInDown.duration(150)}
-        exiting={FadeOutUp.duration(150)}
+        entering={shouldAnimate ? FadeInDown.duration(150) : undefined}
+        exiting={shouldAnimate ? FadeOutUp.duration(150) : undefined}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -641,11 +648,13 @@ export const Composer = React.memo(function Composer({
         </Pressable>
       </Reanimated.View>
     );
-  }, [replyToMessage, handleCancelReply, isDark, profiles]);
+  }, [replyToMessage, handleCancelReply, isDark, profiles, shouldAnimate]);
 
   // Handle cancel edit with keyboard dismiss and haptic
   const handleCancelEdit = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     Keyboard.dismiss();
     onCancelEdit?.();
   }, [onCancelEdit]);
@@ -657,8 +666,8 @@ export const Composer = React.memo(function Composer({
     return (
       <Reanimated.View
         key="edit-preview"
-        entering={FadeInDown.duration(150)}
-        exiting={FadeOutUp.duration(150)}
+        entering={shouldAnimate ? FadeInDown.duration(150) : undefined}
+        exiting={shouldAnimate ? FadeOutUp.duration(150) : undefined}
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -718,7 +727,7 @@ export const Composer = React.memo(function Composer({
         </Pressable>
       </Reanimated.View>
     );
-  }, [editingMessage, handleCancelEdit, isDark]);
+  }, [editingMessage, handleCancelEdit, isDark, shouldAnimate]);
 
   const isEditMode = Boolean(editingMessage);
   const currentText = isEditMode ? editDraft : text;
@@ -741,7 +750,9 @@ export const Composer = React.memo(function Composer({
       try {
         setSending(true);
         onSendingChange?.(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
 
         const extraData: { [k: string]: string } = { isMarkdown: "false" };
         const optimisticVideoUrls: string[] = [];

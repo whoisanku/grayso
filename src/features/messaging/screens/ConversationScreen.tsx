@@ -44,10 +44,7 @@ import {
   SCROLL_TO_BOTTOM_THRESHOLD,
   MESSAGE_GROUPING_WINDOW_NS,
 } from "@/constants/messaging";
-import {
-  FALLBACK_PROFILE_IMAGE,
-  getProfileImageUrl,
-} from "@/utils/deso";
+import { FALLBACK_PROFILE_IMAGE, getProfileImageUrl } from "@/utils/deso";
 import { getMessageId } from "@/utils/messageUtils";
 import type { RootStackParamList } from "@/navigation/types";
 import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
@@ -81,7 +78,6 @@ import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
-     
     console.log(...args);
   }
 };
@@ -166,7 +162,9 @@ export function ConversationScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { isDark, accentColor, accentSoft, accentStrong } = useAccentColor();
   const { isDesktop } = useLayoutBreakpoints();
-  const isWebDesktop = Platform.OS === "web" && isDesktop;
+  const isWeb = Platform.OS === "web";
+  const isWebDesktop = isWeb && isDesktop;
+  const isWebMobile = isWeb && !isDesktop;
 
   // Ref to store Composer's focusInput function for synchronous keyboard triggering
   const focusInputRef = useRef<(() => void) | null>(null);
@@ -183,7 +181,7 @@ export function ConversationScreen({ navigation, route }: Props) {
       alignItems: "center" as const,
       justifyContent: "center" as const,
     }),
-    [isDark]
+    [isDark],
   );
   const composerBottomInset = Math.max(insets.bottom, 8);
 
@@ -261,7 +259,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     const isNextClose =
       nextMessage && timestamp && nextMessage.MessageInfo?.TimestampNanos
         ? Math.abs(timestamp - nextMessage.MessageInfo.TimestampNanos) <
-        MESSAGE_GROUPING_WINDOW_NS
+          MESSAGE_GROUPING_WINDOW_NS
         : false;
     return !isNextSameSender || !isNextClose;
   }, [messages, selectedMessage]);
@@ -292,7 +290,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
     const setUsername = (
       pk: string | undefined,
-      username: string | null | undefined
+      username: string | null | undefined,
     ) => {
       const u = username?.trim();
       if (!pk || !u) return;
@@ -360,10 +358,10 @@ export function ConversationScreen({ navigation, route }: Props) {
           const results = await searchUsers(searchQuery);
           // Filter out existing members
           const existingMemberKeys = new Set(
-            groupMembers.map((m) => m.publicKey)
+            groupMembers.map((m) => m.publicKey),
           );
           setSearchResults(
-            results.filter((r) => !existingMemberKeys.has(r.publicKey))
+            results.filter((r) => !existingMemberKeys.has(r.publicKey)),
           );
           setHasSearched(true);
         } catch (e) {
@@ -431,7 +429,7 @@ export function ConversationScreen({ navigation, route }: Props) {
   const typingMemberPk = useMemo(() => {
     // Find the first person typing who isn't us
     return Object.keys(typingUsers).find(
-      (pk) => typingUsers[pk] && pk !== userPublicKey
+      (pk) => typingUsers[pk] && pk !== userPublicKey,
     );
   }, [typingUsers, userPublicKey]);
 
@@ -472,8 +470,6 @@ export function ConversationScreen({ navigation, route }: Props) {
     typingUsers,
   ]);
 
-
-
   // --- UI State & Refs ---
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -481,12 +477,13 @@ export function ConversationScreen({ navigation, route }: Props) {
     () =>
       Platform.OS === "web"
         ? ({
-          scrollbarWidth: "thin",
-          scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${isDark ? "#0a0f1a" : "#ffffff"
+            scrollbarWidth: "thin",
+            scrollbarColor: `${isDark ? "#475569" : "#cbd5e1"} ${
+              isDark ? "#0a0f1a" : "#ffffff"
             }`,
-        } as any)
+          } as any)
         : undefined,
-    [isDark]
+    [isDark],
   );
   const [actualBubbleHeight, setActualBubbleHeight] = useState<
     number | undefined
@@ -495,6 +492,8 @@ export function ConversationScreen({ navigation, route }: Props) {
   const flatListRef = useRef<any>(null);
   const scrollOffsetRef = useRef(0);
   const composerHideAnim = useRef(new Animated.Value(0)).current;
+  const shouldAnimateComposer = !isWeb;
+  const estimatedMessageSize = 120;
 
   // --- Effects & Callbacks ---
 
@@ -504,12 +503,16 @@ export function ConversationScreen({ navigation, route }: Props) {
 
   // Hide/slide composer while action sheet is open (iMessage-like)
   useEffect(() => {
+    if (!shouldAnimateComposer) {
+      composerHideAnim.setValue(0);
+      return;
+    }
     Animated.timing(composerHideAnim, {
       toValue: selectedMessage ? 1 : 0,
       duration: 160,
       useNativeDriver: true,
     }).start();
-  }, [composerHideAnim, selectedMessage]);
+  }, [composerHideAnim, selectedMessage, shouldAnimateComposer]);
 
   // Reset actual bubble height when modal closes
   useEffect(() => {
@@ -518,22 +521,24 @@ export function ConversationScreen({ navigation, route }: Props) {
     }
   }, [selectedMessage]);
 
-  const composerAnimatedStyle = {
-    transform: [
-      {
-        translateY: composerHideAnim.interpolate({
+  const composerAnimatedStyle = shouldAnimateComposer
+    ? {
+        transform: [
+          {
+            translateY: composerHideAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, 80],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+        opacity: composerHideAnim.interpolate({
           inputRange: [0, 1],
-          outputRange: [0, 80],
+          outputRange: [1, 0],
           extrapolate: "clamp",
         }),
-      },
-    ],
-    opacity: composerHideAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [1, 0],
-      extrapolate: "clamp",
-    }),
-  };
+      }
+    : undefined;
 
   // Keep non-inverted list so newest messages appear at the bottom
 
@@ -584,14 +589,17 @@ export function ConversationScreen({ navigation, route }: Props) {
         },
       });
     },
-    [navigation]
+    [navigation],
   );
 
   const handleBubbleMeasure = useCallback(
-    (id: string, layout: { x: number; y: number; width: number; height: number }) => {
+    (
+      id: string,
+      layout: { x: number; y: number; width: number; height: number },
+    ) => {
       bubbleLayoutsRef.current.set(id, layout);
     },
-    [bubbleLayoutsRef]
+    [bubbleLayoutsRef],
   );
 
   const listData = useMemo(() => {
@@ -656,7 +664,7 @@ export function ConversationScreen({ navigation, route }: Props) {
       listData,
       handleAvatarPress,
       handleBubbleMeasure,
-    ]
+    ],
   );
 
   const keyExtractor = useCallback(
@@ -673,7 +681,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
       return `message-${senderKey}-${index}`;
     },
-    []
+    [],
   );
 
   const flashListData = listData;
@@ -697,7 +705,7 @@ export function ConversationScreen({ navigation, route }: Props) {
         if (showScrollToBottom) setShowScrollToBottom(false);
       }
     },
-    [scrollToBottomAnim, showScrollToBottom, setShowScrollToBottom]
+    [scrollToBottomAnim, showScrollToBottom, setShowScrollToBottom],
   );
 
   const isPaginating = useMemo(() => {
@@ -733,8 +741,6 @@ export function ConversationScreen({ navigation, route }: Props) {
     }
     return null;
   }, [error, isTyping, typingLabel, isDark]);
-
-
 
   return (
     <DesktopShell>
@@ -822,35 +828,39 @@ export function ConversationScreen({ navigation, route }: Props) {
               <View className="flex-row items-center">
                 <View className="flex-row">
                   {loadingMembers ||
-                    (groupMembers.length === 0 && !headerAvatarUri)
+                  (groupMembers.length === 0 && !headerAvatarUri)
                     ? // Loading placeholders
-                    [0, 1, 2].map((i) => (
-                      <View
-                        key={`placeholder-${i}`}
-                        className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${i > 0 ? "-ml-[15px]" : ""
-                          }`}
-                        style={{ zIndex: 3 - i }}
-                      />
-                    ))
-                    : groupMembers.slice(0, 3).map((member, index) => {
-                      const uri = getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE;
-
-                      return (
+                      [0, 1, 2].map((i) => (
                         <View
-                          key={member.publicKey}
-                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${index > 0 ? "-ml-[15px]" : ""
+                          key={`placeholder-${i}`}
+                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                            i > 0 ? "-ml-[15px]" : ""
+                          }`}
+                          style={{ zIndex: 3 - i }}
+                        />
+                      ))
+                    : groupMembers.slice(0, 3).map((member, index) => {
+                        const uri =
+                          getProfileImageUrl(member.publicKey) ||
+                          FALLBACK_PROFILE_IMAGE;
+
+                        return (
+                          <View
+                            key={member.publicKey}
+                            className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                              index > 0 ? "-ml-[15px]" : ""
                             }`}
-                          style={{ zIndex: 3 - index }}
-                        >
-                          <UserAvatar
-                            uri={uri}
-                            name={member.username || ""}
-                            size={36}
-                            className="h-full w-full rounded-full"
-                          />
-                        </View>
-                      );
-                    })}
+                            style={{ zIndex: 3 - index }}
+                          >
+                            <UserAvatar
+                              uri={uri}
+                              name={member.username || ""}
+                              size={36}
+                              className="h-full w-full rounded-full"
+                            />
+                          </View>
+                        );
+                      })}
                 </View>
                 {/* Show member count badge if more than 3 members */}
                 {!loadingMembers && groupMembers.length > 3 && (
@@ -891,118 +901,116 @@ export function ConversationScreen({ navigation, route }: Props) {
               <View className="flex-1 items-center justify-center">
                 <ActivityIndicator size="large" color={accentColor} />
               </View>
+            ) : enableFlashListChat ? (
+              <FlashList<DecryptedMessageEntryResponse>
+                ref={flatListRef}
+                data={flashListData}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
+                ListHeaderComponent={topListHeader}
+                ListFooterComponent={bottomListFooter}
+                showsVerticalScrollIndicator={Platform.OS === "web"}
+                style={scrollBarStyle}
+                contentContainerStyle={{
+                  paddingHorizontal: isWeb ? 16 : 12,
+                  paddingTop: 12,
+                }}
+                onStartReached={() => {
+                  if (!isLoading && hasMore) {
+                    loadMessages(false);
+                  }
+                }}
+                onStartReachedThreshold={0.3}
+                onScroll={handleListScroll}
+                scrollEventThrottle={16}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                ListEmptyComponent={() => (
+                  <View
+                    className="items-center justify-center px-6 py-10"
+                    style={{ minHeight: 400 }}
+                  >
+                    {isLoading ? (
+                      <View className="items-center">
+                        <ActivityIndicator size="large" color={accentColor} />
+                        <Text className="mt-4 text-sm font-medium text-gray-500">
+                          Loading messages...
+                        </Text>
+                      </View>
+                    ) : (
+                      <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                        <Feather
+                          name="message-circle"
+                          size={38}
+                          color={isDark ? "#64748b" : "#9ca3af"}
+                        />
+                        <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                          No messages yet
+                        </Text>
+                        <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
+                          Start the conversation and it will appear here
+                          instantly.
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              />
             ) : (
-              enableFlashListChat ? (
-                <FlashList<DecryptedMessageEntryResponse>
-                  ref={flatListRef}
-                  data={flashListData}
-                  keyExtractor={keyExtractor}
-                  renderItem={renderItem}
-                  ListHeaderComponent={topListHeader}
-                  ListFooterComponent={bottomListFooter}
-                  showsVerticalScrollIndicator={Platform.OS === "web"}
-                  style={scrollBarStyle}
-                  contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingTop: 12,
-                  }}
-                  onStartReached={() => {
-                    if (!isLoading && hasMore) {
-                      loadMessages(false);
-                    }
-                  }}
-                  onStartReachedThreshold={0.3}
-                  onScroll={handleListScroll}
-                  scrollEventThrottle={16}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
-                  ListEmptyComponent={() => (
-                    <View
-                      className="items-center justify-center px-6 py-10"
-                      style={{ minHeight: 400 }}
-                    >
-                      {isLoading ? (
-                        <View className="items-center">
-                          <ActivityIndicator size="large" color={accentColor} />
-                          <Text className="mt-4 text-sm font-medium text-gray-500">
-                            Loading messages...
-                          </Text>
-                        </View>
-                      ) : (
-                        <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                          <Feather
-                            name="message-circle"
-                            size={38}
-                            color={isDark ? "#64748b" : "#9ca3af"}
-                          />
-                          <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                            No messages yet
-                          </Text>
-                          <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
-                            Start the conversation and it will appear here
-                            instantly.
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                />
-              ) : (
-                <FlashList<DecryptedMessageEntryResponse>
-                  ref={flatListRef}
-                  data={flashListData}
-                  keyExtractor={keyExtractor}
-                  renderItem={renderItem}
-                  ListHeaderComponent={topListHeader}
-                  ListFooterComponent={bottomListFooter}
-                  showsVerticalScrollIndicator={Platform.OS === "web"}
-                  style={scrollBarStyle}
-                  contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingTop: 12,
-                  }}
-                  onStartReached={() => {
-                    if (!isLoading && hasMore) {
-                      loadMessages(false);
-                    }
-                  }}
-                  onStartReachedThreshold={0.3}
-                  onScroll={handleListScroll}
-                  scrollEventThrottle={16}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
-                  ListEmptyComponent={() => (
-                    <View
-                      className="items-center justify-center px-6 py-10"
-                      style={{ minHeight: 400 }}
-                    >
-                      {isLoading ? (
-                        <View className="items-center">
-                          <ActivityIndicator size="large" color={accentColor} />
-                          <Text className="mt-4 text-sm font-medium text-gray-500">
-                            Loading messages...
-                          </Text>
-                        </View>
-                      ) : (
-                        <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                          <Feather
-                            name="message-circle"
-                            size={38}
-                            color={isDark ? "#64748b" : "#9ca3af"}
-                          />
-                          <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
-                            No messages yet
-                          </Text>
-                          <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
-                            Start the conversation and it will appear here
-                            instantly.
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                />
-              )
+              <FlashList<DecryptedMessageEntryResponse>
+                ref={flatListRef}
+                data={flashListData}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
+                ListHeaderComponent={topListHeader}
+                ListFooterComponent={bottomListFooter}
+                showsVerticalScrollIndicator={Platform.OS === "web"}
+                style={scrollBarStyle}
+                contentContainerStyle={{
+                  paddingHorizontal: isWeb ? 16 : 12,
+                  paddingTop: 12,
+                }}
+                onStartReached={() => {
+                  if (!isLoading && hasMore) {
+                    loadMessages(false);
+                  }
+                }}
+                onStartReachedThreshold={0.3}
+                onScroll={handleListScroll}
+                scrollEventThrottle={16}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                ListEmptyComponent={() => (
+                  <View
+                    className="items-center justify-center px-6 py-10"
+                    style={{ minHeight: 400 }}
+                  >
+                    {isLoading ? (
+                      <View className="items-center">
+                        <ActivityIndicator size="large" color={accentColor} />
+                        <Text className="mt-4 text-sm font-medium text-gray-500">
+                          Loading messages...
+                        </Text>
+                      </View>
+                    ) : (
+                      <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
+                        <Feather
+                          name="message-circle"
+                          size={38}
+                          color={isDark ? "#64748b" : "#9ca3af"}
+                        />
+                        <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
+                          No messages yet
+                        </Text>
+                        <Text className="mt-1 text-center text-sm text-gray-500 dark:text-slate-400">
+                          Start the conversation and it will appear here
+                          instantly.
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              />
             )}
 
             {showScrollToBottom && (
@@ -1017,13 +1025,10 @@ export function ConversationScreen({ navigation, route }: Props) {
               >
                 <TouchableOpacity
                   onPress={() => {
-                    devLog(
-                      "[ConversationScreen] Scroll-to-latest pressed",
-                      {
-                        scrollOffset: scrollOffsetRef.current,
-                        messageCount: messages.length,
-                      }
-                    );
+                    devLog("[ConversationScreen] Scroll-to-latest pressed", {
+                      scrollOffset: scrollOffsetRef.current,
+                      messageCount: messages.length,
+                    });
                     Animated.timing(scrollToBottomAnim, {
                       toValue: 0,
                       duration: 200,
@@ -1034,7 +1039,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                     } catch (err) {
                       console.warn(
                         "[ConversationScreen] scrollToEnd failed",
-                        err
+                        err,
                       );
                     }
                   }}
@@ -1083,11 +1088,11 @@ export function ConversationScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-
-
         <Animated.View
           style={composerAnimatedStyle}
-          pointerEvents={selectedMessage ? "none" : "auto"}
+          pointerEvents={
+            selectedMessage && shouldAnimateComposer ? "none" : "auto"
+          }
         >
           <Composer
             isGroupChat={isGroupChat}
@@ -1138,76 +1143,78 @@ export function ConversationScreen({ navigation, route }: Props) {
 
             {selectedMessage && selectedBubbleLayout
               ? (() => {
-                const positions = computeModalPositions(
-                  selectedBubbleLayout,
-                  composerBottomInset,
-                  Boolean(selectedMessage?.IsSender),
-                  actualBubbleHeight // Pass actual measured bubble height
-                );
-                return (
-                  <>
-                    <Reanimated.View
-                      pointerEvents="none"
-                      style={[
-                        {
-                          position: "absolute",
-                          top: positions.bubbleTop,
-                          left: selectedBubbleLayout.x,
-                          width: selectedBubbleLayout.width,
-                        },
-                        bubblePreviewStyle,
-                      ]}
-                    >
-                      <SelectedBubblePreview
-                        message={selectedMessage}
-                        profiles={profilesForUi}
-                        isDark={isDark}
-                        messageIdMap={messageIdMap}
-                        layout={{
-                          width: selectedBubbleLayout.width,
-                          height: selectedBubbleLayout.height,
-                        }}
-                        onLayout={(event) => {
-                          const { height } = event.nativeEvent.layout;
-                          setActualBubbleHeight(height);
-                        }}
-                        isGroupChat={isGroupChat}
-                        showTail={selectedShowTail}
-                      />
-                    </Reanimated.View>
+                  const positions = computeModalPositions(
+                    selectedBubbleLayout,
+                    composerBottomInset,
+                    Boolean(selectedMessage?.IsSender),
+                    actualBubbleHeight, // Pass actual measured bubble height
+                  );
+                  return (
+                    <>
+                      <Reanimated.View
+                        pointerEvents="none"
+                        style={[
+                          {
+                            position: "absolute",
+                            top: positions.bubbleTop,
+                            left: selectedBubbleLayout.x,
+                            width: selectedBubbleLayout.width,
+                          },
+                          bubblePreviewStyle,
+                        ]}
+                      >
+                        <SelectedBubblePreview
+                          message={selectedMessage}
+                          profiles={profilesForUi}
+                          isDark={isDark}
+                          messageIdMap={messageIdMap}
+                          layout={{
+                            width: selectedBubbleLayout.width,
+                            height: selectedBubbleLayout.height,
+                          }}
+                          onLayout={(event) => {
+                            const { height } = event.nativeEvent.layout;
+                            setActualBubbleHeight(height);
+                          }}
+                          isGroupChat={isGroupChat}
+                          showTail={selectedShowTail}
+                        />
+                      </Reanimated.View>
 
-                    <Reanimated.View
-                      style={[
-                        {
-                          position: "absolute",
-                          top: positions.actionTop,
-                          left: positions.actionLeft,
-                        },
-                        actionSheetStyle,
-                      ]}
-                    >
-                      <ActionSheetCard
-                        isDark={isDark}
-                        onReply={handleActionReply}
-                        onEdit={
-                          selectedMessage?.IsSender
-                            ? () => startEditingMessage(selectedMessage)
-                            : undefined
-                        }
-                        onCopy={handleActionCopy}
-                      />
-                    </Reanimated.View>
-                  </>
-                );
-              })()
+                      <Reanimated.View
+                        style={[
+                          {
+                            position: "absolute",
+                            top: positions.actionTop,
+                            left: positions.actionLeft,
+                          },
+                          actionSheetStyle,
+                        ]}
+                      >
+                        <ActionSheetCard
+                          isDark={isDark}
+                          onReply={handleActionReply}
+                          onEdit={
+                            selectedMessage?.IsSender
+                              ? () => startEditingMessage(selectedMessage)
+                              : undefined
+                          }
+                          onCopy={handleActionCopy}
+                        />
+                      </Reanimated.View>
+                    </>
+                  );
+                })()
               : null}
           </View>
         </Modal>
 
         <Modal
           visible={showMembersModal}
-          animationType={isWebDesktop ? "fade" : "slide"}
-          presentationStyle={Platform.OS === "web" ? "overFullScreen" : "pageSheet"}
+          animationType={isWebMobile ? "none" : isWebDesktop ? "fade" : "slide"}
+          presentationStyle={
+            Platform.OS === "web" ? "overFullScreen" : "pageSheet"
+          }
           transparent={Platform.OS === "web"}
           onRequestClose={() => {
             if (showAddMemberModal) {
@@ -1219,15 +1226,20 @@ export function ConversationScreen({ navigation, route }: Props) {
         >
           {(() => {
             const membersModalContent = (
-              <View style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+                }}
+              >
                 {/* Conditional header based on which view is active */}
                 {showAddMemberModal ? (
                   // Add Member Header
                   <View
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
                     style={{
-                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16),
-                      paddingBottom: 16
+                      paddingTop: Platform.OS === "web" ? 40 : insets.top + 16,
+                      paddingBottom: 16,
                     }}
                   >
                     <TouchableOpacity
@@ -1251,8 +1263,8 @@ export function ConversationScreen({ navigation, route }: Props) {
                   <View
                     className="flex-row items-center justify-between px-5 border-b border-gray-200 dark:border-slate-800"
                     style={{
-                      paddingTop: Platform.OS === "web" ? 40 : (insets.top + 16),
-                      paddingBottom: 16
+                      paddingTop: Platform.OS === "web" ? 40 : insets.top + 16,
+                      paddingBottom: 16,
                     }}
                   >
                     <Text className="text-xl font-bold text-[#111] dark:text-white">
@@ -1342,7 +1354,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                       keyExtractor={(item) => item.publicKey}
                       renderItem={({ item: user }) => {
                         const userImageUrl = getProfileImageUrl(
-                          user.publicKey || ""
+                          user.publicKey || "",
                         );
                         const isAddingThisUser =
                           addingMemberKey === user.publicKey;
@@ -1518,7 +1530,9 @@ export function ConversationScreen({ navigation, route }: Props) {
                     })}
                     keyExtractor={(item) => item.publicKey}
                     renderItem={({ item: member }) => {
-                      const memberImageUrl = getProfileImageUrl(member.publicKey);
+                      const memberImageUrl = getProfileImageUrl(
+                        member.publicKey,
+                      );
                       const isMe = member.publicKey === userPublicKey;
                       const isMemberOwner =
                         member.publicKey === recipientOwnerKey;
@@ -1586,7 +1600,7 @@ export function ConversationScreen({ navigation, route }: Props) {
                               onPress={() =>
                                 handleRemoveMember(
                                   member.publicKey,
-                                  member.username || ""
+                                  member.username || "",
                                 )
                               }
                               className="rounded-full"
@@ -1671,8 +1685,18 @@ export function ConversationScreen({ navigation, route }: Props) {
             }
 
             return (
-              <View style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
-                <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}>
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+                }}
+              >
+                <SafeAreaView
+                  style={{
+                    flex: 1,
+                    backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+                  }}
+                >
                   {membersModalContent}
                 </SafeAreaView>
               </View>

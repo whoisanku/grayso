@@ -1,5 +1,12 @@
 import React, { useRef, useState, useCallback, useMemo } from "react";
-import { View, Text, Keyboard, Platform, TouchableOpacity } from "react-native";
+import {
+    View,
+    Text,
+    Keyboard,
+    Platform,
+    TouchableOpacity,
+    useWindowDimensions,
+} from "react-native";
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -71,7 +78,9 @@ export const MessageBubble = React.memo(function MessageBubble({
 }: MessageBubbleProps) {
     const bubbleContainerRef = useRef<View>(null);
     const animatedBubbleRef = useAnimatedRef<Reanimated.View>();
-    const { accentColor, accentStrong, accentSoft, onAccent } = useAccentColor();
+    const { accentColor, accentSoft, onAccent } = useAccentColor();
+    const { width: windowWidth } = useWindowDimensions();
+    const enableSwipeToReply = Platform.OS !== "web";
 
     // Image gallery state
     const [galleryVisible, setGalleryVisible] = useState(false);
@@ -210,6 +219,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     const hasTriggeredHaptic = useSharedValue(false);
 
     const triggerHaptic = useCallback(() => {
+        if (Platform.OS === "web") return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }, []);
 
@@ -220,6 +230,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 
 
     const panGesture = useMemo(() => Gesture.Pan()
+        .enabled(enableSwipeToReply)
         //.enabled(!hasMedia) // Enabled for all messages now
         .activeOffsetX(isMine ? -15 : 15) // Start gesture after 15px horizontal movement
         .failOffsetY([-10, 10]) // Fail (allow scroll) if vertical movement exceeds 10px
@@ -255,7 +266,7 @@ export const MessageBubble = React.memo(function MessageBubble({
                 overshootClamping: true,
             });
             hasTriggeredHaptic.value = false;
-        }), [hasMedia, isMine, triggerHaptic, triggerReply]);
+        }), [enableSwipeToReply, hasMedia, isMine, triggerHaptic, triggerReply]);
 
     const animatedRowStyle = useAnimatedStyle(() => {
         return {
@@ -358,7 +369,7 @@ export const MessageBubble = React.memo(function MessageBubble({
     }, [isOnlyMessage, isMine, isFirstInGroup, isLastInGroup]);
 
     // Memoize bubble border and shadow styles for performance
-    // Use CSS boxShadow for web since RN shadow props don't work there
+    // Consistent shadow styling across platforms
     const bubbleExtraStyle = useMemo(() => {
         const baseStyles = [
             borderRadiusStyle,
@@ -377,14 +388,27 @@ export const MessageBubble = React.memo(function MessageBubble({
             ];
         }
 
-        // React Native shadow for iOS/Android
+        // React Native shadow for iOS/Android - matching web shadow intensity
         return [
             ...baseStyles,
-            { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isDark ? 0.2 : 0.05, shadowRadius: 2 },
+            { 
+                shadowColor: '#000', 
+                shadowOffset: { width: 0, height: 2 }, 
+                shadowOpacity: isDark ? 0.25 : 0.08, 
+                shadowRadius: 4,
+                // Android elevation
+                elevation: isDark ? 4 : 2,
+            },
         ];
-    }, [borderRadiusStyle, isMine, isDark]);
+    }, [borderRadiusStyle, isMine, isDark, bubbleBorderColor]);
 
-    const marginBottom = isLastInGroup ? 16 : 2;
+    const marginBottom = isLastInGroup ? 12 : 2;
+    const maxBubbleWidth = useMemo(() => {
+        // Consistent max width across platforms for visual parity
+        // Avatar is now absolutely positioned, so no offset needed
+        const baseWidth = Math.min(windowWidth * 0.75, 360);
+        return Math.max(240, baseWidth);
+    }, [windowWidth]);
 
     return (
         <View
@@ -438,43 +462,19 @@ export const MessageBubble = React.memo(function MessageBubble({
                     <Reanimated.View style={animatedRowStyle}>
                         <GestureDetector gesture={contentGesture} touchAction="pan-y">
                             <View
-                                className={`flex-row px-1 ${isMine ? "justify-end" : "justify-start"
-                                    }`}
+                                className={`flex-row ${isMine ? "justify-end" : "justify-start"}`}
+                                style={{ paddingHorizontal: 6 }}
                             >
-                                {/* Only show profile pic for received messages in GROUP chats */}
-                                {!isMine && isGroupChat ? (
-                                    <View className="mr-2" style={{ width: 32 }}>
-                                        {isFirstInGroup && hasAvatar ? (
-                                            <TouchableOpacity
-                                                onPress={() => onAvatarPress?.(senderPk, senderProfile?.Username)}
-                                                activeOpacity={0.7}
-                                            >
-                                                <Image
-                                                    source={{ uri: avatarUri }}
-                                                    className="h-8 w-8 rounded-full bg-gray-200"
-                                                    placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
-                                                    placeholderContentFit="cover"
-                                                    transition={200}
-                                                    contentFit="cover"
-                                                    cachePolicy="memory-disk"
-                                                />
-                                            </TouchableOpacity>
-                                        ) : isFirstInGroup ? (
-                                            <View className="h-8 w-8 items-center justify-center rounded-full bg-gray-200 dark:bg-slate-700">
-                                                <Feather name="user" size={16} color={isDark ? "#94a3b8" : "#6b7280"} />
-                                            </View>
-                                        ) : null}
-                                    </View>
-                                ) : null}
+                                {/* No avatar in group chats - sender name inside bubble is sufficient */}
                                 <View style={{ position: "relative" }}>
                                     <Reanimated.View
                                         ref={animatedBubbleRef}
                                         style={[
                                             bubbleExtraStyle,
                                             {
-                                                paddingHorizontal: isMediaOnly ? 0 : 16,
-                                                paddingVertical: isMediaOnly ? 0 : 12,
-                                                maxWidth: Platform.OS === 'web' ? 320 : '80%',
+                                                paddingHorizontal: isMediaOnly ? 0 : 14,
+                                                paddingVertical: isMediaOnly ? 0 : 10,
+                                                maxWidth: maxBubbleWidth,
                                                 overflow: 'hidden',
                                                 backgroundColor: bubbleBackgroundColor,
                                             },
@@ -483,21 +483,23 @@ export const MessageBubble = React.memo(function MessageBubble({
                                         {/* Only show sender name in GROUP chats */}
                                         {!isMine && isGroupChat && isFirstInGroup && (
                                             <Text
-                                                className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-                                                style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
+                                                className="mb-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+                                                style={isMediaOnly ? { marginHorizontal: 10, marginTop: 8 } : undefined}
                                                 numberOfLines={1}
                                             >
                                                 {displayName}
                                             </Text>
                                         )}
                                         {renderReplyPreview()}
-                                        <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
+                                        <View className={hasMedia && !isMediaOnly ? "flex-col gap-2" : undefined}>
                                             <FileAndMessageBubble
                                                 decryptedImageURLs={typeof decryptedImageURLs === "string" ? decryptedImageURLs : undefined}
                                                 extraData={extraData}
                                                 isDark={isDark}
                                                 onImagePress={handleImagePress}
                                                 compact={isMediaOnly}
+                                                borderRadius={16}
+                                                parentMaxWidth={maxBubbleWidth}
                                             />
                                             <VideoMessageBubble
                                                 decryptedVideoURLs={typeof decryptedVideoURLs === "string" ? decryptedVideoURLs : undefined}
@@ -509,12 +511,12 @@ export const MessageBubble = React.memo(function MessageBubble({
                                             {/* WhatsApp-style: text + inline timestamp using nested Text */}
                                             {(!isMediaOnly) && (
                                                 <Text
-                                                    className="text-base leading-[22px]"
+                                                    className="text-[15px] leading-[21px]"
                                                     style={{
                                                         flexShrink: 1,
                                                         color: isMine ? onAccent : (isDark ? "#e2e8f0" : "#0f172a"),
-                                                        paddingHorizontal: isMediaOnly ? 12 : 0, // Restore padding if somehow mixed (rare)
-                                                        marginBottom: isMediaOnly ? 12 : 0,
+                                                        paddingHorizontal: isMediaOnly ? 10 : 0,
+                                                        marginBottom: isMediaOnly ? 10 : 0,
                                                     }}
                                                 >
                                                     {messageText}
@@ -540,8 +542,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                                                         fontSize: 10,
                                                         color: "#ffffff",
                                                         fontWeight: '500',
-                                                        marginRight: 12,
-                                                        marginBottom: 8,
+                                                        marginRight: 10,
+                                                        marginBottom: 6,
                                                         textShadowColor: 'rgba(0,0,0,0.5)',
                                                         textShadowOffset: { width: 0, height: 1 },
                                                         textShadowRadius: 2,
@@ -562,8 +564,8 @@ export const MessageBubble = React.memo(function MessageBubble({
                                             <Text
                                                 style={{
                                                     position: 'absolute',
-                                                    bottom: 12,
-                                                    right: 12,
+                                                    bottom: 10,
+                                                    right: 14,
                                                     fontSize: 10,
                                                     color: hasError
                                                         ? "#ef4444"

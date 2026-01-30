@@ -269,18 +269,17 @@ export function SelectedBubblePreview({
           style={[
             {
               width: layout?.width,
-              maxWidth: Platform.OS === 'web' ? 320 : '80%', // Match MessageBubble
               borderWidth: isMine ? 0 : 0.5,
               borderColor: isMine ? "transparent" : bubbleBorderColor,
               backgroundColor: bubbleBackgroundColor,
               shadowColor: "#000",
-              shadowOpacity: isDark ? 0.2 : 0.05, // Match MessageBubble
-              shadowRadius: 2, // Match MessageBubble
-              shadowOffset: { width: 0, height: 1 }, // Match MessageBubble
-              elevation: 2,
+              shadowOpacity: isDark ? 0.25 : 0.08, // Match MessageBubble
+              shadowRadius: 4, // Match MessageBubble
+              shadowOffset: { width: 0, height: 2 }, // Match MessageBubble
+              elevation: isDark ? 4 : 2,
               justifyContent: "flex-start",
-              paddingHorizontal: isMediaOnly ? 0 : 16,
-              paddingVertical: isMediaOnly ? 0 : 12,
+              paddingHorizontal: isMediaOnly ? 0 : 14, // Match MessageBubble
+              paddingVertical: isMediaOnly ? 0 : 10, // Match MessageBubble
               overflow: "hidden",
             },
             borderRadiusStyle, // Apply dynamic border radius
@@ -289,8 +288,8 @@ export function SelectedBubblePreview({
         {/* Only show sender name in GROUP chats */}
         {!isMine && isGroupChat && (
           <Text
-            className="mb-2 text-[11px] font-bold text-slate-500 dark:text-slate-400"
-            style={isMediaOnly ? { marginHorizontal: 12, marginTop: 8 } : undefined}
+            className="mb-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400"
+            style={isMediaOnly ? { marginHorizontal: 10, marginTop: 8 } : undefined}
             numberOfLines={1}
           >
             {displayName}
@@ -300,7 +299,7 @@ export function SelectedBubblePreview({
         {renderReplyPreview()}
 
         {/* Render media + text in a single vertical stack so spacing is consistent */}
-        <View className={hasMedia && !isMediaOnly ? "flex-col gap-1.5" : undefined}>
+        <View className={hasMedia && !isMediaOnly ? "flex-col gap-2" : undefined}>
           <FileAndMessageBubble
             decryptedImageURLs={
               typeof decryptedImageURLs === "string"
@@ -311,6 +310,8 @@ export function SelectedBubblePreview({
             isDark={isDark}
             onImagePress={() => {}} // No-op in preview
             compact={isMediaOnly}
+            borderRadius={16}
+            parentMaxWidth={layout?.width}
           />
           <VideoMessageBubble
             decryptedVideoURLs={
@@ -326,13 +327,13 @@ export function SelectedBubblePreview({
           {/* WhatsApp-style: text + inline timestamp using nested Text */}
           {(!isMediaOnly) && text && text.trim().length > 0 && (
             <Text
-              className="text-[16px] leading-[22px]"
+              className="text-[15px] leading-[21px]"
               style={
                 {
                   flexShrink: 1,
                   color: isMine ? onAccent : isDark ? "#e2e8f0" : "#0f172a",
-                  paddingHorizontal: isMediaOnly ? 12 : 0,
-                  marginBottom: isMediaOnly ? 12 : 0,
+                  paddingHorizontal: isMediaOnly ? 10 : 0,
+                  marginBottom: isMediaOnly ? 10 : 0,
                 } as any
               }
             >
@@ -370,8 +371,8 @@ export function SelectedBubblePreview({
                 fontSize: 10,
                 color: "#ffffff",
                 fontWeight: "500",
-                marginRight: 12,
-                marginBottom: 8,
+                marginRight: 10,
+                marginBottom: 6,
                 textShadowColor: "rgba(0,0,0,0.5)",
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
@@ -387,8 +388,8 @@ export function SelectedBubblePreview({
             <Text
               style={{
                 position: "absolute",
-                bottom: 12,
-                right: 12,
+                bottom: 10,
+                right: 14,
                 fontSize: 10,
                 color: isMine ? onAccent : isDark ? "#94a3b8" : "#94a3b8",
               }}

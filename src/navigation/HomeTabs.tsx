@@ -97,13 +97,13 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           key={route.key}
           onPress={() => navigation.navigate("Composer")}
           activeOpacity={0.8}
-          className="flex-1 items-center justify-center pt-[13px] pb-1"
+          className="flex-1 items-center justify-center pt-[10px] pb-1"
         >
           <View
-            className="h-8 w-8 items-center justify-center rounded-full"
+            className="h-10 w-10 items-center justify-center rounded-full"
             style={{ backgroundColor: accentColor }}
           >
-            <CreatePostIcon width={18} height={18} color="white" fill="white" stroke="white" />
+            <CreatePostIcon width={22} height={22} color="white" fill="white" stroke="white" />
           </View>
         </TouchableOpacity>
       );

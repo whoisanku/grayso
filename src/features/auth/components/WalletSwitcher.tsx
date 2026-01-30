@@ -10,11 +10,18 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { identity } from "deso-protocol";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UserAvatar } from "@/components/UserAvatar";
 import { useWalletSwitcher } from "../hooks/useWalletSwitcher";
+import { RootStackParamList } from "@/navigation/types";
+import { handleLogout } from "@/lib/auth";
+import { Toast } from "@/components/ui/Toast";
+import { useAuthTransition } from "@/state/auth/AuthTransitionProvider";
 
 type WalletSwitcherProps = {
   minimal?: boolean;
@@ -33,13 +40,16 @@ export function WalletSwitcher({
   const isDark = colorScheme === "dark";
   const { accounts, pendingAction, switchToPublicKey, addWallet } =
     useWalletSwitcher();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { startAuthTransition, endAuthTransition } = useAuthTransition();
   const [internalOpen, setInternalOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && windowWidth >= 1024;
   const insets = useSafeAreaInsets();
   const profileCardRef = useRef<View>(null);
-  const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, height: 0 });
+  const [cardPosition, setCardPosition] = useState({ top: 0, left: 0, width: 0, height: 0 });
   
   // Use external control if provided, otherwise use internal state
   const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
@@ -48,8 +58,8 @@ export function WalletSwitcher({
     if (!profileCardRef.current) {
       return;
     }
-    profileCardRef.current.measureInWindow((x, y, _width, height) => {
-      setCardPosition({ top: y, left: x, height });
+    profileCardRef.current.measureInWindow((x, y, width, height) => {
+      setCardPosition({ top: y, left: x, width, height });
     });
   }, []);
 
@@ -71,8 +81,8 @@ export function WalletSwitcher({
       return;
     }
     if (isDesktop && profileCardRef.current) {
-      profileCardRef.current.measureInWindow((x, y, _width, height) => {
-        setCardPosition({ top: y, left: x, height });
+      profileCardRef.current.measureInWindow((x, y, width, height) => {
+        setCardPosition({ top: y, left: x, width, height });
         setInternalOpen(true);
       });
       return;
@@ -112,29 +122,74 @@ export function WalletSwitcher({
 
   const handleSelectAccount = useCallback(
     async (publicKey: string, isCurrent: boolean) => {
-      if (isCurrent) {
+      if (isCurrent || pendingAction || isSigningOut) {
         closeMenu();
         return;
       }
       await switchToPublicKey(publicKey);
       closeMenu();
     },
-    [switchToPublicKey, closeMenu],
+    [switchToPublicKey, closeMenu, pendingAction, isSigningOut],
   );
 
   const handleAddWallet = useCallback(async () => {
+    if (pendingAction || isSigningOut) {
+      return;
+    }
     closeMenu();
     await addWallet();
-  }, [addWallet, closeMenu]);
+  }, [addWallet, closeMenu, pendingAction, isSigningOut]);
+
+  const handleGoToProfile = useCallback(() => {
+    closeMenu();
+    navigation.navigate("Main", { screen: "Profile" });
+  }, [closeMenu, navigation]);
+
+  const handleSignOut = useCallback(async () => {
+    if (pendingAction || isSigningOut) return;
+    setIsSigningOut(true);
+    startAuthTransition("logout");
+    try {
+      await handleLogout(() => identity.logout());
+      Toast.show({
+        type: "success",
+        text1: "Signed out",
+        text2: "Come back soon!",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Please try again";
+      Toast.show({
+        type: "error",
+        text1: "Logout failed",
+        text2: message,
+      });
+    } finally {
+      endAuthTransition();
+      setIsSigningOut(false);
+      closeMenu();
+    }
+  }, [
+    pendingAction,
+    isSigningOut,
+    startAuthTransition,
+    endAuthTransition,
+    closeMenu,
+  ]);
 
   if (!currentAccount) {
     return null;
   }
 
-  const popoverWidth = minimal ? 200 : 280;
-  const desktopLeft = Math.min(cardPosition.left, windowWidth - popoverWidth - 12);
-  const desktopTop = cardPosition.top + cardPosition.height + 8;
+  // Keep popover same width as trigger
+  const popoverWidth = minimal ? 180 : Math.max(180, cardPosition.width);
+  // Position popover aligned with trigger
+  const desktopLeft = cardPosition.left;
+  const desktopTop = cardPosition.top + cardPosition.height + 4;
   const useDesktopAnchor = isDesktop && cardPosition.height > 0;
+  const overlayBackground = isDesktop
+    ? "transparent"
+    : "rgba(0, 0, 0, 0.5)";
 
   return (
     <>
@@ -159,89 +214,83 @@ export function WalletSwitcher({
             onLayout={handleLayout}
             onHoverIn={() => setIsHovered(true)}
             onHoverOut={() => setIsHovered(false)}
-            className="mb-3 flex-row items-center justify-between rounded-full py-2 px-3"
-            style={{
-              backgroundColor: isHovered
-                ? (isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.05)")
-                : "transparent",
-              // Add transition for background color
-              ...(Platform.OS === "web" && {
-                transitionProperty: "background-color",
-                transitionDuration: "250ms",
-                transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                transitionDelay: isHovered ? "0ms" : "50ms",
-              }),
-            }}
-          >
-            {/* Avatar with scale/translate animation */}
-            <View
-              style={{
-                position: "relative",
-                zIndex: 10,
+            className="mb-3 flex-row items-center rounded-full pl-1 pr-2"
+            style={[
+              { gap: 6, paddingVertical: 3 },
+              {
+                backgroundColor: isHovered || isOpen
+                  ? (isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(100, 116, 139, 0.08)")
+                  : "transparent",
                 ...(Platform.OS === "web" && {
-                  transitionProperty: "transform",
-                  transitionDuration: "250ms",
-                  transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                  transitionDelay: isHovered ? "0ms" : "50ms",
+                  transitionProperty: "background-color",
+                  transitionDuration: "150ms",
+                  cursor: "pointer",
                 }),
-                transform: isHovered
-                  ? [{ scale: 2 / 3 }, { translateX: -22 }]
-                  : [{ scale: 1 }, { translateX: 0 }],
-              }}
+              },
+            ]}
+          >
+            {/* Avatar - always visible, scales down when active to align with nav icons */}
+            <View
+              style={[
+                Platform.OS === "web" ? {
+                  transitionProperty: "transform",
+                  transitionDuration: "200ms",
+                } as any : undefined,
+                (isHovered || isOpen) ? {
+                  transform: [{ scale: 0.7 }, { translateX: -6 }],
+                } : undefined,
+              ]}
             >
               <UserAvatar
                 uri={currentAccount.avatarUrl}
                 name={currentAccount.displayName}
-                size={44}
+                size={48}
               />
             </View>
 
-            {/* Username and handle - fade in on hover */}
+            {/* Name and handle - only visible on hover/open like Bluesky */}
             <View
-              className="flex-1"
-              style={{
-                marginLeft: -20, // Overlap with scaled avatar
-                ...(Platform.OS === "web" && {
+              className="flex-1 min-w-0"
+              style={[
+                { marginLeft: -8 },
+                Platform.OS === "web" ? {
                   transitionProperty: "opacity",
-                  transitionDuration: "250ms",
-                  transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                  transitionDelay: isHovered ? "0ms" : "50ms",
-                }),
-                opacity: isHovered ? 1 : 0,
-              }}
+                  transitionDuration: "150ms",
+                } as any : undefined,
+                { opacity: isHovered || isOpen ? 1 : 0 },
+              ]}
             >
               <Text
-                className={`text-sm font-semibold leading-tight ${
+                className={`text-[14px] font-bold leading-tight ${
                   isDark ? "text-slate-50" : "text-slate-900"
                 }`}
                 numberOfLines={1}
               >
-                {currentAccount.username || currentAccount.displayName}
+                {currentAccount.displayName || currentAccount.username}
               </Text>
               <Text
-                className={`text-xs leading-tight ${
+                className={`text-[12px] leading-tight mt-0.5 ${
                   isDark ? "text-slate-400" : "text-slate-500"
                 }`}
                 numberOfLines={1}
               >
-                {currentAccount.shortPublicKey}
+                @{currentAccount.username || currentAccount.shortPublicKey}
               </Text>
             </View>
 
-            {/* Ellipsis icon - fade in on hover */}
+            {/* Ellipsis icon - only visible on hover/open like Bluesky */}
             <View
-              style={{
-                ...(Platform.OS === "web" && {
+              style={[
+                Platform.OS === "web" ? {
                   transitionProperty: "opacity",
-                  transitionDuration: "250ms",
-                  transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                }),
-                opacity: isHovered ? 1 : 0,
-              }}
+                  transitionDuration: "150ms",
+                } as any : undefined,
+                { opacity: isHovered || isOpen ? 1 : 0 },
+              ]}
             >
               <Feather
                 name="more-horizontal"
-                size={16}
+                size={18}
                 color={isDark ? "#94a3b8" : "#64748b"}
               />
             </View>
@@ -252,47 +301,63 @@ export function WalletSwitcher({
       {/* Modal overlay for both desktop and mobile - positioned differently */}
       <Modal
         transparent
-        animationType="fade"
+        animationType={isDesktop ? "fade" : "fade"}
         visible={isOpen}
         onRequestClose={closeMenu}
+        statusBarTranslucent
       >
         <Pressable 
           className="flex-1" 
           onPress={closeMenu}
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
+          style={{ backgroundColor: overlayBackground }}
         >
           {/* Wallet switcher popover */}
           <View
             style={{
               position: "absolute",
               // Desktop: Use measured profile card position
-              // Mobile: Position above bottom nav
+              // Mobile: Position centered or above bottom nav
               ...(useDesktopAnchor
                 ? {
-                    top: desktopTop, // Below profile card with 8px gap
+                    top: desktopTop,
                     left: Math.max(12, desktopLeft),
                   }
-                : {
-                    bottom: Math.max(insets.bottom, 15) + 72, // Above bottom nav
-                    right: 10,
-                  }),
-              width: popoverWidth,
+                : Platform.OS === "web"
+                  ? {
+                      // Web mobile - positioned near bottom but not as a sheet
+                      bottom: Math.max(insets.bottom, 20) + 80,
+                      left: 16,
+                      right: 16,
+                      width: "auto",
+                      maxWidth: 320,
+                    }
+                  : {
+                      // Native mobile - above bottom nav
+                      bottom: Math.max(insets.bottom, 15) + 72,
+                      right: 12,
+                      left: 12,
+                      width: "auto",
+                      maxWidth: 320,
+                    }),
+              ...(useDesktopAnchor ? { width: popoverWidth } : {}),
             }}
             pointerEvents="box-none"
           >
             <Pressable
               onPress={(e) => e.stopPropagation()}
-              className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-900 p-2 shadow-2xl"
+              className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-900 shadow-xl"
+              style={{ paddingVertical: 6, paddingHorizontal: 6 }}
             >
+              {/* Switch account header */}
               <Text
-                className={`px-3 pb-1 text-xs font-semibold uppercase tracking-wider ${
+                className={`px-2 pt-1 pb-2 text-xs font-semibold ${
                   isDark ? "text-slate-400" : "text-slate-500"
                 }`}
               >
-                Wallets
+                Switch account
               </Text>
 
-              <View className="gap-1">
+              <View className="gap-0.5">
                 {accounts.map((account) => {
                   const isPending =
                     pendingAction?.type === "switch" &&
@@ -300,86 +365,140 @@ export function WalletSwitcher({
                   return (
                     <Pressable
                       key={account.publicKey}
-                      disabled={Boolean(pendingAction)}
+                      disabled={Boolean(pendingAction) || isSigningOut}
                       onPress={() =>
                         handleSelectAccount(account.publicKey, account.isCurrent)
                       }
-                      className={`flex-row items-center gap-3 rounded-lg px-3 py-2 active:opacity-70 hover:bg-slate-200 dark:hover:bg-slate-800 ${
-                        account.isCurrent
-                          ? isDark
-                            ? "bg-slate-800/60"
-                            : "bg-slate-100"
-                          : ""
-                      }`}
-                      style={Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined}
+                      className="flex-row items-center rounded-md px-2 py-2 active:opacity-70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      style={[
+                        { gap: 10 },
+                        Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined
+                      ]}
                     >
                       <UserAvatar
                         uri={account.avatarUrl}
                         name={account.displayName}
-                        size={28}
+                        size={24}
                       />
-                      <View className="flex-1">
-                        <Text
-                          className={`text-sm font-medium ${
-                            isDark ? "text-slate-50" : "text-slate-900"
-                          }`}
-                          numberOfLines={1}
-                        >
-                          @{account.username || account.displayName}
-                        </Text>
-                        <Text
-                          className={`text-xs ${
-                            isDark ? "text-slate-400" : "text-slate-500"
-                          }`}
-                          numberOfLines={1}
-                        >
-                          {account.shortPublicKey}
-                        </Text>
-                      </View>
+                      <Text
+                        className={`flex-1 text-sm ${
+                          isDark ? "text-slate-50" : "text-slate-900"
+                        }`}
+                        numberOfLines={1}
+                      >
+                        @{account.username || account.shortPublicKey}
+                      </Text>
                       {isPending ? (
                         <ActivityIndicator
                           size="small"
                           color={isDark ? "#e2e8f0" : "#0f172a"}
                         />
                       ) : account.isCurrent ? (
-                        <Feather
-                          name="check"
-                          size={16}
-                          color={isDark ? "#e2e8f0" : "#0f172a"}
-                        />
+                        <View
+                          className="items-center justify-center rounded-full"
+                          style={{
+                            width: 16,
+                            height: 16,
+                            backgroundColor: isDark ? "#22c55e" : "#16a34a",
+                          }}
+                        >
+                          <Feather
+                            name="check"
+                            size={10}
+                            color="#ffffff"
+                          />
+                        </View>
                       ) : null}
                     </Pressable>
                   );
                 })}
               </View>
 
-              <View className="my-2 h-px bg-slate-200 dark:bg-slate-700" />
+              <View className="my-1.5 mx-1 h-px bg-slate-200/80 dark:bg-slate-700/50" />
 
-              <Pressable
-                disabled={Boolean(pendingAction)}
-                onPress={handleAddWallet}
-                className="flex-row items-center gap-2 rounded-lg px-3 py-2 active:opacity-70 hover:bg-slate-200 dark:hover:bg-slate-800"
-                style={Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined}
-              >
-                <Feather
-                  name="plus"
-                  size={16}
-                  color={isDark ? "#e2e8f0" : "#0f172a"}
-                />
-                <Text
-                  className={`text-sm font-medium ${
-                    isDark ? "text-slate-50" : "text-slate-900"
-                  }`}
+              <View className="gap-0.5">
+                <Pressable
+                  onPress={handleGoToProfile}
+                  disabled={Boolean(pendingAction) || isSigningOut}
+                  className="flex-row items-center rounded-md px-2 py-2 active:opacity-70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  style={[
+                    { gap: 10 },
+                    Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined
+                  ]}
                 >
-                  Add wallet
-                </Text>
-                {pendingAction?.type === "add" ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={isDark ? "#e2e8f0" : "#0f172a"}
+                  <Feather
+                    name="user"
+                    size={18}
+                    color={isDark ? "#94a3b8" : "#64748b"}
                   />
-                ) : null}
-              </Pressable>
+                  <Text
+                    className={`text-sm ${
+                      isDark ? "text-slate-50" : "text-slate-900"
+                    }`}
+                  >
+                    Go to profile
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={Boolean(pendingAction) || isSigningOut}
+                  onPress={handleAddWallet}
+                  className="flex-row items-center rounded-md px-2 py-2 active:opacity-70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  style={[
+                    { gap: 10 },
+                    Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined
+                  ]}
+                >
+                  <Feather
+                    name="plus"
+                    size={18}
+                    color={isDark ? "#94a3b8" : "#64748b"}
+                  />
+                  <Text
+                    className={`text-sm flex-1 ${
+                      isDark ? "text-slate-50" : "text-slate-900"
+                    }`}
+                  >
+                    Add another account
+                  </Text>
+                  {pendingAction?.type === "add" ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={isDark ? "#e2e8f0" : "#0f172a"}
+                    />
+                  ) : null}
+                </Pressable>
+
+                <Pressable
+                  disabled={Boolean(pendingAction) || isSigningOut}
+                  onPress={handleSignOut}
+                  className="flex-row items-center rounded-md px-2 py-2 active:opacity-70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  style={[
+                    { gap: 10 },
+                    Platform.OS === "web" ? ({ cursor: "pointer" } as any) : undefined
+                  ]}
+                >
+                  <Feather
+                    name="log-out"
+                    size={18}
+                    color={isDark ? "#f87171" : "#dc2626"}
+                  />
+                  <Text
+                    className={`text-sm flex-1 ${
+                      isDark ? "text-red-300" : "text-red-600"
+                    }`}
+                  >
+                    Sign out
+                  </Text>
+                  {isSigningOut ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={isDark ? "#fecaca" : "#dc2626"}
+                    />
+                  ) : null}
+                </Pressable>
+              </View>
+
             </Pressable>
           </View>
         </Pressable>
