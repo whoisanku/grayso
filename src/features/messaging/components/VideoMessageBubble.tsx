@@ -23,6 +23,19 @@ type NormalizedVideoSource = {
   id?: string;
 };
 
+const isNative = Platform.OS !== 'web';
+
+/**
+ * Build a playback URL from a video ID.
+ * On native, use HLS .m3u8 manifest. On web, use iframe embed.
+ */
+function buildPlaybackUrl(videoId: string): string {
+  if (isNative) {
+    return `https://customer-wmy0lgubd5pjy0wz.cloudflarestream.com/${videoId}/manifest/video.m3u8`;
+  }
+  return `https://iframe.videodelivery.net/${videoId}`;
+}
+
 const normalizeVideoSource = (url: string): NormalizedVideoSource => {
   try {
     const parsed = new URL(url);
@@ -31,23 +44,34 @@ const normalizeVideoSource = (url: string): NormalizedVideoSource => {
       const videoId = parsed.pathname.replace(/^\//, "");
 
       if (videoId) {
-        // Use the iframe URL directly - it works on all platforms
         return {
-          streamUrl: url,
+          streamUrl: buildPlaybackUrl(videoId),
           posterUrl: `https://videodelivery.net/${videoId}/thumbnails/thumbnail.jpg?time=1s`,
           id: videoId
         };
       }
     }
 
-    // If it's already an HLS or other videodelivery URL, keep it as is
     if (parsed.hostname === "videodelivery.net") {
       const videoIdMatch = url.match(/videodelivery\.net\/([^\/]+)\//);
       if (videoIdMatch && videoIdMatch[1]) {
         const videoId = videoIdMatch[1];
 
         return {
-          streamUrl: url,
+          streamUrl: isNative ? buildPlaybackUrl(videoId) : url,
+          posterUrl: `https://videodelivery.net/${videoId}/thumbnails/thumbnail.jpg?time=1s`,
+          id: videoId
+        };
+      }
+    }
+
+    // cloudflarestream.com URLs
+    if (parsed.hostname.includes('cloudflarestream.com')) {
+      const pathParts = parsed.pathname.replace(/^\/+/, '').split('/');
+      const videoId = pathParts[0];
+      if (videoId && /^[A-Za-z0-9_-]{8,}$/.test(videoId)) {
+        return {
+          streamUrl: isNative ? buildPlaybackUrl(videoId) : url,
           posterUrl: `https://videodelivery.net/${videoId}/thumbnails/thumbnail.jpg?time=1s`,
           id: videoId
         };
@@ -67,7 +91,7 @@ const buildStreamUrlFromClientId = (clientId?: string): NormalizedVideoSource | 
   if (!sanitized) return null;
 
   return {
-    streamUrl: `https://iframe.videodelivery.net/${sanitized}`,
+    streamUrl: buildPlaybackUrl(sanitized),
     posterUrl: `https://videodelivery.net/${sanitized}/thumbnails/thumbnail.jpg?time=1s`,
     id: sanitized
   };

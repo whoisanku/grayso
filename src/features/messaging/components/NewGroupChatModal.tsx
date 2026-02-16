@@ -20,6 +20,7 @@ import { DeSoIdentityContext } from 'react-deso-protocol';
 import { searchUsers, UserSearchResult } from '@/lib/userSearch';
 import { createGroupChat } from '@/features/messaging/api/groupChat';
 import { FALLBACK_PROFILE_IMAGE, getProfileImageUrl } from '@/utils/deso';
+import { toPlatformSafeImageUrl } from '@/lib/mediaUrl';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '@/lib/media';
 import { useAccentColor } from '@/state/theme/useAccentColor';
@@ -257,9 +258,9 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                         {groupImageUri ? (
                             <Image
                                 source={{ uri: groupImageUri }}
-                                className="h-24 w-24 rounded-full border-[3px]"
-                                style={{ borderColor: accentColor }}
+                                style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: accentColor }}
                                 placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
+                                contentFit="cover"
                                 transition={500}
                             />
                         ) : (
@@ -398,8 +399,9 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                             }}
                         >
                             <Image
-                                source={{ uri: getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE }}
-                                className="h-7 w-7 rounded-full"
+                                source={{ uri: toPlatformSafeImageUrl(getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE) ?? (getProfileImageUrl(member.publicKey) || FALLBACK_PROFILE_IMAGE) }}
+                                style={{ width: 28, height: 28, borderRadius: 14 }}
+                                contentFit="cover"
                                 placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
                                 transition={500}
                             />
@@ -493,9 +495,10 @@ export function NewGroupChatModal({ visible, onClose, onGroupCreated, onNavigate
                         className="flex-row items-center px-5 py-3"
                     >
                         <Image
-                            source={{ uri: getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE }}
-                            className="mr-3.5 h-12 w-12 rounded-full"
-                            style={{ backgroundColor: isDark ? '#334155' : '#e2e8f0' }}
+                            source={{ uri: toPlatformSafeImageUrl(getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE) ?? (getProfileImageUrl(item.publicKey) || FALLBACK_PROFILE_IMAGE) }}
+                            className="mr-3.5"
+                            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? '#334155' : '#e2e8f0' }}
+                            contentFit="cover"
                             placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}
                             transition={500}
                         />

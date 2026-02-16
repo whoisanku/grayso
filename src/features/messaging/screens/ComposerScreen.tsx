@@ -5,19 +5,19 @@ import {
   TextInput,
   ScrollView,
   TouchableOpacity,
-  Image,
   Platform,
   ActivityIndicator,
   LayoutAnimation,
   UIManager,
 } from "react-native";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { type RootStackParamList } from "@/navigation/types";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl, submitPost } from "deso-protocol";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { uploadImage, uploadVideo } from "@/lib/media";
 import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
@@ -30,6 +30,7 @@ import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
 import { Toast } from "@/components/ui/Toast";
+import { PageTopBar } from "@/components/ui/PageTopBar";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -39,7 +40,7 @@ let LiquidGlassView: React.ComponentType<any> | null = null;
 if (isIOS26OrAbove) {
   try {
     LiquidGlassView = require("@callstack/liquid-glass").LiquidGlassView;
-  } catch (e) {
+  } catch {
     LiquidGlassView = null;
   }
 }
@@ -61,7 +62,6 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     type: 'image' | 'video';
   }[]>([]);
   const [isPosting, setIsPosting] = useState(false);
-  const insets = useSafeAreaInsets();
   const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
   const { isDesktop } = useLayoutBreakpoints();
@@ -78,9 +78,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     if (!currentUser?.PublicKeyBase58Check) {
       return FALLBACK_PROFILE_IMAGE;
     }
-    return buildProfilePictureUrl(currentUser.PublicKeyBase58Check, {
+    const rawUrl = buildProfilePictureUrl(currentUser.PublicKeyBase58Check, {
       fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
     });
+    return toPlatformSafeImageUrl(rawUrl) ?? rawUrl;
   }, [currentUser?.PublicKeyBase58Check]);
 
   if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -343,58 +344,60 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
       backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
     >
       <View className="flex-1">
-        {/* Custom Header */}
-        <View
-          accessibilityRole="header"
-          className="flex-row items-center justify-between border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-[#0a0f1a]"
-        >
-          <TouchableOpacity
-            onPress={onCancel}
-            className="py-2"
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel post"
-          >
-            <Text className="text-lg font-medium text-slate-600 dark:text-slate-400">Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={onPost}
-            disabled={!canPost || isPosting}
-            className="rounded-full px-5 py-2"
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={isPosting ? "Posting..." : "Submit post"}
-            accessibilityState={{ disabled: !canPost || isPosting }}
-            style={
-              canPost
-                ? {
-                    backgroundColor: accentColor,
-                    shadowColor: accentStrong,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 8,
-                    elevation: 5,
-                  }
-                : {
-                    backgroundColor: isDark ? "rgba(30, 41, 59, 0.9)" : "#e2e8f0",
-                  }
-            }
-          >
-            {isPosting ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text
-                className="text-base font-bold"
-                style={{
-                  color: canPost ? "#ffffff" : isDark ? "#94a3b8" : "#94a3b8",
-                }}
-              >
-                Post
+        <PageTopBar
+          title="New Post"
+          leftSlot={
+            <TouchableOpacity
+              onPress={onCancel}
+              className="px-1 py-2"
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel post"
+            >
+              <Text className="text-base font-medium text-slate-600 dark:text-slate-400">
+                Cancel
               </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+          }
+          rightSlot={
+            <TouchableOpacity
+              onPress={onPost}
+              disabled={!canPost || isPosting}
+              className="rounded-full px-5 py-2"
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={isPosting ? "Posting..." : "Submit post"}
+              accessibilityState={{ disabled: !canPost || isPosting }}
+              style={
+                canPost
+                  ? {
+                      backgroundColor: accentColor,
+                      shadowColor: accentStrong,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 8,
+                      elevation: 5,
+                    }
+                  : {
+                      backgroundColor: isDark ? "rgba(30, 41, 59, 0.9)" : "#e2e8f0",
+                    }
+              }
+            >
+              {isPosting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text
+                  className="text-base font-bold"
+                  style={{
+                    color: canPost ? "#ffffff" : isDark ? "#94a3b8" : "#94a3b8",
+                  }}
+                >
+                  Post
+                </Text>
+              )}
+            </TouchableOpacity>
+          }
+        />
 
         <View className="flex-1">
           <ScrollView
@@ -403,11 +406,12 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
             contentContainerStyle={{ paddingBottom: 20 }}
           >
             <View className="flex-row">
-              <View className="mr-3 h-12 w-12 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+              <View className="mr-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" style={{ width: 48, height: 48 }}>
                 <Image
                   source={{ uri: avatarUri }}
-                  className="h-full w-full"
-                  resizeMode="cover"
+                  style={{ width: 48, height: 48, borderRadius: 24 }}
+                  contentFit="cover"
+                  transition={300}
                 />
               </View>
               <View className="flex-1">
@@ -443,8 +447,9 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
                   <View key={index} className="relative mr-3">
                     <Image
                       source={{ uri: item.localUri }}
-                      className="h-64 w-48 rounded-2xl bg-slate-100 dark:bg-slate-800"
-                      resizeMode="cover"
+                      style={{ width: 192, height: 256, borderRadius: 16 }}
+                      className="bg-slate-100 dark:bg-slate-800"
+                      contentFit="cover"
                     />
                     {/* Video Indicator */}
                     {item.type === 'video' && (

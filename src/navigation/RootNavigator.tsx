@@ -1,6 +1,12 @@
 import React, { useContext, useEffect, useState } from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { View, Animated, ActivityIndicator, Text } from "react-native";
+import {
+  View,
+  Animated,
+  ActivityIndicator,
+  Text,
+  Platform,
+} from "react-native";
 import { HomeTabs } from "./HomeTabs";
 import { LoginScreen } from "../features/auth/screens/LoginScreen";
 import { SettingsScreen } from "../features/settings/screens/SettingsScreen";
@@ -22,8 +28,8 @@ export function RootNavigator() {
   const { colorScheme } = useColorScheme();
   const { isTransitioning, reason } = useAuthTransition();
   const [showSplash, setShowSplash] = useState(true);
-  const [hasShownLoginToast, setHasShownLoginToast] = useState(false);
-  const fadeAnimRef = React.useRef(new Animated.Value(1));
+  const [fadeAnim] = useState(() => new Animated.Value(1));
+  const hasShownLoginToastRef = React.useRef(false);
   const isInitialLoadRef = React.useRef(true);
 
   useEffect(() => {
@@ -34,14 +40,14 @@ export function RootNavigator() {
       if (isInitialLoadRef.current) {
         if (currentUser) {
           // If we have a user on first load, mark toast as "shown" (skipped)
-          setHasShownLoginToast(true);
+          hasShownLoginToastRef.current = true;
         }
         isInitialLoadRef.current = false;
       }
 
       // Small delay to ensure smooth transition
       const timer = setTimeout(() => {
-        Animated.timing(fadeAnimRef.current, {
+        Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
@@ -51,24 +57,30 @@ export function RootNavigator() {
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, showSplash, currentUser]);
+  }, [isLoading, showSplash, currentUser, fadeAnim]);
 
   // Show login success toast when user logs in (only for subsequent logins, not initial restore)
   useEffect(() => {
-    if (currentUser && !isLoading && !showSplash && !hasShownLoginToast && !isInitialLoadRef.current) {
-      setHasShownLoginToast(true);
+    if (
+      currentUser &&
+      !isLoading &&
+      !showSplash &&
+      !hasShownLoginToastRef.current &&
+      !isInitialLoadRef.current
+    ) {
+      hasShownLoginToastRef.current = true;
       Toast.show({
-        type: 'success',
-        text1: 'Welcome back!',
-        text2: `Logged in as @${currentUser.ProfileEntryResponse?.Username || 'user'}`,
+        type: "success",
+        text1: "Welcome back!",
+        text2: `Logged in as @${currentUser.ProfileEntryResponse?.Username || "user"}`,
       });
     }
-    
+
     // Reset flag when user logs out
     if (!currentUser) {
-      setHasShownLoginToast(false);
+      hasShownLoginToastRef.current = false;
     }
-  }, [currentUser, isLoading, showSplash, hasShownLoginToast]);
+  }, [currentUser, isLoading, showSplash]);
 
   // Show splash while checking initial auth state
   if (showSplash) {
@@ -76,13 +88,20 @@ export function RootNavigator() {
       <Animated.View
         style={{
           flex: 1,
-          opacity: fadeAnimRef.current,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colorScheme === "dark" ? "#0a0f1a" : "#ffffff"
+          opacity: fadeAnim,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colorScheme === "dark" ? "#0a0f1a" : "#ffffff",
         }}
       >
-        <View style={{ height: 80, width: 80, overflow: 'hidden', borderRadius: 16 }}>
+        <View
+          style={{
+            height: 80,
+            width: 80,
+            overflow: "hidden",
+            borderRadius: 16,
+          }}
+        >
           <AppLogo width="100%" height="100%" />
         </View>
       </Animated.View>
@@ -90,8 +109,8 @@ export function RootNavigator() {
   }
 
   const shouldShowAuthOverlay = !showSplash && (isLoading || isTransitioning);
-  const authOverlayLabel =
-    reason === "logout" ? "Signing out…" : "Signing in…";
+  const authOverlayLabel = reason === "logout" ? "Signing out…" : "Signing in…";
+  const isWeb = Platform.OS === "web";
 
   return (
     <View style={{ flex: 1 }}>
@@ -119,7 +138,11 @@ export function RootNavigator() {
               />
             </Stack.Group>
             <Stack.Group
-              screenOptions={{ presentation: "modal", headerShown: false }}
+              screenOptions={{
+                presentation: "modal",
+                headerShown: false,
+                animation: isWeb ? "none" : "default",
+              }}
             >
               <Stack.Screen name="Composer" component={ComposerScreen} />
               <Stack.Screen name="NewChat" component={NewChatScreen} />

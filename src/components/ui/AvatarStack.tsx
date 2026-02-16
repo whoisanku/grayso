@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
 
 import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 
 type AvatarStackProps = {
   maxVisible?: number;
@@ -38,7 +39,7 @@ export function AvatarStack({ maxVisible = 5, size = 28 }: AvatarStackProps) {
         >
           {account.avatarUrl ? (
             <Image
-              source={{ uri: account.avatarUrl }}
+              source={{ uri: toPlatformSafeImageUrl(account.avatarUrl) ?? account.avatarUrl }}
               style={{
                 width: size,
                 height: size,

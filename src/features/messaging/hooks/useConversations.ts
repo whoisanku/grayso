@@ -1,20 +1,15 @@
 import { useContext, useEffect, useRef, useMemo, useState } from "react";
 import { DeSoIdentityContext } from "react-deso-protocol";
+import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import {
-  useInfiniteQuery,
-  useQueryClient,
-  type InfiniteData,
-} from "@tanstack/react-query";
-import { fetchConversations, getConversationsQueryKey } from "@/state/queries/messages/list";
+  fetchConversations,
+  getConversationsQueryKey,
+} from "@/state/queries/messages/list";
 import { PublicKeyToProfileEntryResponseMap } from "deso-protocol";
 import { ConversationMap } from "@/features/messaging/api/conversations";
 import { identity } from "deso-protocol";
-import {
-  getSupabaseClient,
-  isSupabaseConfigured,
-} from "@/lib/supabaseClient";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { Platform } from "react-native";
-import { StorageService } from "@/lib/storage";
 import type { GroupMember } from "@/lib/deso/graphql";
 
 type Mailbox = "inbox" | "spam";
@@ -41,37 +36,17 @@ type UseConversationsResult = {
 
 export const useConversations = (
   mailbox: Mailbox = "inbox",
-  options: { enabled?: boolean } = {}
+  options: { enabled?: boolean } = {},
 ): UseConversationsResult => {
   const { currentUser } = useContext(DeSoIdentityContext);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const queryClient = useQueryClient();
-  const [typingStatuses, setTypingStatuses] = useState<Record<string, boolean>>({});
+  const [typingStatuses, setTypingStatuses] = useState<Record<string, boolean>>(
+    {},
+  );
   const [latestMessages, setLatestMessages] = useState<Record<string, any>>({});
-  const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  // Hydrate cached conversations immediately for fast paint
-  useEffect(() => {
-    const userPk = currentUser?.PublicKeyBase58Check;
-    if (!userPk) return;
-    (async () => {
-      const cached = await StorageService.getConversations(userPk, mailbox);
-      if (cached) {
-        const hydrated =
-          cached && typeof cached === "object" && "pages" in cached
-            ? cached
-            : {
-              pages: [cached],
-              pageParams: [0],
-            };
-        queryClient.setQueryData(
-          getConversationsQueryKey(userPk, mailbox),
-          hydrated
-        );
-      }
-    })();
-  }, [currentUser?.PublicKeyBase58Check, mailbox, queryClient]);
+  const typingTimeoutsRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({});
 
   const initialPageParam = 0;
 
@@ -92,7 +67,10 @@ export const useConversations = (
     ReturnType<typeof getConversationsQueryKey>,
     number
   >({
-    queryKey: getConversationsQueryKey(currentUser?.PublicKeyBase58Check, mailbox),
+    queryKey: getConversationsQueryKey(
+      currentUser?.PublicKeyBase58Check,
+      mailbox,
+    ),
     queryFn: async ({ pageParam }) => {
       try {
         return await fetchConversations(currentUser!.PublicKeyBase58Check, {
@@ -110,7 +88,10 @@ export const useConversations = (
           try {
             await identity.logout();
           } catch (logoutError) {
-            console.warn("Failed to logout after decryption error", logoutError);
+            console.warn(
+              "Failed to logout after decryption error",
+              logoutError,
+            );
           }
         }
         throw e;
@@ -118,7 +99,7 @@ export const useConversations = (
     },
     getNextPageParam: (lastPage) =>
       lastPage && typeof lastPage === "object"
-        ? lastPage.nextOffset ?? undefined
+        ? (lastPage.nextOffset ?? undefined)
         : undefined,
     initialPageParam,
     enabled: !!currentUser?.PublicKeyBase58Check && (options.enabled ?? true),
@@ -126,28 +107,6 @@ export const useConversations = (
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-
-  // Persist conversations to storage when updated (debounced)
-  useEffect(() => {
-    const userPk = currentUser?.PublicKeyBase58Check;
-    if (!userPk || !data?.pages) return;
-
-    const debounceMs = Platform.OS === "web" ? 2000 : 1000;
-
-    if (persistTimeoutRef.current) {
-      clearTimeout(persistTimeoutRef.current);
-    }
-
-    persistTimeoutRef.current = setTimeout(() => {
-      void StorageService.saveConversations(userPk, mailbox, data);
-    }, debounceMs);
-
-    return () => {
-      if (persistTimeoutRef.current) {
-        clearTimeout(persistTimeoutRef.current);
-      }
-    };
-  }, [currentUser?.PublicKeyBase58Check, mailbox, data]);
 
   useEffect(() => {
     const userPublicKey = currentUser?.PublicKeyBase58Check;
@@ -174,10 +133,13 @@ export const useConversations = (
           if (debounceRef.current) {
             clearTimeout(debounceRef.current);
           }
-          debounceRef.current = setTimeout(() => {
-            void refetch();
-          }, Platform.OS === "web" ? 150 : 75);
-        }
+          debounceRef.current = setTimeout(
+            () => {
+              void refetch();
+            },
+            Platform.OS === "web" ? 150 : 75,
+          );
+        },
       )
       .subscribe((status, err) => {
         if (err) {
@@ -191,9 +153,12 @@ export const useConversations = (
         if (debounceRef.current) {
           clearTimeout(debounceRef.current);
         }
-        debounceRef.current = setTimeout(() => {
-          void refetch();
-        }, Platform.OS === "web" ? 150 : 75);
+        debounceRef.current = setTimeout(
+          () => {
+            void refetch();
+          },
+          Platform.OS === "web" ? 150 : 75,
+        );
       })
       .on("broadcast", { event: "typing" }, ({ payload }) => {
         const { conversationId, is_typing } = payload;
@@ -223,18 +188,21 @@ export const useConversations = (
         // Optimistically update the latest message for the conversation
         const { conversationId, message } = payload;
         if (conversationId && message) {
-          setLatestMessages(prev => ({
+          setLatestMessages((prev) => ({
             ...prev,
-            [conversationId]: message
+            [conversationId]: message,
           }));
 
           // Also trigger a refetch to ensure consistency
           if (debounceRef.current) {
             clearTimeout(debounceRef.current);
           }
-          debounceRef.current = setTimeout(() => {
-            void refetch();
-          }, Platform.OS === "web" ? 150 : 75);
+          debounceRef.current = setTimeout(
+            () => {
+              void refetch();
+            },
+            Platform.OS === "web" ? 150 : 75,
+          );
         }
       });
 
@@ -259,21 +227,27 @@ export const useConversations = (
     }
     const conversations = data.pages.reduce<ConversationsPage["conversations"]>(
       (acc, page) => ({ ...acc, ...page.conversations }),
-      {}
+      {},
     );
     const profiles = data.pages.reduce<ConversationsPage["profiles"]>(
       (acc, page) => ({ ...acc, ...page.profiles }),
-      {}
+      {},
     );
-    const groupMembers = data.pages.reduce<GroupMembersMap>((acc, page) => ({
-      ...acc,
-      ...page.groupMembers,
-    }), {} as GroupMembersMap);
+    const groupMembers = data.pages.reduce<GroupMembersMap>(
+      (acc, page) => ({
+        ...acc,
+        ...page.groupMembers,
+      }),
+      {} as GroupMembersMap,
+    );
 
-    const groupExtraData = data.pages.reduce<GroupExtraMap>((acc, page) => ({
-      ...acc,
-      ...page.groupExtraData,
-    }), {} as GroupExtraMap);
+    const groupExtraData = data.pages.reduce<GroupExtraMap>(
+      (acc, page) => ({
+        ...acc,
+        ...page.groupExtraData,
+      }),
+      {} as GroupExtraMap,
+    );
     return {
       conversations,
       profiles,

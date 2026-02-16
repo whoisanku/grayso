@@ -17,33 +17,15 @@ import {
 } from "@/alf/breakpoints";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { WalletSwitcher } from "@/features/auth/components/WalletSwitcher";
-import Svg, { Path } from "react-native-svg";
+import HomeIcon from "@/assets/navIcons/home.svg";
+import HomeIconFilled from "@/assets/navIcons/home-filled.svg";
 import MessageIcon from "@/assets/navIcons/message.svg";
 import MessageIconFilled from "@/assets/navIcons/message-filled.svg";
 import UserIcon from "@/assets/navIcons/user.svg";
 import UserIconFilled from "@/assets/navIcons/user-filled.svg";
 import SettingsIcon from "@/assets/navIcons/settings.svg";
 import SettingsIconFilled from "@/assets/navIcons/settings-filled.svg";
-
-// Feather icon for New Post button
-function FeatherIcon({
-  width = 20,
-  height = 20,
-  fill = "white",
-}: {
-  width?: number;
-  height?: number;
-  fill?: string;
-}) {
-  return (
-    <Svg width={width} height={height} viewBox="0 0 20 20">
-      <Path
-        d="M4.254 19.567c.307-.982.77-2.364 1.391-4.362 2.707-.429 3.827.341 5.546-2.729-1.395.427-3.077-.792-2.987-1.321.091-.528 3.913.381 6.416-3.173-3.155.696-4.164-.836-3.757-1.067.939-.534 3.726-.222 5.212-1.669.766-.745 1.125-2.556.813-3.202-.374-.781-2.656-1.946-3.914-1.836-1.258.109-3.231 4.79-3.817 4.754-.584-.037-.703-2.098.319-4.013-1.077.477-3.051 1.959-3.67 3.226-1.153 2.357.108 7.766-.296 7.958-.405.193-1.766-2.481-2.172-3.694-.555 1.859-.568 3.721 1.053 6.194-.611 1.623-.945 3.491-.996 4.441-.024.759.724.922.859.493z"
-        fill={fill}
-      />
-    </Svg>
-  );
-}
+import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
 
 const NAV_ICON_WIDTH = 26;
 type NavIconComponent = React.ComponentType<{
@@ -117,12 +99,10 @@ function NavItem({
 
 interface DesktopLeftNavProps {
   activeTab?: keyof HomeTabParamList | "Settings";
-  onTabChange?: (tab: keyof HomeTabParamList) => void;
 }
 
 export function DesktopLeftNav({
   activeTab = "Messages",
-  onTabChange,
 }: DesktopLeftNavProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -140,10 +120,12 @@ export function DesktopLeftNav({
   });
 
   // Determine which nav item is active based on route
+  const isFeedActive = currentRouteName === "Feed" || activeTab === "Feed";
   const isProfileActive =
     currentRouteName === "Profile" || activeTab === "Profile";
   const isSettingsActive = currentRouteName === "Settings";
   const isChatsActive =
+    !isFeedActive &&
     !isProfileActive &&
     !isSettingsActive &&
     (activeTab === "Messages" || currentRouteName === "Main");
@@ -156,6 +138,16 @@ export function DesktopLeftNav({
     isActive: boolean;
     onPress: () => void;
   }[] = [
+    {
+      key: "Feed",
+      label: "Feed",
+      Icon: HomeIcon,
+      ActiveIcon: HomeIconFilled,
+      isActive: isFeedActive,
+      onPress: () => {
+        rootNavigation.navigate("Main", { screen: "Feed" });
+      },
+    },
     {
       key: "Messages",
       label: "Chats",
@@ -255,7 +247,7 @@ export function DesktopLeftNav({
                 className="mt-6 ml-2 flex-row items-center self-start rounded-full px-5 py-2.5 active:opacity-90"
                 style={{ backgroundColor: accentColor }}
               >
-                <FeatherIcon width={18} height={18} fill="white" />
+                <FeatherPostIcon width={18} height={18} fill="white" />
                 <Text className="ml-2 text-sm font-semibold text-white">
                   New Post
                 </Text>
@@ -266,7 +258,7 @@ export function DesktopLeftNav({
                 className="mt-6 h-11 w-11 items-center justify-center rounded-full active:opacity-90"
                 style={{ backgroundColor: accentColor }}
               >
-                <FeatherIcon width={20} height={20} fill="white" />
+                <FeatherPostIcon width={20} height={20} fill="white" />
               </Pressable>
             )}
           </View>

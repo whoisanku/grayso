@@ -22,7 +22,44 @@
     "ios": {
       "bundleIdentifier": "com.anonymous.starter-app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true,
+          "NSAllowsArbitraryLoadsInMedia": true,
+          "NSExceptionDomains": {
+            "images.deso.org": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSTemporaryExceptionRequiresForwardSecrecy": false
+            },
+            "node.deso.org": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSTemporaryExceptionRequiresForwardSecrecy": false
+            },
+            "videodelivery.net": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSTemporaryExceptionRequiresForwardSecrecy": false
+            },
+            "lvpr.tv": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSTemporaryExceptionRequiresForwardSecrecy": false
+            },
+            "mypinata.cloud": {
+              "NSIncludesSubdomains": true,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true,
+              "NSTemporaryExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSTemporaryExceptionRequiresForwardSecrecy": false
+            }
+          }
+        }
       }
     },
     "android": {

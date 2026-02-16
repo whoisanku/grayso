@@ -3,6 +3,7 @@ import { View, Text, ImageStyle } from "react-native";
 import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
@@ -37,10 +38,12 @@ export function UserAvatar({
   }, [uri]);
 
   // If we have a URI and haven't encountered an error, show the image
-  if (uri && !hasError) {
+  const safeUri = uri ? (toPlatformSafeImageUrl(uri) ?? uri) : null;
+
+  if (safeUri && !hasError) {
     return (
       <Image
-        source={{ uri }}
+        source={{ uri: safeUri }}
         style={[{ width: size, height: size, borderRadius: size / 2 }, style]}
         className={`rounded-full ${className || ""}`}
         placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}

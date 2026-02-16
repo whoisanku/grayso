@@ -19,6 +19,7 @@ import { type FocusAccount } from "@/lib/focus/graphql";
 import { useFollowers } from "../api/useFollowers";
 import { useFollowing } from "../api/useFollowing";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey, getProfileImageUrl } from "@/utils/deso";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { DesktopLeftNav } from "@/features/messaging/components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "@/features/messaging/components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
@@ -50,11 +51,11 @@ const AccountRow = React.memo(function AccountRow({ account, onPress }: AccountR
   const isDark = colorScheme === "dark";
   
   const avatarUrl = useMemo(() => {
-    return (
+    const rawUrl =
       getExtraString(account.extraData as Record<string, unknown> | undefined, "LargeProfilePicURL") ||
       getExtraString(account.extraData as Record<string, unknown> | undefined, "NFTProfilePictureUrl") ||
-      (account.publicKey ? getProfileImageUrl(account.publicKey) : FALLBACK_PROFILE_IMAGE)
-    );
+      (account.publicKey ? getProfileImageUrl(account.publicKey) : FALLBACK_PROFILE_IMAGE);
+    return toPlatformSafeImageUrl(rawUrl) ?? rawUrl;
   }, [account.extraData, account.publicKey]);
 
   const displayName =

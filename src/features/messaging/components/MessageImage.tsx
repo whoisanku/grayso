@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { ActivityIndicator } from "react-native";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 
 export type MessageImageProps = {
   uri: string;
@@ -37,6 +38,7 @@ export const MessageImage = React.memo(({
   forceSquare = false,
 }: MessageImageProps) => {
   const [isLoading, setIsLoading] = useState(true);
+  const safeUri = toPlatformSafeImageUrl(uri) ?? uri;
 
   // Calculate optimized dimensions
   const aspectRatio = (width && height) 
@@ -75,7 +77,7 @@ export const MessageImage = React.memo(({
       className={className}
     >
       <Image
-        source={{ uri }}
+        source={{ uri: safeUri }}
         style={{ width: '100%', height: '100%' }}
         contentFit={contentFit}
         placeholder={{ blurhash: DEFAULT_IMAGE_BLURHASH }}

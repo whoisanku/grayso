@@ -38,8 +38,10 @@ const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       Main: {
+        initialRouteName: "Feed",
         screens: {
-          Messages: "",
+          Feed: "feed",
+          Messages: "messages",
           Profile: "u/:username?",
         },
       },
@@ -66,10 +68,14 @@ export default function App() {
                 <DrawerOpenProvider>
                   <DrawerSwipeDisabledProvider>
                     <GestureHandlerRootView style={{ flex: 1 }}>
-                      <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                      <StatusBar
+                        style={colorScheme === "dark" ? "light" : "dark"}
+                      />
                       <NavigationContainer
                         linking={linking}
-                        theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+                        theme={
+                          colorScheme === "dark" ? DarkTheme : DefaultTheme
+                        }
                         documentTitle={{ formatter: () => "Grayso" }}
                       >
                         <RootNavigator />

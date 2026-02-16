@@ -23,6 +23,7 @@ import { FlashList } from "@shopify/flash-list";
 import { UserAvatar } from "@/components/UserAvatar";
 
 import Reanimated from "react-native-reanimated";
+import { ConversationShimmer } from "../components/ConversationShimmer";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
 import { LiquidGlassView } from "../../../utils/liquidGlass";
@@ -75,6 +76,7 @@ import {
   useLayoutBreakpoints,
 } from "@/alf/breakpoints";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
+import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
@@ -85,6 +87,11 @@ const devLog = (...args: unknown[]) => {
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Conversation">;
+type HeaderGroupMember = {
+  publicKey: string;
+  username?: string;
+  profilePic?: string;
+};
 
 function looksLikePublicKeyTitle(value: string): boolean {
   const v = value.trim();
@@ -164,7 +171,6 @@ export function ConversationScreen({ navigation, route }: Props) {
   const { isDesktop } = useLayoutBreakpoints();
   const isWeb = Platform.OS === "web";
   const isWebDesktop = isWeb && isDesktop;
-  const isWebMobile = isWeb && !isDesktop;
 
   // Ref to store Composer's focusInput function for synchronous keyboard triggering
   const focusInputRef = useRef<(() => void) | null>(null);
@@ -183,7 +189,7 @@ export function ConversationScreen({ navigation, route }: Props) {
     }),
     [isDark],
   );
-  const composerBottomInset = Math.max(insets.bottom, 8);
+  const composerBottomInset = isWeb ? 8 : Math.max(insets.bottom, 8);
 
   // --- Custom Hooks ---
 
@@ -341,6 +347,63 @@ export function ConversationScreen({ navigation, route }: Props) {
     groupMembers,
     initialGroupMembers,
   ]);
+
+  const topBarGroupMembers = useMemo<HeaderGroupMember[]>(() => {
+    if (!isGroupChat) return [];
+
+    const byKey = new Map<string, HeaderGroupMember>();
+
+    for (const rawMember of initialGroupMembers ?? []) {
+      const member = rawMember as HeaderGroupMember;
+      if (!member?.publicKey) continue;
+      byKey.set(member.publicKey, {
+        publicKey: member.publicKey,
+        username: member.username,
+        profilePic: member.profilePic,
+      });
+    }
+
+    for (const member of groupMembers ?? []) {
+      if (!member?.publicKey) continue;
+      const existing = byKey.get(member.publicKey);
+      byKey.set(member.publicKey, {
+        publicKey: member.publicKey,
+        username: member.username ?? existing?.username,
+        profilePic: member.profilePic ?? existing?.profilePic,
+      });
+    }
+
+    return Array.from(byKey.values());
+  }, [groupMembers, initialGroupMembers, isGroupChat]);
+
+  const topBarMembersLabel = useMemo(() => {
+    if (!isGroupChat) return "";
+
+    const memberCount = topBarGroupMembers.length;
+    if (memberCount === 0) {
+      return loadingMembers ? "Loading members..." : "No members yet";
+    }
+
+    const uniqueNames = Array.from(
+      new Set(
+        topBarGroupMembers
+          .map((member) => member.username?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    );
+
+    const previewNames = uniqueNames.slice(0, 3).join(", ");
+    const remainingCount = memberCount - Math.min(uniqueNames.length, 3);
+    const countLabel = `${memberCount} member${memberCount === 1 ? "" : "s"}`;
+
+    if (!previewNames) {
+      return countLabel;
+    }
+
+    return `${countLabel} • ${previewNames}${
+      remainingCount > 0 ? ` +${remainingCount}` : ""
+    }`;
+  }, [isGroupChat, loadingMembers, topBarGroupMembers]);
 
   // Add Member Modal State
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -751,14 +814,12 @@ export function ConversationScreen({ navigation, route }: Props) {
         backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
         useKeyboardController={true}
       >
-        {/* Custom Header */}
-        <View
-          // @ts-ignore - data attribute for CSS scroll lock
-          dataSet={{ scrollLock: "true" }}
-          className="flex-row items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0a0f1a]"
-        >
-          <View className="flex-row items-center flex-1 min-w-0">
-            <TouchableOpacity
+        <PageTopBar
+          title={headerDisplayName || "Conversation"}
+          subtitle={isGroupChat ? topBarMembersLabel : undefined}
+          titleClassName="text-[17px] font-bold tracking-[-0.3px]"
+          leftSlot={
+            <PageTopBarIconButton
               onPress={() => {
                 if (navigation.canGoBack()) {
                   navigation.goBack();
@@ -766,124 +827,95 @@ export function ConversationScreen({ navigation, route }: Props) {
                   navigation.navigate("Main");
                 }
               }}
-              className="mr-3"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Go back"
             >
-              {LiquidGlassView ? (
-                <LiquidGlassView
-                  effect="regular"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Feather
-                    name="chevron-left"
-                    size={22}
-                    color={isDark ? "#fff" : "#000"}
-                  />
-                </LiquidGlassView>
+              <Feather
+                name="arrow-left"
+                size={18}
+                color={isDark ? "#f8fafc" : "#0f172a"}
+              />
+            </PageTopBarIconButton>
+          }
+          rightSlot={
+            <TouchableOpacity
+              onPress={() => {
+                if (isGroupChat) {
+                  setShowMembersModal(true);
+                } else {
+                  // Navigate to DM partner's profile
+                  navigation.navigate("Main", {
+                    screen: "Profile",
+                    params: {
+                      username: headerProfile?.Username || undefined,
+                      publicKey: counterPartyPublicKey,
+                    },
+                  });
+                }
+              }}
+              activeOpacity={0.6}
+              style={{ flexShrink: 0 }}
+            >
+              {isGroupChat ? (
+                <View className="flex-row items-center">
+                  <View className="flex-row">
+                    {loadingMembers ||
+                    (topBarGroupMembers.length === 0 && !headerAvatarUri)
+                      ? // Loading placeholders
+                        [0, 1, 2].map((i) => (
+                          <View
+                            key={`placeholder-${i}`}
+                            className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                              i > 0 ? "-ml-[15px]" : ""
+                            }`}
+                            style={{ zIndex: 3 - i }}
+                          />
+                        ))
+                      : topBarGroupMembers.slice(0, 3).map((member, index) => {
+                          const uri =
+                            getProfileImageUrl(member.publicKey) ||
+                            FALLBACK_PROFILE_IMAGE;
+
+                          return (
+                            <View
+                              key={member.publicKey}
+                              className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
+                                index > 0 ? "-ml-[15px]" : ""
+                              }`}
+                              style={{ zIndex: 3 - index }}
+                            >
+                              <UserAvatar
+                                uri={uri}
+                                name={member.username || ""}
+                                size={36}
+                                className="h-full w-full rounded-full"
+                              />
+                            </View>
+                          );
+                        })}
+                  </View>
+                  {/* Show member count badge if more than 3 members */}
+                  {!loadingMembers && topBarGroupMembers.length > 3 && (
+                    <View
+                      className="-ml-[10px] h-9 px-2.5 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 items-center justify-center"
+                      style={{ zIndex: -1 }}
+                    >
+                      <Text className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        +{topBarGroupMembers.length - 3}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               ) : (
-                <Feather
-                  name="arrow-left"
-                  size={24}
-                  color={isDark ? "#f8fafc" : "#0f172a"}
+                <UserAvatar
+                  uri={headerAvatarUri}
+                  name={headerDisplayName || ""}
+                  size={36}
+                  className="bg-slate-200 dark:bg-slate-700"
                 />
               )}
             </TouchableOpacity>
-            <View className="flex-1 min-w-0">
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                className="text-[17px] font-bold tracking-[-0.3px] text-[#0f172a] dark:text-[#f8fafc]"
-              >
-                {headerDisplayName || "Conversation"}
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => {
-              if (isGroupChat) {
-                setShowMembersModal(true);
-              } else {
-                // Navigate to DM partner's profile
-                navigation.navigate("Main", {
-                  screen: "Profile",
-                  params: {
-                    username: headerProfile?.Username || undefined,
-                    publicKey: counterPartyPublicKey,
-                  },
-                });
-              }
-            }}
-            activeOpacity={0.6}
-            className="ml-2"
-            style={{ flexShrink: 0 }}
-          >
-            {isGroupChat ? (
-              <View className="flex-row items-center">
-                <View className="flex-row">
-                  {loadingMembers ||
-                  (groupMembers.length === 0 && !headerAvatarUri)
-                    ? // Loading placeholders
-                      [0, 1, 2].map((i) => (
-                        <View
-                          key={`placeholder-${i}`}
-                          className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                            i > 0 ? "-ml-[15px]" : ""
-                          }`}
-                          style={{ zIndex: 3 - i }}
-                        />
-                      ))
-                    : groupMembers.slice(0, 3).map((member, index) => {
-                        const uri =
-                          getProfileImageUrl(member.publicKey) ||
-                          FALLBACK_PROFILE_IMAGE;
-
-                        return (
-                          <View
-                            key={member.publicKey}
-                            className={`h-9 w-9 rounded-full bg-slate-200 border-2 border-white dark:bg-slate-700 dark:border-slate-800 ${
-                              index > 0 ? "-ml-[15px]" : ""
-                            }`}
-                            style={{ zIndex: 3 - index }}
-                          >
-                            <UserAvatar
-                              uri={uri}
-                              name={member.username || ""}
-                              size={36}
-                              className="h-full w-full rounded-full"
-                            />
-                          </View>
-                        );
-                      })}
-                </View>
-                {/* Show member count badge if more than 3 members */}
-                {!loadingMembers && groupMembers.length > 3 && (
-                  <View
-                    className="-ml-[10px] h-9 px-2.5 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-800 items-center justify-center"
-                    style={{ zIndex: -1 }}
-                  >
-                    <Text className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      +{groupMembers.length - 3}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <UserAvatar
-                uri={headerAvatarUri}
-                name={headerDisplayName || ""}
-                size={36}
-                className="bg-slate-200 dark:bg-slate-700"
-              />
-            )}
-          </TouchableOpacity>
-        </View>
+          }
+        />
 
         {/* Main content - limited width on web for better readability */}
         <View
@@ -896,11 +928,13 @@ export function ConversationScreen({ navigation, route }: Props) {
             },
           ]}
         >
-          <View style={{ flex: 1, minHeight: 0 }}>
+          <View
+            style={{ flex: 1, minHeight: 0 }}
+            // @ts-ignore - data attribute for CSS virtualized list/touch behavior
+            dataSet={{ virtualizedList: "true", scrollable: "true" }}
+          >
             {isLoading && messages.length === 0 ? (
-              <View className="flex-1 items-center justify-center">
-                <ActivityIndicator size="large" color={accentColor} />
-              </View>
+              <ConversationShimmer />
             ) : enableFlashListChat ? (
               <FlashList<DecryptedMessageEntryResponse>
                 ref={flatListRef}
@@ -923,8 +957,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                 onStartReachedThreshold={0.3}
                 onScroll={handleListScroll}
                 scrollEventThrottle={16}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode={
+                  Platform.OS === "ios" ? "interactive" : "on-drag"
+                }
                 ListEmptyComponent={() => (
                   <View
                     className="items-center justify-center px-6 py-10"
@@ -978,8 +1014,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                 onStartReachedThreshold={0.3}
                 onScroll={handleListScroll}
                 scrollEventThrottle={16}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode={
+                  Platform.OS === "ios" ? "interactive" : "on-drag"
+                }
                 ListEmptyComponent={() => (
                   <View
                     className="items-center justify-center px-6 py-10"
@@ -1211,7 +1249,7 @@ export function ConversationScreen({ navigation, route }: Props) {
 
         <Modal
           visible={showMembersModal}
-          animationType={isWebMobile ? "none" : isWebDesktop ? "fade" : "slide"}
+          animationType={isWeb ? "none" : "slide"}
           presentationStyle={
             Platform.OS === "web" ? "overFullScreen" : "pageSheet"
           }
@@ -1708,7 +1746,7 @@ export function ConversationScreen({ navigation, route }: Props) {
         <Modal
           visible={!!memberToRemove}
           transparent
-          animationType="fade"
+          animationType={isWeb ? "none" : "fade"}
           onRequestClose={() => setMemberToRemove(null)}
         >
           <View className="flex-1 justify-center items-center bg-black/50 px-4">

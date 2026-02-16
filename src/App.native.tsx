@@ -1,101 +1,61 @@
-import CryptoPolyfill from "./components/CryptoPolyfill";
-import "react-native-gesture-handler";
 import React from "react";
-import {
-  NavigationContainer,
-  DarkTheme,
-  DefaultTheme,
-} from "@react-navigation/native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useColorScheme } from "nativewind";
+import { Linking, Pressable, Text, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { DeSoIdentityProvider } from "react-deso-protocol";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as AuthSession from "expo-auth-session";
-import * as WebBrowser from "expo-web-browser";
-import { configure, identity } from "deso-protocol";
-import { getTransactionSpendingLimits } from "./utils/deso";
-import { RootNavigator } from "./navigation/RootNavigator";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "./components/KeyboardProvider";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./state/queryClient";
-import { AppThemeProvider } from "./state/theme/AppThemeProvider";
-import { AppearanceProvider } from "./state/theme/useAppearance";
-import { AppToast } from "./components/ui/Toast";
-import { AuthTransitionProvider } from "@/state/auth/AuthTransitionProvider";
-import { useAppFonts } from "@/hooks/useAppFonts";
-import { DrawerOpenProvider, DrawerSwipeDisabledProvider } from "@/state/shell";
 
-WebBrowser.maybeCompleteAuthSession();
-
-const devLog = (...args: unknown[]) => {
-  if (typeof __DEV__ !== "undefined" && __DEV__) {
-     
-    console.log(...args);
-  }
-};
-
-const redirectUri = AuthSession.makeRedirectUri({ useProxy: true } as any);
-
-configure({
-  redirectURI: redirectUri,
-  identityPresenter: async (url) => {
-    devLog("Opening auth session with URL:", url);
-    const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
-    devLog("Auth session result:", result);
-    if (result.type === "success") {
-      devLog("Handling redirect URI:", result.url);
-      await identity.handleRedirectURI(result.url);
-      devLog("Redirect URI handled successfully");
-    } else {
-      devLog("Auth session was not successful:", result.type);
-    }
-  },
-  storageProvider: AsyncStorage,
-  appName: "Starter App",
-  spendingLimitOptions: getTransactionSpendingLimits(""),
-});
+const WEB_FALLBACK_URL =
+  process.env.EXPO_PUBLIC_WEB_APP_URL ?? "https://grayso.vercel.app";
 
 export default function App() {
-  const { colorScheme } = useColorScheme();
-  const { fontsLoaded } = useAppFonts();
-
-  // Don't render the app until fonts are loaded
-  if (!fontsLoaded) {
-    return null;
-  }
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthTransitionProvider>
-        <AppearanceProvider>
-          <AppThemeProvider>
-            <DeSoIdentityProvider>
-              <CryptoPolyfill />
-              <SafeAreaProvider>
-                <DrawerOpenProvider>
-                  <DrawerSwipeDisabledProvider>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-                        <StatusBar
-                          style={colorScheme === "dark" ? "light" : "dark"}
-                        />
-                        <NavigationContainer
-                          theme={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-                        >
-                          <RootNavigator />
-                        </NavigationContainer>
-                      </KeyboardProvider>
-                      <AppToast />
-                    </GestureHandlerRootView>
-                  </DrawerSwipeDisabledProvider>
-                </DrawerOpenProvider>
-              </SafeAreaProvider>
-            </DeSoIdentityProvider>
-          </AppThemeProvider>
-        </AppearanceProvider>
-      </AuthTransitionProvider>
-    </QueryClientProvider>
+    <SafeAreaProvider>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: "#020617", paddingHorizontal: 24 }}
+      >
+        <StatusBar style="light" />
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <Text
+            style={{
+              color: "#f8fafc",
+              fontSize: 26,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            Grayso Is Web + PWA Only
+          </Text>
+          <Text
+            style={{
+              marginTop: 12,
+              color: "#94a3b8",
+              fontSize: 15,
+              lineHeight: 22,
+              textAlign: "center",
+              maxWidth: 420,
+            }}
+          >
+            This build is intentionally disabled on iOS and Android native apps.
+            Open Grayso in your browser or install the PWA instead.
+          </Text>
+
+          <Pressable
+            onPress={() => Linking.openURL(WEB_FALLBACK_URL)}
+            style={{
+              marginTop: 24,
+              borderRadius: 999,
+              backgroundColor: "#2563eb",
+              paddingHorizontal: 18,
+              paddingVertical: 12,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open Grayso web app"
+          >
+            <Text style={{ color: "#ffffff", fontSize: 14, fontWeight: "700" }}>
+              Open Web App
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
