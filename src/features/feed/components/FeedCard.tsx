@@ -127,10 +127,12 @@ export function FeedCard({
   post,
   isVisible,
   onPress,
+  onReplyPress,
 }: {
   post: FocusFeedPost;
   isVisible: boolean;
   onPress?: (post: FocusFeedPost) => void;
+  onReplyPress?: (post: FocusFeedPost) => void;
 }) {
   const { isDark, accentColor } = useAccentColor();
 
@@ -141,15 +143,26 @@ export function FeedCard({
   const isPureRepost = Boolean(repostedPost?.postHash && !postBody);
 
   const {
-    username: usernameHandle,
-    displayName,
-    avatarUri,
+    username: actorUsernameHandle,
+    displayName: actorDisplayName,
+    avatarUri: actorAvatarUri,
   } = getAuthorPresentation(post.poster);
   const {
-    username: repostUsernameHandle,
-    displayName: repostDisplayName,
-    avatarUri: repostAvatarUri,
+    username: embeddedUsernameHandle,
+    displayName: embeddedDisplayName,
+    avatarUri: embeddedAvatarUri,
   } = getAuthorPresentation(repostedPost?.poster);
+
+  const usernameHandle = isPureRepost
+    ? embeddedUsernameHandle
+    : actorUsernameHandle;
+  const displayName = isPureRepost ? embeddedDisplayName : actorDisplayName;
+  const avatarUri = isPureRepost ? embeddedAvatarUri : actorAvatarUri;
+  const reposterLabel = actorDisplayName || actorUsernameHandle;
+  const primaryTimestamp = isPureRepost
+    ? repostedPost?.timestamp ?? post.timestamp
+    : post.timestamp;
+  const formattedPrimaryTimestamp = formatRelativeTimestamp(primaryTimestamp);
 
   const primaryBody = isPureRepost ? repostBody : postBody;
   const primaryImageUrls = isPureRepost
@@ -174,6 +187,19 @@ export function FeedCard({
       className="border-b border-slate-200 px-4 py-3 dark:border-slate-800"
       style={({ pressed }) => ({ opacity: pressed ? 0.95 : 1 })}
     >
+      {isPureRepost ? (
+        <View className="mb-1.5 flex-row items-center gap-1">
+          <Feather
+            name="repeat"
+            size={13}
+            color={isDark ? "#94a3b8" : "#64748b"}
+          />
+          <Text className="text-[12px] text-slate-500 dark:text-slate-400">
+            Reposted by {reposterLabel}
+          </Text>
+        </View>
+      ) : null}
+
       <View className="flex-row items-start">
         <Image
           source={{ uri: avatarUri }}
@@ -185,8 +211,8 @@ export function FeedCard({
         />
 
         <View className="ml-3 flex-1">
-          <View className="flex-row items-start justify-between">
-            <View className="flex-1 pr-3">
+          {isPureRepost ? (
+            <View className="flex-row items-center gap-1.5">
               <Text
                 numberOfLines={1}
                 className="text-[15px] font-semibold text-slate-900 dark:text-white"
@@ -195,29 +221,34 @@ export function FeedCard({
               </Text>
               <Text
                 numberOfLines={1}
-                className="mt-0.5 text-[13px] text-slate-500 dark:text-slate-400"
+                className="min-w-0 flex-1 text-[15px] text-slate-500 dark:text-slate-400"
               >
                 @{usernameHandle}
+                {formattedPrimaryTimestamp ? ` · ${formattedPrimaryTimestamp}` : ""}
               </Text>
             </View>
+          ) : (
+            <View className="flex-row items-start justify-between">
+              <View className="flex-1 pr-3">
+                <Text
+                  numberOfLines={1}
+                  className="text-[15px] font-semibold text-slate-900 dark:text-white"
+                >
+                  {displayName}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="mt-0.5 text-[13px] text-slate-500 dark:text-slate-400"
+                >
+                  @{usernameHandle}
+                </Text>
+              </View>
 
-            <Text className="text-[12px] text-slate-500 dark:text-slate-400">
-              {formatRelativeTimestamp(post.timestamp)}
-            </Text>
-          </View>
-
-          {isPureRepost ? (
-            <View className="mt-1 flex-row items-center gap-1">
-              <Feather
-                name="repeat"
-                size={13}
-                color={isDark ? "#94a3b8" : "#64748b"}
-              />
               <Text className="text-[12px] text-slate-500 dark:text-slate-400">
-                Reposted @{repostUsernameHandle}
+                {formattedPrimaryTimestamp}
               </Text>
             </View>
-          ) : null}
+          )}
 
           {primaryBody ? (
             <Text className="mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100">
@@ -236,7 +267,7 @@ export function FeedCard({
             <View className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
               <View className="flex-row items-start">
                 <Image
-                  source={{ uri: repostAvatarUri }}
+                  source={{ uri: embeddedAvatarUri }}
                   style={{ width: 32, height: 32, borderRadius: 16 }}
                   className="bg-slate-200 dark:bg-slate-700"
                   contentFit="cover"
@@ -249,13 +280,13 @@ export function FeedCard({
                     numberOfLines={1}
                     className="text-[13px] font-semibold text-slate-900 dark:text-white"
                   >
-                    {repostDisplayName}
+                    {embeddedDisplayName}
                   </Text>
                   <Text
                     numberOfLines={1}
                     className="mt-0.5 text-[12px] text-slate-500 dark:text-slate-400"
                   >
-                    @{repostUsernameHandle}
+                    @{embeddedUsernameHandle}
                   </Text>
                 </View>
               </View>
@@ -277,7 +308,18 @@ export function FeedCard({
           ) : null}
 
           <View className="mt-3 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-1">
+            <Pressable
+              className="flex-row items-center gap-1 rounded-full px-1 py-1"
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onReplyPress?.(post);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Reply to this post"
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
               <Feather
                 name="message-circle"
                 size={15}
@@ -286,7 +328,7 @@ export function FeedCard({
               <Text className="text-xs text-slate-500 dark:text-slate-400">
                 {formatCount(postStats?.replyCount)}
               </Text>
-            </View>
+            </Pressable>
 
             <View className="flex-row items-center gap-1">
               <Feather

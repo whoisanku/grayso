@@ -41,12 +41,14 @@ const BLUESKY_MIN_MEDIA_ASPECT_RATIO = 1 / 2;
 
 function InactiveVideoPreview({
   posterUrl,
+  fallbackVideoUrl,
   isDark,
   borderRadius,
   aspectRatio,
   maxHeight,
 }: {
   posterUrl?: string;
+  fallbackVideoUrl?: string;
   isDark: boolean;
   borderRadius: number;
   aspectRatio: number;
@@ -77,6 +79,18 @@ function InactiveVideoPreview({
             placeholder={{ blurhash: DEFAULT_VIDEO_BLURHASH }}
             transition={350}
           />
+        ) : Platform.OS === "web" && fallbackVideoUrl ? (
+          <video
+            src={fallbackVideoUrl}
+            style={styles.htmlPreviewVideo}
+            autoPlay
+            muted
+            playsInline
+            preload="auto"
+            onLoadedData={(event) => {
+              event.currentTarget.pause();
+            }}
+          />
         ) : null}
         <View style={styles.previewOverlay}>
           <View style={styles.previewChip}>
@@ -93,6 +107,7 @@ const DEFAULT_VIDEO_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
 function ActivePlayer({
   source,
+  posterUrl,
   isHls,
   isDark,
   borderRadius,
@@ -101,6 +116,7 @@ function ActivePlayer({
   maxHeight,
 }: {
   source: string;
+  posterUrl?: string;
   isHls: boolean;
   isDark: boolean;
   borderRadius: number;
@@ -232,6 +248,19 @@ function ActivePlayer({
           },
         ]}
       >
+        {posterUrl ? (
+          <Image
+            source={{ uri: posterUrl }}
+            style={[
+              StyleSheet.absoluteFillObject,
+              { opacity: isLoading ? 1 : 0 },
+            ]}
+            contentFit="cover"
+            placeholder={{ blurhash: DEFAULT_VIDEO_BLURHASH }}
+            transition={250}
+          />
+        ) : null}
+
         <VideoView
           style={StyleSheet.absoluteFillObject}
           player={player}
@@ -252,6 +281,73 @@ function ActivePlayer({
               <Feather name="refresh-cw" size={16} color="#ffffff" />
               <Text style={styles.retryText}>Tap to retry</Text>
             </Pressable>
+          </View>
+        ) : null}
+      </View>
+    </ConstrainedMediaFrame>
+  );
+}
+
+function ActiveIframeVideo({
+  source,
+  posterUrl,
+  isDark,
+  borderRadius,
+  aspectRatio,
+  maxHeight,
+}: {
+  source: string;
+  posterUrl?: string;
+  isDark: boolean;
+  borderRadius: number;
+  aspectRatio: number;
+  maxHeight: number;
+}) {
+  const [isLoading, setIsLoading] = useState(true);
+
+  return (
+    <ConstrainedMediaFrame
+      aspectRatio={aspectRatio}
+      minAspectRatio={BLUESKY_MIN_MEDIA_ASPECT_RATIO}
+      maxHeightRatio={BLUESKY_VIDEO_MAX_HEIGHT_RATIO}
+      maxHeight={maxHeight}
+      borderRadius={borderRadius}
+    >
+      <View
+        style={[
+          styles.frame,
+          {
+            borderRadius,
+            overflow: "hidden",
+            backgroundColor: isDark ? "#0f172a" : "#0b1220",
+          },
+        ]}
+      >
+        {posterUrl ? (
+          <Image
+            source={{ uri: posterUrl }}
+            style={[
+              StyleSheet.absoluteFillObject,
+              { opacity: isLoading ? 1 : 0 },
+            ]}
+            contentFit="cover"
+            placeholder={{ blurhash: DEFAULT_VIDEO_BLURHASH }}
+            transition={250}
+          />
+        ) : null}
+
+        <iframe
+          src={source}
+          style={styles.iframe}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowFullScreen
+          loading="lazy"
+          onLoad={() => setIsLoading(false)}
+        />
+
+        {isLoading ? (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="small" color="#ffffff" />
           </View>
         ) : null}
       </View>
@@ -294,6 +390,19 @@ function ActiveWebVideo({
           },
         ]}
       >
+        {posterUrl ? (
+          <Image
+            source={{ uri: posterUrl }}
+            style={[
+              StyleSheet.absoluteFillObject,
+              { opacity: isLoading ? 1 : 0 },
+            ]}
+            contentFit="cover"
+            placeholder={{ blurhash: DEFAULT_VIDEO_BLURHASH }}
+            transition={250}
+          />
+        ) : null}
+
         <video
           src={source}
           poster={posterUrl}
@@ -302,7 +411,7 @@ function ActiveWebVideo({
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           controls
           onCanPlay={() => setIsLoading(false)}
           onPlaying={() => setIsLoading(false)}
@@ -339,6 +448,11 @@ export function FeedVideo({
     return (
       <InactiveVideoPreview
         posterUrl={normalized.posterUrl}
+        fallbackVideoUrl={
+          Platform.OS === "web" && !normalized.posterUrl && !normalized.iframeUrl
+            ? normalized.playableUrl
+            : undefined
+        }
         isDark={isDark}
         borderRadius={borderRadius}
         aspectRatio={mediaAspectRatio}
@@ -352,32 +466,14 @@ export function FeedVideo({
     const src = buildWebIframeUrl(normalized.iframeUrl);
 
     return (
-      <ConstrainedMediaFrame
-        aspectRatio={mediaAspectRatio}
-        minAspectRatio={BLUESKY_MIN_MEDIA_ASPECT_RATIO}
-        maxHeightRatio={BLUESKY_VIDEO_MAX_HEIGHT_RATIO}
-        maxHeight={maxMediaHeight}
+      <ActiveIframeVideo
+        source={src}
+        posterUrl={normalized.posterUrl}
+        isDark={isDark}
         borderRadius={borderRadius}
-      >
-        <View
-          style={[
-            styles.frame,
-            {
-              borderRadius,
-              overflow: "hidden",
-              backgroundColor: isDark ? "#0f172a" : "#0b1220",
-            },
-          ]}
-        >
-          <iframe
-            src={src}
-            style={styles.iframe}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            loading="lazy"
-          />
-        </View>
-      </ConstrainedMediaFrame>
+        aspectRatio={mediaAspectRatio}
+        maxHeight={maxMediaHeight}
+      />
     );
   }
 
@@ -399,6 +495,7 @@ export function FeedVideo({
   return (
     <ActivePlayer
       source={normalized.playableUrl}
+      posterUrl={normalized.posterUrl}
       isHls={normalized.isHls}
       isDark={isDark}
       borderRadius={borderRadius}
@@ -430,6 +527,13 @@ const styles = StyleSheet.create({
     height: "100%",
     objectFit: "contain",
     backgroundColor: "black",
+  } as any,
+  htmlPreviewVideo: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    backgroundColor: "black",
+    pointerEvents: "none",
   } as any,
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

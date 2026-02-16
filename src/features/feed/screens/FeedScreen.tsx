@@ -17,6 +17,7 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { FeedPostShimmer } from "../components/FeedPostShimmer";
 import { useFollowFeedTimeline } from "@/features/feed/api/useFollowFeedTimeline";
 import { FeedCard } from "@/features/feed/components/FeedCard";
+import { FeedCommentModal } from "@/features/feed/components/FeedCommentModal";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
@@ -49,6 +50,9 @@ export function FeedScreen() {
 
   const [visiblePostHashes, setVisiblePostHashes] =
     useState<Set<string>>(EMPTY_VISIBLE_HASHES);
+  const [commentTargetPost, setCommentTargetPost] = useState<FocusFeedPost | null>(
+    null,
+  );
   const [viewabilityConfig] = useState(() => ({
     itemVisiblePercentThreshold: 60,
     waitForInteraction: false,
@@ -89,6 +93,15 @@ export function FeedScreen() {
     [],
   );
   const openDrawer = useCallback(() => setDrawerOpen(true), [setDrawerOpen]);
+  const openCommentComposer = useCallback((post: FocusFeedPost) => {
+    setCommentTargetPost(post);
+  }, []);
+  const closeCommentComposer = useCallback(() => {
+    setCommentTargetPost(null);
+  }, []);
+  const handleCommentSubmitted = useCallback(() => {
+    void reload();
+  }, [reload]);
 
   const listEmptyState = useMemo(() => {
     if (isLoading) {
@@ -181,6 +194,7 @@ export function FeedScreen() {
                     ? index < 2
                     : visiblePostHashes.has(item.postHash)
                 }
+                onReplyPress={openCommentComposer}
               />
             )}
             onViewableItemsChanged={onViewableItemsChanged}
@@ -223,6 +237,14 @@ export function FeedScreen() {
             keyboardShouldPersistTaps="always"
           />
         </View>
+
+        <FeedCommentModal
+          key={commentTargetPost?.postHash ?? "feed-comment-modal"}
+          visible={Boolean(commentTargetPost)}
+          post={commentTargetPost}
+          onClose={closeCommentComposer}
+          onSubmitted={handleCommentSubmitted}
+        />
       </View>
     </ScreenWrapper>
   );
