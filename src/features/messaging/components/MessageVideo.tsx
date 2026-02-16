@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Text, Platform } from "react-native";
 import { Image } from "expo-image";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer, VideoView, type VideoSource } from "expo-video";
 import { Feather } from "@expo/vector-icons";
+import { normalizeVideoSource, resolveLivepeerPlayback } from "@/lib/mediaUrl";
+
+/**
+ * Convert an iframe/cloudflare video URL to an HLS stream URL for native playback.
+ * On web, iframe URLs work fine. On native iOS/Android, we need the .m3u8 manifest.
+ */
+
 
 export type MessageVideoProps = {
   uri: string;
@@ -25,14 +32,52 @@ function ActiveVideoPlayer({ uri, isDark }: { uri: string; isDark?: boolean }) {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  const player = useVideoPlayer(uri, (player) => {
-    console.log('[MessageVideo] Initializing player with URI:', uri);
-    console.log('[MessageVideo] Platform:', Platform.OS);
+  const [resolvedSource, setResolvedSource] = useState<string | null>(null);
+  
+  // Use normalized source to get playbackId and robust URLs
+  const normalized = React.useMemo(() => normalizeVideoSource(uri), [uri]);
+  const playbackId = normalized.playbackId;
+  const initialPlayableUrl = normalized.playableUrl;
+
+  // Resolve Livepeer URL if needed
+  useEffect(() => {
+    if (playbackId) {
+      resolveLivepeerPlayback(playbackId).then((url) => {
+        if (url) {
+          setResolvedSource(url);
+        } else {
+          setHasError(true);
+          setIsLoading(false);
+          setErrorMessage("Failed to resolve Livepeer video");
+        }
+      });
+    } else {
+      setResolvedSource(initialPlayableUrl);
+    }
+  }, [playbackId, initialPlayableUrl]);
+
+  const effectiveSource = resolvedSource ?? initialPlayableUrl;
+  const isHls = playbackId ? (resolvedSource?.includes('.m3u8') ?? false) : normalized.isHls;
+
+  // Build proper VideoSource object so iOS AVPlayer knows the content type
+  const videoSource = React.useMemo<VideoSource | null>(() => {
+    if (!effectiveSource || (playbackId && !resolvedSource)) return null;
+
+    const src: VideoSource = { uri: effectiveSource };
+    if (isHls) {
+      (src as Record<string, unknown>).contentType = 'hls';
+    }
+    return src;
+  }, [effectiveSource, isHls, playbackId, resolvedSource]);
+
+  const player = useVideoPlayer(videoSource, (player) => {
+    console.log('[MessageVideo] Initializing player with URI:', effectiveSource, '(original:', uri, ')');
+    console.log('[MessageVideo] Platform:', Platform.OS, 'isHls:', isHls);
     player.loop = false;
 
     // Add error handling
     player.addListener('statusChange', (status) => {
-      console.log('[MessageVideo] Player status:', status, 'URI:', uri);
+      console.log('[MessageVideo] Player status:', status, 'URI:', effectiveSource);
       if (status.error) {
         const errMsg = status.error.message || 'Unknown playback error';
         console.error('[MessageVideo] Player error:', status.error);

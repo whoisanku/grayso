@@ -2,13 +2,23 @@ import React, { useContext, useCallback, useMemo, useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { HomeScreen } from "../features/messaging/screens/HomeScreen";
 import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
+import { FeedScreen } from "../features/feed/screens/FeedScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import MessageIconFilled from "../assets/navIcons/message-filled.svg";
+import HomeIcon from "../assets/navIcons/home.svg";
+import HomeIconFilled from "../assets/navIcons/home-filled.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
-import CreatePostIcon from "../assets/navIcons/create-post.svg";
+import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
 
-import { View, TouchableOpacity, Platform, DeviceEventEmitter, Text, useWindowDimensions, Pressable } from "react-native";
+import {
+  View,
+  TouchableOpacity,
+  Platform,
+  DeviceEventEmitter,
+  Text,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import { Image } from "expo-image";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -24,6 +34,7 @@ import { FALLBACK_PROFILE_IMAGE, getProfileDisplayName } from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { PressableScale } from "@/components/ui/PressableScale";
 
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { DesktopLeftNav } from "../features/messaging/components/desktop/DesktopLeftNav";
@@ -35,106 +46,114 @@ import {
 } from "../alf/breakpoints";
 import { getBorderColor } from "../theme/borders";
 import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
-import { useWalletSwitcher } from "@/features/auth/hooks/useWalletSwitcher";
 import { ProfileStats } from "@/features/profile/components/ProfileStats";
 import { useAccountProfile } from "@/features/profile/api/useAccountProfile";
-import { useIsDrawerOpen, useSetDrawerOpen, useIsDrawerSwipeDisabled } from "@/state/shell";
+import {
+  useIsDrawerOpen,
+  useSetDrawerOpen,
+  useIsDrawerSwipeDisabled,
+} from "@/state/shell";
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { accentColor, accentStrong } = useAccentColor();
+  const { accentColor } = useAccentColor();
   const insets = useSafeAreaInsets();
   const [showWalletSwitcher, setShowWalletSwitcher] = React.useState(false);
-  const { accounts } = useWalletSwitcher();
   const longPressHandledRef = React.useRef(false);
+  const activeRouteName = state.routes[state.index]?.name;
+  const showFeedFab = activeRouteName === "Feed";
+  const showChatFab = activeRouteName === "Messages";
 
-  const tabButtons = state.routes.map((route, index) => {
-    const { options } = descriptors[route.key];
-    const isFocused = state.index === index;
+  const tabButtons = state.routes
+    .filter((route) => route.name !== "Post")
+    .map((route) => {
+      const isFocused = state.routes[state.index]?.key === route.key;
 
-    const onPress = () => {
-      if (route.name === "Profile" && longPressHandledRef.current) {
-        longPressHandledRef.current = false;
-        return;
-      }
+      const onPress = () => {
+        if (route.name === "Profile" && longPressHandledRef.current) {
+          longPressHandledRef.current = false;
+          return;
+        }
 
-      const event = navigation.emit({
-        type: "tabPress",
-        target: route.key,
-        canPreventDefault: true,
-      });
+        // Haptic feedback on every tap
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
 
-      if (!isFocused && !event.defaultPrevented) {
-        if (route.name === "Post") {
-          navigation.navigate("Composer");
-        } else {
+        if (isFocused) {
+          // Already on this tab — emit scroll-to-top
+          DeviceEventEmitter.emit("scrollToTop", { tab: route.name });
+          return;
+        }
+
+        const event = navigation.emit({
+          type: "tabPress",
+          target: route.key,
+          canPreventDefault: true,
+        });
+
+        if (!event.defaultPrevented) {
           navigation.navigate(route.name);
         }
-      }
-    };
+      };
 
-    // Handle long-press on Profile icon with haptic feedback
-    const onLongPress =
-      route.name === "Profile"
-      ? () => {
-          longPressHandledRef.current = true;
-          if (Platform.OS !== "web") {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          }
-          setShowWalletSwitcher(true);
-        }
-      : undefined;
+      // Handle long-press on Profile icon with haptic feedback
+      const onLongPress =
+        route.name === "Profile"
+          ? () => {
+              longPressHandledRef.current = true;
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }
+              setShowWalletSwitcher(true);
+            }
+          : undefined;
 
-    // Center button (Compose) - integrated into bottom bar
-    if (route.name === "Post") {
       return (
-        <TouchableOpacity
+        <PressableScale
           key={route.key}
-          onPress={() => navigation.navigate("Composer")}
-          activeOpacity={0.8}
-          className="flex-1 items-center justify-center pt-[10px] pb-1"
+          onPress={onPress}
+          onLongPress={onLongPress}
+          delayLongPress={250}
+          targetScale={0.85}
+          style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 13, paddingBottom: 4 }}
         >
-          <View
-            className="h-10 w-10 items-center justify-center rounded-full"
-            style={{ backgroundColor: accentColor }}
-          >
-            <CreatePostIcon width={22} height={22} color="white" fill="white" stroke="white" />
-          </View>
-        </TouchableOpacity>
-      );
-    }
-
-    return (
-      <TouchableOpacity
-        key={route.key}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        delayLongPress={250}
-        activeOpacity={0.7}
-        className="flex-1 items-center justify-center pt-[13px] pb-1"
-      >
-        {route.name === "Messages" ? (
-          isFocused ? (
-            <MessageIconFilled
-              width={27}
-              height={27}
-              fill={isDark ? "#f8fafc" : "#0f172a"}
-            />
-          ) : (
-            <MessageIcon
-              width={27}
-              height={27}
-              stroke={isDark ? "#64748b" : "#94a3b8"}
-              strokeWidth={2}
-            />
-          )
-        ) : (
-          isFocused ? (
+          {route.name === "Messages" ? (
+            isFocused ? (
+              <MessageIconFilled
+                width={27}
+                height={27}
+                fill={isDark ? "#f8fafc" : "#0f172a"}
+              />
+            ) : (
+              <MessageIcon
+                width={27}
+                height={27}
+                stroke={isDark ? "#64748b" : "#94a3b8"}
+                strokeWidth={2}
+              />
+            )
+          ) : route.name === "Feed" ? (
+            isFocused ? (
+              <HomeIconFilled
+                width={27}
+                height={27}
+                fill={isDark ? "#f8fafc" : "#0f172a"}
+              />
+            ) : (
+              <HomeIcon
+                width={27}
+                height={27}
+                stroke={isDark ? "#64748b" : "#94a3b8"}
+                strokeWidth={2}
+              />
+            )
+          ) : isFocused ? (
             <UserIconFilled
               width={27}
               height={27}
@@ -147,11 +166,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               stroke={isDark ? "#64748b" : "#94a3b8"}
               strokeWidth={2}
             />
-          )
-        )}
-      </TouchableOpacity>
-    );
-  });
+          )}
+        </PressableScale>
+      );
+    });
 
   // Bluesky-style attached bottom bar
   return (
@@ -168,9 +186,49 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       >
         {tabButtons}
       </View>
+
+      {showFeedFab || showChatFab ? (
+        <PressableScale
+          onPress={() => {
+            if (showChatFab) {
+              const parentNavigation = navigation.getParent();
+              if (parentNavigation) {
+                parentNavigation.navigate("NewChat" as never);
+                return;
+              }
+            }
+
+            navigation.navigate("Composer");
+          }}
+          targetScale={0.9}
+          style={{
+            position: "absolute",
+            right: 24,
+            bottom: Math.max(insets.bottom, 15) + 56,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: accentColor,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 6,
+          }}
+        >
+          {showChatFab ? (
+            <Feather name="plus" size={22} color="#ffffff" />
+          ) : (
+            <FeatherPostIcon width={22} height={22} fill="#ffffff" />
+          )}
+        </PressableScale>
+      ) : null}
+
       {/* Wallet Switcher Modal - triggered by long-press on Profile icon */}
       {showWalletSwitcher && (
-        <WalletSwitcher 
+        <WalletSwitcher
           showTrigger={false}
           externalOpen={showWalletSwitcher}
           onExternalClose={() => setShowWalletSwitcher(false)}
@@ -189,20 +247,24 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
   const { currentUser } = useContext(DeSoIdentityContext);
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const tabNavigation = useNavigation<any>();
+  const rootNavigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
-  
+
   // Use context-based drawer state management
   const isDrawerOpen = useIsDrawerOpen();
   const setDrawerOpen = useSetDrawerOpen();
   const isDrawerSwipeDisabled = useIsDrawerSwipeDisabled();
-  
+
   const [trendingScrollGesture] = useState(() => Gesture.Native());
-  const [activeTab, setActiveTab] = React.useState<keyof HomeTabParamList>("Messages");
-  
-  const drawerWidth = useMemo(() => Math.min(280, windowWidth * 0.7), [windowWidth]);
+  const [activeTab, setActiveTab] =
+    React.useState<keyof HomeTabParamList>("Feed");
+
+  const drawerWidth = useMemo(
+    () => Math.min(280, windowWidth * 0.7),
+    [windowWidth],
+  );
   const { centerColumnOffset } = useLayoutBreakpoints();
 
   // Fetch profile stats
@@ -210,13 +272,16 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const { data: account } = useAccountProfile(publicKey);
   const followerCount = useMemo(
     () => account?.followerCounts?.totalFollowers ?? 0,
-    [account?.followerCounts?.totalFollowers]
+    [account?.followerCounts?.totalFollowers],
   );
   const followingCount = useMemo(
     () => account?.followingCounts?.totalFollowing ?? 0,
-    [account?.followingCounts?.totalFollowing]
+    [account?.followingCounts?.totalFollowing],
   );
-  const displayName = getProfileDisplayName(currentUser?.ProfileEntryResponse, publicKey || "");
+  const displayName = getProfileDisplayName(
+    currentUser?.ProfileEntryResponse,
+    publicKey || "",
+  );
 
   // Listen for drawer toggle requests from HomeScreen
   React.useEffect(() => {
@@ -226,109 +291,170 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
         if (payload.requestOpen !== undefined) {
           setDrawerOpen(payload.requestOpen);
         }
-      }
+      },
     );
     return () => subscription.remove();
   }, [setDrawerOpen]);
 
-
-
-  const renderDrawerContent = useCallback(() => (
-    <View
-      className="flex-1 h-full"
-      style={{
-        paddingTop: insets.top,
-        paddingBottom: insets.bottom,
-        backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
-        borderRightWidth: 0.5,
-        borderRightColor: getBorderColor(isDark, 'contrast_low'),
-      }}
-    >
-      {/* Profile Section */}
-      <View className="px-4 py-5 border-b border-slate-100 dark:border-slate-800">
-        <View className="flex-row items-center mb-3">
-          <Image
-            source={{
-              uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic
-                ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
-                : buildProfilePictureUrl(currentUser?.PublicKeyBase58Check || "", {
-                  fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-                }),
-            }}
-            className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
-            contentFit="cover"
-            placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
-            transition={500}
+  const renderDrawerContent = useCallback(
+    () => (
+      <View
+        className="flex-1 h-full"
+        style={{
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
+          borderRightWidth: 0.5,
+          borderRightColor: getBorderColor(isDark, "contrast_low"),
+        }}
+      >
+        {/* Profile Section */}
+        <View className="px-4 py-5 border-b border-slate-100 dark:border-slate-800">
+          <View className="flex-row items-center mb-3">
+            <Image
+              source={{
+                uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
+                  : buildProfilePictureUrl(
+                      currentUser?.PublicKeyBase58Check || "",
+                      {
+                        fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
+                      },
+                    ),
+              }}
+              style={{ width: 48, height: 48, borderRadius: 24 }}
+              className="bg-slate-200 dark:bg-slate-700"
+              contentFit="cover"
+              placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
+              transition={500}
+            />
+          </View>
+          <Text
+            className="text-base font-bold text-slate-900 dark:text-white mb-0.5"
+            numberOfLines={1}
+          >
+            {displayName}
+          </Text>
+          <Text
+            className="text-sm text-slate-500 dark:text-slate-400 mb-3"
+            numberOfLines={1}
+          >
+            @{currentUser?.ProfileEntryResponse?.Username || "User"}
+          </Text>
+          <ProfileStats
+            followers={followerCount}
+            following={followingCount}
+            posts={0}
           />
         </View>
-        <Text className="text-base font-bold text-slate-900 dark:text-white mb-0.5" numberOfLines={1}>
-          {displayName}
-        </Text>
-        <Text className="text-sm text-slate-500 dark:text-slate-400 mb-3" numberOfLines={1}>
-          @{currentUser?.ProfileEntryResponse?.Username || "User"}
-        </Text>
-        <ProfileStats 
-          followers={followerCount}
-          following={followingCount}
-          posts={0}
-        />
+
+        {/* Navigation Items */}
+        <View className="flex-1 pt-2">
+          {/* Feed */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Feed" });
+            }}
+          >
+            <HomeIcon
+              width={22}
+              height={22}
+              stroke={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={2}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Home
+            </Text>
+          </TouchableOpacity>
+
+          {/* Chat */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Messages" });
+            }}
+          >
+            <MessageIcon
+              width={22}
+              height={22}
+              stroke={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={2}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Chat
+            </Text>
+          </TouchableOpacity>
+
+          {/* Profile */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Profile" });
+            }}
+          >
+            <UserIcon
+              width={22}
+              height={22}
+              stroke={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={2}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Profile
+            </Text>
+          </TouchableOpacity>
+
+          {/* Settings */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Settings");
+            }}
+          >
+            <Feather
+              name="settings"
+              size={22}
+              color={isDark ? "#e2e8f0" : "#0f172a"}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Settings
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+    ),
+    [
+      currentUser,
+      insets.top,
+      insets.bottom,
+      isDark,
+      rootNavigation,
+      displayName,
+      followerCount,
+      followingCount,
+      setDrawerOpen,
+    ],
+  );
 
-      {/* Navigation Items */}
-      <View className="flex-1 pt-2">
-        {/* Chat */}
-        <TouchableOpacity
-          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
-          activeOpacity={0.7}
-          onPress={() => {
-            setDrawerOpen(false);
-            rootNavigation.navigate("Main", { screen: "Messages" });
-          }}
-        >
-          <MessageIcon width={24} height={24} stroke={isDark ? "#e2e8f0" : "#0f172a"} strokeWidth={2} />
-          <Text className="ml-4 text-base text-slate-900 dark:text-white">
-            Chat
-          </Text>
-        </TouchableOpacity>
-
-        {/* Profile */}
-        <TouchableOpacity
-          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
-          activeOpacity={0.7}
-          onPress={() => {
-            setDrawerOpen(false);
-            rootNavigation.navigate("Main", { screen: "Profile" });
-          }}
-        >
-          <UserIcon width={24} height={24} stroke={isDark ? "#e2e8f0" : "#0f172a"} strokeWidth={2} />
-          <Text className="ml-4 text-base text-slate-900 dark:text-white">
-            Profile
-          </Text>
-        </TouchableOpacity>
-
-        {/* Settings */}
-        <TouchableOpacity
-          className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
-          activeOpacity={0.7}
-          onPress={() => {
-            setDrawerOpen(false);
-            rootNavigation.navigate("Settings");
-          }}
-        >
-          <Feather name="settings" size={24} color={isDark ? "#e2e8f0" : "#0f172a"} />
-          <Text className="ml-4 text-base text-slate-900 dark:text-white">
-            Settings
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  ), [currentUser, insets.top, insets.bottom, isDark, rootNavigation, displayName, followerCount, followingCount]);
-
-  const renderTabNavigator = (tabBarOverride?: (props: BottomTabBarProps) => React.ReactNode) => (
+  const renderTabNavigator = (
+    tabBarOverride?: (props: BottomTabBarProps) => React.ReactNode,
+  ) => (
     <Tab.Navigator
+      initialRouteName="Feed"
+      backBehavior="initialRoute"
       tabBar={tabBarOverride ?? ((props) => <CustomTabBar {...props} />)}
       screenOptions={{
         headerShown: false,
+        lazy: true,
+        freezeOnBlur: true,
         tabBarStyle: {
           position: "absolute",
           backgroundColor: "transparent",
@@ -345,6 +471,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
         },
       }}
     >
+      <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Messages" component={HomeScreen} />
       <Tab.Screen
         name="Post"
@@ -363,21 +490,14 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   // Desktop web: show side navigation similar to Bluesky
   // Using fixed-position sidebars with content centered in viewport
   if (isDesktopWeb) {
-    const handleTabChange = (tab: keyof HomeTabParamList) => {
-      tabNavigation.navigate(tab);
-    };
-
     return (
       <View
         className="flex-1"
-        style={{ backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}
+        style={{ backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}
       >
         {/* Fixed Left Navigation */}
-        <DesktopLeftNav 
-          activeTab={activeTab} 
-          onTabChange={handleTabChange}
-        />
-        
+        <DesktopLeftNav activeTab={activeTab} />
+
         {/* Main Content Area - centered with borders like Bluesky */}
         <View className="flex-1 items-center">
           <View
@@ -389,12 +509,12 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
               // Left and right borders around center content
               borderLeftWidth: 1,
               borderRightWidth: 1,
-              borderColor: getBorderColor(isDark, 'contrast_low'),
+              borderColor: getBorderColor(isDark, "contrast_low"),
               transform: [
                 { translateX: centerColumnOffset ? CENTER_COLUMN_OFFSET : 0 },
               ],
-              ...(Platform.OS === 'web' && {
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              ...(Platform.OS === "web" && {
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
               }),
             }}
           >
@@ -408,13 +528,9 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
     );
   }
 
-
-
-
-
   // Native: Use Drawer component wrapping the tab navigator with optimized gesture handling
   const swipeEnabled = !isDrawerSwipeDisabled;
-  
+
   return (
     <Drawer
       open={isDrawerOpen}
@@ -444,12 +560,11 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
       }}
       drawerType={Platform.OS === "ios" ? "slide" : "front"}
       drawerStyle={{ width: drawerWidth }}
-      overlayStyle={{ 
-        backgroundColor: isDark 
-          ? "rgba(10, 13, 16, 0.8)" 
-          : "rgba(0, 57, 117, 0.1)" 
+      overlayStyle={{
+        backgroundColor: isDark
+          ? "rgba(10, 13, 16, 0.8)"
+          : "rgba(0, 57, 117, 0.1)",
       }}
-
       swipeEdgeWidth={windowWidth}
       swipeMinVelocity={100}
       swipeMinDistance={10}

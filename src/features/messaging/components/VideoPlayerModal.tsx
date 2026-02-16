@@ -2,30 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Modal, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
+import { normalizeVideoSource, resolveLivepeerPlayback } from '@/lib/mediaUrl';
 
 export type VideoPlayerModalProps = {
     visible: boolean;
     uri: string | null;
     onClose: () => void;
     isDark?: boolean;
-};
-
-// Helper to convert iframe URL to HLS URL for native playback
-const getHlsUrl = (uri: string | null): string | null => {
-    if (!uri) return null;
-
-    // Only convert for Native platforms
-    if (Platform.OS !== 'web' && uri.includes('iframe.videodelivery.net')) {
-        // Extract video ID
-        const parts = uri.split('/');
-        const lastPart = parts[parts.length - 1];
-        const videoId = lastPart.split('?')[0]; // Remove query params if any
-
-        return `https://videodelivery.net/${videoId}/manifest/video.m3u8`;
-    }
-
-    return uri;
 };
 
 export const VideoPlayerModal = React.memo(({
@@ -107,12 +91,13 @@ export const VideoPlayerModal = React.memo(({
         }
 
         // Native or Direct URL = Use Native Player
-        const videoUri = getHlsUrl(uri);
-        if (!videoUri) return null;
+        const normalized = normalizeVideoSource(uri);
 
         return (
             <NativeVideoPlayer
-                uri={videoUri}
+                uri={normalized.playableUrl}
+                isHls={normalized.isHls}
+                playbackId={normalized.playbackId}
                 onClose={onClose}
                 onError={(msg) => {
                     setHasError(true);
@@ -140,10 +125,42 @@ export const VideoPlayerModal = React.memo(({
     );
 });
 
-function NativeVideoPlayer({ uri, onClose, onError, onLoad }: { uri: string, onClose: () => void, onError: (msg: string) => void, onLoad: () => void }) {
+function NativeVideoPlayer({ uri, isHls, playbackId, onClose, onError, onLoad }: { uri: string, isHls: boolean, playbackId?: string, onClose: () => void, onError: (msg: string) => void, onLoad: () => void }) {
     const insets = useSafeAreaInsets();
+    const [resolvedSource, setResolvedSource] = useState<string | null>(null);
 
-    const player = useVideoPlayer(uri, (player) => {
+    // Resolve Livepeer URL if needed
+    useEffect(() => {
+        if (playbackId) {
+            resolveLivepeerPlayback(playbackId).then((url) => {
+                if (url) {
+                    setResolvedSource(url);
+                } else {
+                    onError("Failed to load video");
+                }
+            });
+        } else {
+            setResolvedSource(uri);
+        }
+    }, [playbackId, uri]);
+
+    const effectiveSource = resolvedSource ?? uri;
+    const effectiveIsHls = playbackId 
+        ? (resolvedSource?.includes('.m3u8') ?? false) 
+        : isHls;
+
+    // Build proper VideoSource object so iOS AVPlayer knows the content type
+    const videoSource = React.useMemo<VideoSource | null>(() => {
+        if (!effectiveSource || (playbackId && !resolvedSource)) return null;
+
+        const src: VideoSource = { uri: effectiveSource };
+        if (effectiveIsHls) {
+            (src as Record<string, unknown>).contentType = 'hls';
+        }
+        return src;
+    }, [effectiveSource, effectiveIsHls, playbackId, resolvedSource]);
+
+    const player = useVideoPlayer(videoSource, (player) => {
         player.loop = false;
         player.play();
     });

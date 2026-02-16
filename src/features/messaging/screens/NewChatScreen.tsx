@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   ActivityIndicator,
   Keyboard,
   Platform,
@@ -20,9 +19,11 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ChatType } from "deso-protocol";
 import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
 import { FALLBACK_PROFILE_IMAGE, formatPublicKey } from "@/utils/deso";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { RootStackParamList } from "@/navigation/types";
 import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "@/constants/messaging";
 import { useAccentColor } from "@/state/theme/useAccentColor";
+import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 
 type NewChatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -31,17 +32,16 @@ const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 const ProfileItem = React.memo(function ProfileItem({
   item,
   onSelect,
-  isDark,
 }: {
   item: UserSearchResult;
   onSelect: (profile: UserSearchResult) => void;
-  isDark: boolean;
 }) {
-  const avatarUrl = item.publicKey
+  const rawAvatarUrl = item.publicKey
     ? buildProfilePictureUrl(item.publicKey, {
         fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
       })
     : FALLBACK_PROFILE_IMAGE;
+  const avatarUrl = toPlatformSafeImageUrl(rawAvatarUrl) ?? rawAvatarUrl;
 
   return (
     <GesturePressable
@@ -53,7 +53,9 @@ const ProfileItem = React.memo(function ProfileItem({
       <View className="flex-row items-center px-4 py-3">
         <Image
           source={{ uri: avatarUrl }}
-          className="h-12 w-12 rounded-full bg-slate-200 dark:bg-slate-700"
+          style={{ width: 48, height: 48, borderRadius: 24 }}
+          className="bg-slate-200 dark:bg-slate-700"
+          contentFit="cover"
           placeholder={{ blurhash: DEFAULT_AVATAR_BLURHASH }}
           transition={500}
         />
@@ -156,9 +158,9 @@ export function NewChatScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: UserSearchResult }) => (
-      <ProfileItem item={item} onSelect={handleSelectProfile} isDark={isDark} />
+      <ProfileItem item={item} onSelect={handleSelectProfile} />
     ),
-    [handleSelectProfile, isDark]
+    [handleSelectProfile]
   );
 
   return (
@@ -166,15 +168,17 @@ export function NewChatScreen() {
       className="flex-1 bg-white dark:bg-[#0a0f1a]"
       style={{ paddingTop: Platform.OS === "android" ? insets.top : 0 }}
     >
-      {/* Header - matching group composer style */}
-      <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-        <Text className="text-xl font-bold text-[#111] dark:text-white">
-          New Message
-        </Text>
-        <Pressable onPress={handleClose} className="p-1 active:opacity-80">
-          <Feather name="x" size={24} color={isDark ? "#fff" : "#111"} />
-        </Pressable>
-      </View>
+      <PageTopBar
+        title="New Message"
+        rightSlot={
+          <PageTopBarIconButton
+            onPress={handleClose}
+            accessibilityLabel="Close new message"
+          >
+            <Feather name="x" size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+          </PageTopBarIconButton>
+        }
+      />
 
       {/* Search Input */}
       <View className="px-4 py-3">

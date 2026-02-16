@@ -1,7 +1,4 @@
-import {
-  buildProfilePictureUrl,
-  type TransactionSpendingLimitResponseOptions,
-} from "deso-protocol";
+import { type TransactionSpendingLimitResponseOptions } from "deso-protocol";
 import type { ProfileEntryResponse } from "deso-protocol";
 
 export const FALLBACK_PROFILE_IMAGE =
@@ -58,10 +55,8 @@ export function getProfileImageUrl(
     return `https://ui-avatars.com/api/?name=${sanitized}&background=${bg}`;
   }
 
-  // Use deso-protocol helper for consistent CDN URL with fallback
-  return buildProfilePictureUrl(publicKey, {
-    fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
-  });
+  const encodedFallback = encodeURIComponent(FALLBACK_PROFILE_IMAGE);
+  return `https://node.deso.org/api/v0/get-single-profile-picture/${publicKey}?fallback=${encodedFallback}`;
 }
 
 export function getTransactionSpendingLimits(

@@ -365,6 +365,87 @@ const INBOX_THREADS_QUERY = `
   }
 `;
 
+const FOLLOW_FEEDS_HASHES_QUERY = `
+  query FollowFeedsHashes(
+    $filter: FollowFeedFilter
+    $first: Int
+    $offset: Int
+    $orderBy: [FollowFeedsOrderBy!]
+  ) {
+    followFeeds(
+      filter: $filter
+      first: $first
+      offset: $offset
+      orderBy: $orderBy
+    ) {
+      nodes {
+        id
+        postHash
+        __typename
+      }
+      pageInfo {
+        endCursor
+        hasNextPage
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+
+const POST_BY_POST_HASH_QUERY = `
+  query PostByPostHash($postHash: String!) {
+    postByPostHash(postHash: $postHash) {
+      body
+      postHash
+      repostedPostHash
+      repostedPost {
+        body
+        postHash
+        imageUrls
+        videoUrls
+        timestamp
+        poster {
+          publicKey
+          username
+          extraData
+          isVerified
+          __typename
+        }
+        __typename
+      }
+      extraData
+      imageUrls
+      videoUrls
+      timestamp
+      isNft
+      isQuotedRepost
+      isHidden
+      poster {
+        publicKey
+        username
+        extraData
+        isVerified
+        __typename
+      }
+      postStats {
+        totalReactionCount
+        likeReactionCount
+        laughReactionCount
+        loveReactionCount
+        dislikeReactionCount
+        angryReactionCount
+        astonishedReactionCount
+        replyCount
+        quoteCount
+        repostCount
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+
 type AccessGroupNode = {
   accessGroupPublicKey?: string | null;
   accessGroupKeyName?: string | null;
@@ -420,6 +501,11 @@ type FocusInboxResponse = {
     } | null;
   } | null;
   errors?: { message?: string }[] | null;
+};
+
+type FocusFeedPageInfo = {
+  endCursor?: string | null;
+  hasNextPage?: boolean | null;
 };
 
 const numberLike = z.union([z.number(), z.string()]).transform((value) => {
@@ -514,12 +600,88 @@ const accountExtendedResponseSchema = z.object({
   errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
 
+const followFeedHashNodeSchema = z.object({
+  id: z.string().nullish(),
+  postHash: z.string(),
+});
+
+const followFeedsHashesResponseSchema = z.object({
+  data: z.object({
+    followFeeds: z
+      .object({
+        nodes: z.array(followFeedHashNodeSchema).default([]),
+        pageInfo: z
+          .object({
+            endCursor: z.string().nullish(),
+            hasNextPage: z.boolean().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
+const feedPosterSchema = z.object({
+  publicKey: z.string(),
+  username: z.string().nullish(),
+  extraData: z.record(z.string(), z.unknown()).nullish(),
+  isVerified: z.boolean().nullish(),
+});
+
+const feedRepostedPostSchema = z.object({
+  body: z.string().nullish(),
+  postHash: z.string(),
+  imageUrls: z.array(z.string()).nullish(),
+  videoUrls: z.array(z.string()).nullish(),
+  timestamp: z.string().nullish(),
+  poster: feedPosterSchema.nullish(),
+});
+
+const feedPostSchema = z.object({
+  body: z.string().nullish(),
+  postHash: z.string(),
+  repostedPostHash: z.string().nullish(),
+  repostedPost: feedRepostedPostSchema.nullish(),
+  extraData: z.record(z.string(), z.unknown()).nullish(),
+  imageUrls: z.array(z.string()).nullish(),
+  videoUrls: z.array(z.string()).nullish(),
+  timestamp: z.string().nullish(),
+  isNft: z.boolean().nullish(),
+  isQuotedRepost: z.boolean().nullish(),
+  isHidden: z.boolean().nullish(),
+  poster: feedPosterSchema.nullish(),
+  postStats: z
+    .object({
+      totalReactionCount: numberLike.nullish(),
+      likeReactionCount: numberLike.nullish(),
+      laughReactionCount: numberLike.nullish(),
+      loveReactionCount: numberLike.nullish(),
+      dislikeReactionCount: numberLike.nullish(),
+      angryReactionCount: numberLike.nullish(),
+      astonishedReactionCount: numberLike.nullish(),
+      replyCount: numberLike.nullish(),
+      quoteCount: numberLike.nullish(),
+      repostCount: numberLike.nullish(),
+    })
+    .nullish(),
+});
+
+const postByHashResponseSchema = z.object({
+  data: z.object({
+    postByPostHash: feedPostSchema.nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
 export type FocusAccount = z.infer<typeof focusAccountSchema>;
 export type FocusFollowEdge = z.infer<typeof followNodeSchema>;
+export type FocusFollowFeedHashNode = z.infer<typeof followFeedHashNodeSchema>;
+export type FocusFeedPost = z.infer<typeof feedPostSchema>;
 
 async function performGraphqlRequest(
   body: Record<string, unknown>,
-  graphqlEndpoint: string
+  graphqlEndpoint: string,
 ): Promise<Response> {
   const headers = {
     Accept: "application/json",
@@ -570,8 +732,8 @@ export async function fetchAccountExtendedByPublicKey({
     throw new Error(
       `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
         0,
-        120
-      )}`
+        120,
+      )}`,
     );
   }
 
@@ -581,7 +743,7 @@ export async function fetchAccountExtendedByPublicKey({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse profile response"
+        "Unable to parse profile response",
     );
   }
 
@@ -590,7 +752,7 @@ export async function fetchAccountExtendedByPublicKey({
       parsed.data.errors
         .map((err) => err.message)
         .filter(Boolean)
-        .join("; ") || "Profile query returned errors"
+        .join("; ") || "Profile query returned errors",
     );
   }
 
@@ -607,7 +769,8 @@ export async function fetchFollowersList({
   first = 10,
   offset = 0,
   orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
-  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ?? DEFAULT_FOCUS_GRAPHQL_URL,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   publicKey: string;
   first?: number;
@@ -629,8 +792,8 @@ export async function fetchFollowersList({
     throw new Error(
       `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
         0,
-        120
-      )}`
+        120,
+      )}`,
     );
   }
 
@@ -640,7 +803,7 @@ export async function fetchFollowersList({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse followers response"
+        "Unable to parse followers response",
     );
   }
 
@@ -649,7 +812,7 @@ export async function fetchFollowersList({
       parsed.data.errors
         .map((err) => err.message)
         .filter(Boolean)
-        .join("; ") || "Followers query returned errors"
+        .join("; ") || "Followers query returned errors",
     );
   }
 
@@ -669,7 +832,8 @@ export async function fetchFollowingList({
   first = 10,
   offset = 0,
   orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
-  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ?? DEFAULT_FOCUS_GRAPHQL_URL,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   publicKey: string;
   first?: number;
@@ -691,8 +855,8 @@ export async function fetchFollowingList({
     throw new Error(
       `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
         0,
-        120
-      )}`
+        120,
+      )}`,
     );
   }
 
@@ -702,7 +866,7 @@ export async function fetchFollowingList({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse following response"
+        "Unable to parse following response",
     );
   }
 
@@ -711,7 +875,7 @@ export async function fetchFollowingList({
       parsed.data.errors
         .map((err) => err.message)
         .filter(Boolean)
-        .join("; ") || "Following query returned errors"
+        .join("; ") || "Following query returned errors",
     );
   }
 
@@ -726,6 +890,135 @@ export async function fetchFollowingList({
   };
 }
 
+export async function fetchFollowFeedHashes({
+  followerPublicKey,
+  first = 20,
+  offset = 0,
+  orderBy = ["TIMESTAMP_DESC"],
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  followerPublicKey: string;
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  graphqlEndpoint?: string;
+}): Promise<{
+  nodes: FocusFollowFeedHashNode[];
+  pageInfo: FocusFeedPageInfo;
+  nextOffset: number | null;
+}> {
+  const body = {
+    operationName: "FollowFeedsHashes",
+    query: FOLLOW_FEEDS_HASHES_QUERY,
+    variables: {
+      first,
+      offset,
+      orderBy,
+      filter: {
+        followerPublicKey: { equalTo: followerPublicKey },
+      },
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+  const parsed = followFeedsHashesResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse follow feed hashes response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Follow feed hashes query returned errors",
+    );
+  }
+
+  const nodes = parsed.data.data.followFeeds?.nodes ?? [];
+  const pageInfo = parsed.data.data.followFeeds?.pageInfo ?? {};
+  const hasNextPage = Boolean(pageInfo?.hasNextPage);
+  const nextOffset = hasNextPage ? offset + nodes.length : null;
+
+  return {
+    nodes,
+    pageInfo,
+    nextOffset,
+  };
+}
+
+export async function fetchPostByPostHash({
+  postHash,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  postHash: string;
+  graphqlEndpoint?: string;
+}): Promise<FocusFeedPost | null> {
+  const body = {
+    operationName: "PostByPostHash",
+    query: POST_BY_POST_HASH_QUERY,
+    variables: {
+      postHash,
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+  const parsed = postByHashResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse post by hash response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Post by hash query returned errors",
+    );
+  }
+
+  return parsed.data.data.postByPostHash ?? null;
+}
+
+// Backward-compatible alias while callers are migrated.
+export const fetchPostByPostHashCached = fetchPostByPostHash;
+
 export async function fetchInboxMessageThreads({
   userPublicKey,
   first = 20,
@@ -734,7 +1027,7 @@ export async function fetchInboxMessageThreads({
   isSpam,
   filter,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-  DEFAULT_FOCUS_GRAPHQL_URL,
+    DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   userPublicKey: string;
   first?: number;
@@ -780,8 +1073,8 @@ export async function fetchInboxMessageThreads({
     throw new Error(
       `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
         0,
-        120
-      )}`
+        120,
+      )}`,
     );
   }
 
@@ -789,8 +1082,10 @@ export async function fetchInboxMessageThreads({
 
   if (json.errors?.length) {
     throw new Error(
-      json.errors.map((err) => err.message).filter(Boolean).join("; ") ||
-      "GraphQL query returned errors"
+      json.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "GraphQL query returned errors",
     );
   }
 

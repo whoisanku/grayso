@@ -10,6 +10,7 @@ import {
   formatPublicKey,
   getProfileImageUrl,
 } from "@/utils/deso";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { ImageGalleryModal } from "@/features/messaging/components/ImageGalleryModal";
 
 const DEFAULT_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
@@ -54,13 +55,13 @@ export function ProfileHeader({
     (account?.extraData as Record<string, unknown> | undefined) ?? undefined;
 
   const avatarUrl = useMemo(() => {
-    return (
+    const rawUrl =
       getExtraString(extraData, "LargeProfilePicURL") ||
       getExtraString(extraData, "NFTProfilePictureUrl") ||
       (account?.publicKey
         ? getProfileImageUrl(account.publicKey)
-        : FALLBACK_PROFILE_IMAGE)
-    );
+        : FALLBACK_PROFILE_IMAGE);
+    return toPlatformSafeImageUrl(rawUrl) ?? rawUrl;
   }, [account?.publicKey, extraData]);
 
   // Reset error state when avatar URL changes
@@ -71,7 +72,9 @@ export function ProfileHeader({
   }, [avatarUrl]);
 
   const bannerUrl = useMemo(() => {
-    return getExtraString(extraData, "FeaturedImageURL") || undefined;
+    const rawUrl = getExtraString(extraData, "FeaturedImageURL") || undefined;
+    if (!rawUrl) return undefined;
+    return toPlatformSafeImageUrl(rawUrl) ?? rawUrl;
   }, [extraData]);
 
   useEffect(() => {
@@ -125,7 +128,6 @@ export function ProfileHeader({
           >
             <Image
               source={{ uri: bannerUrl }}
-              className="w-full h-full"
               contentFit="cover"
               placeholder={BANNER_BLURHASH}
               transition={300}
@@ -216,17 +218,17 @@ export function ProfileHeader({
           {!hasAvatarError ? (
             <Image
               source={{ uri: avatarUrl }}
-              className="w-full h-full rounded-full"
+              style={[
+                { width: '100%', height: '100%', borderRadius: 45 },
+                Platform.OS === "web"
+                  ? { display: isAvatarLoaded ? "flex" : "none" }
+                  : { opacity: isAvatarLoaded ? 1 : 0 },
+              ]}
               contentFit="cover"
               placeholder={DEFAULT_BLURHASH}
               transition={300}
               cachePolicy="memory-disk"
               recyclingKey={avatarUrl}
-              style={[
-                Platform.OS === "web"
-                  ? { display: isAvatarLoaded ? "flex" : "none" }
-                  : { opacity: isAvatarLoaded ? 1 : 0 },
-              ]}
               onLoadStart={() => {
                 setIsAvatarLoading(true);
                 setIsAvatarLoaded(false);

@@ -1,5 +1,8 @@
 import type { ChatType } from "deso-protocol";
-import type { RouteProp, NavigatorScreenParams } from "@react-navigation/native";
+import type {
+  RouteProp,
+  NavigatorScreenParams,
+} from "@react-navigation/native";
 
 export type ConversationRouteParams = {
   threadPublicKey: string;
@@ -19,11 +22,14 @@ export type ConversationRouteParams = {
 
 export type HomeTabParamList = {
   Messages: undefined;
+  Feed: undefined;
   Post: undefined;
-  Profile: {
-    username?: string;
-    publicKey?: string;
-  } | undefined;
+  Profile:
+    | {
+        username?: string;
+        publicKey?: string;
+      }
+    | undefined;
 };
 
 export type RootStackParamList = {
@@ -39,4 +45,3 @@ export type ConversationScreenRouteProp = RouteProp<
   RootStackParamList,
   "Conversation"
 >;
-

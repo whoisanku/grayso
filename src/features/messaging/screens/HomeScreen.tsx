@@ -12,9 +12,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   DeviceEventEmitter,
-  Modal,
   Platform,
-  TextInput,
 } from "react-native";
 import { UserAvatar } from "@/components/UserAvatar";
 import { FlashList } from "@shopify/flash-list";
@@ -29,6 +27,7 @@ import {
 } from "deso-protocol";
 import {
   CompositeNavigationProp,
+  useIsFocused,
   useNavigation,
 } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -42,31 +41,27 @@ import { DEFAULT_KEY_MESSAGING_GROUP_NAME } from "@/constants/messaging";
 import {
   formatPublicKey,
   FALLBACK_PROFILE_IMAGE,
-  getProfileImageUrl,
 } from "@/utils/deso";
 
 import { useConversationThreads } from "@/features/messaging/hooks/useConversationThreads";
+import { ChatListShimmer } from "../components/ChatListShimmer";
 import { useThreadSettings } from "@/features/messaging/hooks/useThreadSettings";
 import {
   SafeAreaView,
 } from "react-native-safe-area-context";
-import { OUTGOING_MESSAGE_EVENT, DRAWER_STATE_EVENT } from "@/constants/events";
+import {
+  OUTGOING_MESSAGE_EVENT,
+} from "@/constants/events";
 import { getBorderColor } from "@/theme/borders";
-import { LiquidGlassView } from "../../../utils/liquidGlass";
 import type { ConversationMap } from "@/features/messaging/api/conversations";
 import { NewGroupChatModal } from "../components/NewGroupChatModal";
-import { searchUsers, UserSearchResult } from "../../../lib/userSearch";
 import { useAccentColor } from "@/state/theme/useAccentColor";
-import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
-import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
-import {
-  CENTER_CONTENT_MAX_WIDTH,
-  useLayoutBreakpoints,
-} from "@/alf/breakpoints";
+import { useLayoutBreakpoints } from "@/alf/breakpoints";
 import { ChatActionModal } from "../components/ChatActionModal";
 import { moveSpamInbox } from "@/features/messaging/api/spam";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import { useSetDrawerOpen } from "@/state/shell";
+import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
@@ -164,52 +159,6 @@ const ConversationRow = React.memo(function ConversationRow({
 
 ConversationRow.displayName = "ConversationRow";
 
-type NewChatResultRowProps = {
-  item: UserSearchResult;
-  isDark: boolean;
-  onPress: (item: UserSearchResult) => void;
-};
-
-const NewChatResultRow = React.memo(function NewChatResultRow({
-  item,
-  isDark,
-  onPress,
-}: NewChatResultRowProps) {
-  const handlePress = useCallback(() => onPress(item), [item, onPress]);
-
-  return (
-    <GesturePressable
-      onPress={handlePress}
-      style={({ pressed }) => ({
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      <View className="flex-row items-center px-5 py-3 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
-        <UserAvatar
-          uri={getProfileImageUrl(item.publicKey)}
-          name={item.username || "?"}
-          size={48}
-          className="bg-slate-200 dark:bg-slate-700"
-        />
-        <View style={{ marginLeft: 14, flex: 1 }}>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "600",
-              color: isDark ? "#ffffff" : "#0f172a",
-            }}
-            numberOfLines={1}
-          >
-            {item.username || "Anonymous"}
-          </Text>
-        </View>
-      </View>
-    </GesturePressable>
-  );
-});
-
-NewChatResultRow.displayName = "NewChatResultRow";
-
 // UI-only mock data
 type MockConversation = {
   id: string;
@@ -283,19 +232,13 @@ const getMediaPreviewText = (
 };
 
 export function HomeScreen() {
-  const { isDark, accentColor, accentStrong, accentSoft } = useAccentColor();
+  const { isDark, accentColor, accentStrong } = useAccentColor();
   const { currentUser } = useContext(DeSoIdentityContext);
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const rootNavigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [showGroupComposerModal, setShowGroupComposerModal] = useState(false);
-  const [showNewChatModal, setShowNewChatModal] = useState(false);
-  // New chat modal state
-  const [newChatSearchQuery, setNewChatSearchQuery] = useState("");
-  const [newChatResults, setNewChatResults] = useState<UserSearchResult[]>([]);
-  const [isSearchingNewChat, setIsSearchingNewChat] = useState(false);
-  const [hasSearchedNewChat, setHasSearchedNewChat] = useState(false);
   const [activeMailbox, setActiveMailbox] = useState<"inbox" | "spam">("inbox");
   const [optimisticPreviews, setOptimisticPreviews] = useState<
     Record<
@@ -338,6 +281,8 @@ export function HomeScreen() {
     [isDark]
   );
 
+  const isFocused = useIsFocused();
+
   const {
     conversations,
     profiles,
@@ -345,7 +290,7 @@ export function HomeScreen() {
     groupExtraData,
     threadMeta,
     isLoading,
-    isFetching,
+    isFetching: _isFetching,
     isFetchingNextPage,
     hasNextPage,
     reload,
@@ -353,7 +298,7 @@ export function HomeScreen() {
     error,
     typingStatuses,
     latestMessages,
-  } = useConversationThreads();
+  } = useConversationThreads({ isFocused });
 
   const { settings: threadSettings, setThreadMailbox: setThreadMailboxOverride } =
     useThreadSettings();
@@ -382,60 +327,6 @@ export function HomeScreen() {
       subscription.remove();
     };
   }, []);
-
-
-  // Debounced search for new chat modal
-  useEffect(() => {
-    if (!newChatSearchQuery.trim()) {
-      setNewChatResults([]);
-      setHasSearchedNewChat(false);
-      return;
-    }
-
-    const timeoutId = setTimeout(async () => {
-      setIsSearchingNewChat(true);
-      try {
-        const results = await searchUsers(newChatSearchQuery);
-        const filtered = results.filter(
-          (p) => p.publicKey !== currentUser?.PublicKeyBase58Check
-        );
-        setNewChatResults(filtered);
-        setHasSearchedNewChat(true);
-      } catch (error) {
-        console.error("[HomeScreen] new chat search error:", error);
-        setNewChatResults([]);
-      } finally {
-        setIsSearchingNewChat(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timeoutId);
-  }, [newChatSearchQuery, currentUser?.PublicKeyBase58Check]);
-
-  // Handle selecting a profile for new DM
-  const handleSelectNewChatProfile = useCallback(
-    (profile: UserSearchResult) => {
-      const userPublicKey = currentUser?.PublicKeyBase58Check;
-      if (!userPublicKey) return;
-
-      setShowNewChatModal(false);
-      setNewChatSearchQuery("");
-      setNewChatResults([]);
-      setHasSearchedNewChat(false);
-
-      rootNavigation.navigate("Conversation", {
-        threadPublicKey: profile.publicKey,
-        chatType: "DM" as ChatType,
-        userPublicKey,
-        userAccessGroupKeyName: DEFAULT_KEY_MESSAGING_GROUP_NAME,
-        recipientInfo: {
-          username: profile.username,
-          publicKey: profile.publicKey,
-        },
-      });
-    },
-    [currentUser?.PublicKeyBase58Check, rootNavigation]
-  );
 
   const buildItemsFromConversations = useCallback(
     (
@@ -686,7 +577,6 @@ export function HomeScreen() {
   ]);
 
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const isRefreshingMailbox = isFetching && !isFetchingNextPage && !isLoading;
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
@@ -774,23 +664,9 @@ export function HomeScreen() {
     [handleConversationPress, handleConversationLongPress]
   );
 
-  const handleNewChatResultPress = useCallback(
-    (user: UserSearchResult) => {
-      handleSelectNewChatProfile(user);
-    },
-    [handleSelectNewChatProfile]
-  );
-
-  const renderNewChatResultItem = useCallback(
-    ({ item }: { item: UserSearchResult }) => (
-      <NewChatResultRow item={item} isDark={isDark} onPress={handleNewChatResultPress} />
-    ),
-    [handleNewChatResultPress, isDark]
-  );
-
   const handleCompose = useCallback(() => {
-    navigation.navigate("Composer");
-  }, [navigation]);
+    rootNavigation.navigate("NewChat");
+  }, [rootNavigation]);
 
   const handleMoveSpam = useCallback(
     async (item: MockConversation, moveToSpam: boolean) => {
@@ -844,66 +720,46 @@ export function HomeScreen() {
   if (isLoading && items.length === 0) {
     return (
       <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-        <View className="flex-row items-center justify-between px-4 pt-4 pb-3">
-          <View className="flex-row items-center">
-            {!isDesktopWeb && (
-              <Pressable
+        <PageTopBar
+          title="Chats"
+          leftSlot={
+            !isDesktopWeb ? (
+              <PageTopBarIconButton
                 onPress={openDrawer}
-                className="mr-3 active:opacity-80"
+                accessibilityLabel="Open menu"
               >
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                  <Feather
-                    name="menu"
-                    size={20}
-                    color={isDark ? "#f8fafc" : "#0f172a"}
-                  />
-                </View>
-              </Pressable>
-            )}
-            <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
-              Chats
-            </Text>
-          </View>
-
-          {/* Header Right Icons */}
-          <View className="flex-row items-center">
-            {/* New Group Chat Button */}
-            <Pressable
-              onPress={() => setShowGroupComposerModal(true)}
-              className="mr-1 active:opacity-80"
-            >
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <Feather
+                  name="menu"
+                  size={18}
+                  color={isDark ? "#f8fafc" : "#0f172a"}
+                />
+              </PageTopBarIconButton>
+            ) : undefined
+          }
+          rightSlot={
+            <>
+              <PageTopBarIconButton
+                onPress={() => setShowGroupComposerModal(true)}
+                accessibilityLabel="Create group chat"
+              >
                 <UserGroupIcon
-                  width={20}
-                  height={20}
+                  width={18}
+                  height={18}
                   stroke={isDark ? "#f8fafc" : "#0f172a"}
                   strokeWidth={2}
                 />
-              </View>
-            </Pressable>
-
-            {/* New Chat Button */}
-            <Pressable
-              onPress={() => setShowNewChatModal(true)}
-              className="active:opacity-80"
-            >
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                <Feather
-                  name="plus"
-                  size={20}
-                  color={isDark ? "#f8fafc" : "#0f172a"}
-                />
-              </View>
-            </Pressable>
-          </View>
-        </View>
+              </PageTopBarIconButton>
+            </>
+          }
+        />
 
         {/* WhatsApp-style filter chips */}
         <View
           style={{
             flexDirection: "row",
             paddingHorizontal: 16,
-            paddingBottom: 12,
+            paddingTop: 16,
+            paddingBottom: 16,
             gap: 8,
             alignItems: "center",
           }}
@@ -954,9 +810,7 @@ export function HomeScreen() {
           })}
         </View>
 
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color={accentColor} />
-        </View>
+        <ChatListShimmer />
       </SafeAreaView>
     );
   }
@@ -993,123 +847,38 @@ export function HomeScreen() {
             paddingHorizontal: 0,
           }}
         >
-          {/* Header */}
-          <View
-            // @ts-ignore - data attribute for CSS scroll lock
-            dataSet={{ scrollLock: "true" }}
-            className="flex-row items-center justify-between pt-4 pb-3 px-4"
-          >
-            <View className="flex-row items-center">
-              {/* Hamburger Menu Button - hidden on desktop */}
-              {!isDesktopWeb && (
-                <Pressable
+          <PageTopBar
+            title="Chats"
+            leftSlot={
+              !isDesktopWeb ? (
+                <PageTopBarIconButton
                   onPress={openDrawer}
-                  className="mr-3 active:opacity-80"
+                  accessibilityLabel="Open menu"
                 >
-                  {LiquidGlassView ? (
-                    <LiquidGlassView
-                      effect="regular"
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Feather
-                        name="menu"
-                        size={20}
-                        color={isDark ? "#f8fafc" : "#0f172a"}
-                      />
-                    </LiquidGlassView>
-                  ) : (
-                    <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                      <Feather
-                        name="menu"
-                        size={20}
-                        color={isDark ? "#f8fafc" : "#0f172a"}
-                      />
-                    </View>
-                  )}
-                </Pressable>
-              )}
-              <Text className="text-[32px] font-extrabold text-slate-900 dark:text-white">
-                Chats
-              </Text>
-            </View>
-
-            {/* Header Right Icons */}
-            <View className="flex-row items-center">
-              {/* New Group Chat Button */}
-              <Pressable
-                onPress={() => setShowGroupComposerModal(true)}
-                className="mr-1 active:opacity-80"
-              >
-                {LiquidGlassView ? (
-                  <LiquidGlassView
-                    effect="regular"
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <UserGroupIcon
-                      width={20}
-                      height={20}
-                      stroke={isDark ? "#f8fafc" : "#0f172a"}
-                      strokeWidth={2}
-                    />
-                  </LiquidGlassView>
-                ) : (
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                    <UserGroupIcon
-                      width={20}
-                      height={20}
-                      stroke={isDark ? "#f8fafc" : "#0f172a"}
-                      strokeWidth={2}
-                    />
-                  </View>
-                )}
-              </Pressable>
-
-              {/* New Chat Button - opens new chat modal */}
-              <Pressable
-                onPress={() => setShowNewChatModal(true)}
-                className="active:opacity-80"
-              >
-                {LiquidGlassView ? (
-                  <LiquidGlassView
-                    effect="regular"
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Feather
-                      name="plus"
-                      size={20}
-                      color={isDark ? "#f8fafc" : "#0f172a"}
-                    />
-                  </LiquidGlassView>
-                ) : (
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                    <Feather
-                      name="plus"
-                      size={20}
-                      color={isDark ? "#f8fafc" : "#0f172a"}
-                    />
-                  </View>
-                )}
-              </Pressable>
-            </View>
-          </View>
+                  <Feather
+                    name="menu"
+                    size={18}
+                    color={isDark ? "#f8fafc" : "#0f172a"}
+                  />
+                </PageTopBarIconButton>
+              ) : undefined
+            }
+            rightSlot={
+              <>
+                <PageTopBarIconButton
+                  onPress={() => setShowGroupComposerModal(true)}
+                  accessibilityLabel="Create group chat"
+                >
+                  <UserGroupIcon
+                    width={18}
+                    height={18}
+                    stroke={isDark ? "#f8fafc" : "#0f172a"}
+                    strokeWidth={2}
+                  />
+                </PageTopBarIconButton>
+              </>
+            }
+          />
 
           {/* WhatsApp-style filter chips */}
           <View
@@ -1118,7 +887,8 @@ export function HomeScreen() {
             style={{
               flexDirection: "row",
               paddingHorizontal: 16,
-              paddingBottom: 12,
+              paddingTop: 16,
+              paddingBottom: 16,
               gap: 8,
               alignItems: "center",
             }}
@@ -1155,15 +925,15 @@ export function HomeScreen() {
                     style={{
                       fontSize: 13,
                       fontWeight: "500",
-                    color: isActive
-                      ? "#ffffff"
-                      : isDark
+                      color: isActive
+                        ? "#ffffff"
+                        : isDark
                           ? "#94a3b8"
                           : "#64748b",
-                  }}
-                >
-                  {filter.label}
-                </Text>
+                    }}
+                  >
+                    {filter.label}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -1280,178 +1050,6 @@ export function HomeScreen() {
             });
           }}
         />
-
-        {/* New Chat Modal */}
-        <Modal
-          visible={showNewChatModal}
-          animationType={isDesktopWeb ? "fade" : "slide"}
-          presentationStyle={isDesktopWeb ? "overFullScreen" : "pageSheet"}
-          transparent={isDesktopWeb}
-          onRequestClose={() => setShowNewChatModal(false)}
-        >
-          {(() => {
-            const closeButtonStyle = {
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: isDark
-                ? "rgba(51, 65, 85, 0.6)"
-                : "rgba(241, 245, 249, 1)",
-              alignItems: "center",
-              justifyContent: "center",
-            } as const;
-
-            const modalContent = (
-              <>
-                {/* Header */}
-                <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-800">
-                  <Text className="text-xl font-bold text-[#111] dark:text-white">
-                    New Message
-                  </Text>
-                  <Pressable
-                    onPress={() => setShowNewChatModal(false)}
-                    style={closeButtonStyle}
-                    className="active:opacity-80"
-                  >
-                    <Feather
-                      name="x"
-                      size={20}
-                      color={isDark ? "#94a3b8" : "#64748b"}
-                    />
-                  </Pressable>
-                </View>
-
-                {/* Search Input */}
-                <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: isDark
-                        ? "rgba(51, 65, 85, 0.4)"
-                        : "rgba(241, 245, 249, 1)",
-                      borderRadius: 14,
-                      paddingHorizontal: 16,
-                      height: 50,
-                      borderWidth: 1,
-                      borderColor: getBorderColor(isDark, "subtle"),
-                    }}
-                  >
-                    <Feather
-                      name="search"
-                      size={18}
-                      color={isDark ? "#64748b" : "#94a3b8"}
-                    />
-                    <TextInput
-                      style={{
-                        flex: 1,
-                        marginLeft: 12,
-                        fontSize: 16,
-                        color: isDark ? "#ffffff" : "#0f172a",
-                        ...(Platform.OS === "web" && {
-                          outlineStyle: "none" as any,
-                        }),
-                      }}
-                      placeholder="Search username..."
-                      placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                      value={newChatSearchQuery}
-                      onChangeText={setNewChatSearchQuery}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoFocus={Platform.OS !== "web"}
-                    />
-                  </View>
-                </View>
-
-                {/* Search Results */}
-                {isSearchingNewChat ? (
-                  <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator size="large" color={accentColor} />
-                  </View>
-                ) : hasSearchedNewChat && newChatResults.length === 0 ? (
-                  <View className="flex-1 items-center justify-center px-8">
-                    <Feather
-                      name="user-x"
-                      size={48}
-                      color={isDark ? "#334155" : "#cbd5e1"}
-                    />
-                    <Text className="mt-4 text-center text-base text-slate-500 dark:text-slate-400">
-                      No users found
-                    </Text>
-                  </View>
-                ) : !hasSearchedNewChat ? (
-                  <View className="flex-1 items-center justify-center px-8">
-                    <View
-                      style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 32,
-                        backgroundColor: accentSoft,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Feather name="search" size={28} color={accentStrong} />
-                    </View>
-                    <Text className="mt-4 text-center text-base font-medium text-slate-900 dark:text-white">
-                      Find someone to chat with
-                    </Text>
-                    <Text className="mt-1 text-center text-sm text-slate-500 dark:text-slate-400">
-                      Search by username to start a conversation
-                    </Text>
-                  </View>
-                ) : (
-                  <FlashList
-                    data={newChatResults}
-                    keyExtractor={(item) => item.publicKey}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    renderItem={renderNewChatResultItem}
-                  />
-                )}
-              </>
-            );
-
-            if (isDesktopWeb) {
-              return (
-                <View
-                  style={{
-                    flex: 1,
-                    backgroundColor: isDark
-                      ? "rgba(10, 15, 26, 0.85)"
-                      : "rgba(255, 255, 255, 0.85)",
-                  }}
-                >
-                  <DesktopLeftNav />
-                  <View style={{ flex: 1, alignItems: "center" }}>
-                    <View
-                      style={{
-                        flex: 1,
-                        width: "100%",
-                        maxWidth: CENTER_CONTENT_MAX_WIDTH,
-                        backgroundColor: isDark ? "#0a0f1a" : "#ffffff",
-                        borderLeftWidth: 1,
-                        borderRightWidth: 1,
-                        borderColor: getBorderColor(isDark, "contrast_low"),
-                      }}
-                    >
-                      <SafeAreaView style={{ flex: 1 }}>
-                        {modalContent}
-                      </SafeAreaView>
-                    </View>
-                  </View>
-                  <DesktopRightNav />
-                </View>
-              );
-            }
-
-            return (
-              <SafeAreaView className="flex-1 bg-white dark:bg-[#0a0f1a]">
-                {modalContent}
-              </SafeAreaView>
-            );
-          })()}
-        </Modal>
 
         {/* Chat Action Modal */}
         <ChatActionModal

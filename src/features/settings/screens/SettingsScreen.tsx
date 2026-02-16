@@ -18,6 +18,7 @@ import { WalletList } from "@/features/auth/components/WalletList";
 import { AvatarStack } from "@/components/ui/AvatarStack";
 import { UserAvatar } from "@/components/UserAvatar";
 import { getProfileDisplayName, getProfileImageUrl, formatPublicKey } from "@/utils/deso";
+import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 
 export function SettingsScreen({ navigation }: any) {
   const { colorScheme } = useColorScheme();
@@ -76,15 +77,21 @@ export function SettingsScreen({ navigation }: any) {
         backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
         edges={['top']}
       >
-        <View className="flex-row items-center px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-           <Pressable 
-             onPress={handleBackPress} 
-             className="mr-3 rounded-full p-1.5 transition-colors duration-150 hover:bg-slate-200 dark:hover:bg-slate-800 active:opacity-80 cursor-pointer"
-           >
-              <Feather name="arrow-left" size={24} color={isDark ? "white" : "black"} />
-           </Pressable>
-           <Text className="text-xl font-bold text-slate-900 dark:text-white">Settings</Text>
-        </View>
+        <PageTopBar
+          title="Settings"
+          leftSlot={
+            <PageTopBarIconButton
+              onPress={handleBackPress}
+              accessibilityLabel="Go back"
+            >
+              <Feather
+                name="arrow-left"
+                size={20}
+                color={isDark ? "#f8fafc" : "#0f172a"}
+              />
+            </PageTopBarIconButton>
+          }
+        />
 
         <ScrollView>
           {/* Profile Card */}

@@ -1,5 +1,6 @@
 import React, { useContext, useMemo, useState, useCallback } from "react";
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, Platform } from "react-native";
+import { ProfileShimmer } from "../components/ProfileShimmer";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useColorScheme } from "nativewind";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -110,10 +111,7 @@ export function ProfileScreen() {
         }
       >
         {isLoading ? (
-          <View className="flex-1 items-center justify-center py-16 px-4">
-            <ActivityIndicator size="small" color={isDark ? "#60a5fa" : "#3b82f6"} />
-            <Text className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading profile…</Text>
-          </View>
+          <ProfileShimmer />
         ) : error ? (
           <View className="rounded-2xl p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 mx-4">
             <Text className="text-base font-semibold text-red-700 dark:text-red-300 mb-1">Unable to load profile</Text>
