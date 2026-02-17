@@ -198,6 +198,14 @@ export function NewChatScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
+            style={{
+              borderWidth: 0,
+              ...(Platform.OS === "web" && {
+                outlineStyle: "none" as any,
+                outlineWidth: 0 as any,
+                boxShadow: "none" as any,
+              }),
+            }}
           />
         </View>
       </View>

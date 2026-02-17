@@ -67,8 +67,13 @@ export function getTransactionSpendingLimits(
     GlobalDESOLimit: 1 * 1e9,
     TransactionCountLimitMap: {
       AUTHORIZE_DERIVED_KEY: 1,
+      FOLLOW: UNLIMITED as any,
+      UNFOLLOW: UNLIMITED as any,
       NEW_MESSAGE: UNLIMITED as any,
       SUBMIT_POST: UNLIMITED as any,
+      LIKE: UNLIMITED as any,
+      CREATE_POST_ASSOCIATION: UNLIMITED as any,
+      DELETE_POST_ASSOCIATION: UNLIMITED as any,
       ACCESS_GROUP: UNLIMITED as any,
       ACCESS_GROUP_MEMBERS: UNLIMITED as any,
       DELETE_USER_ASSOCIATION: UNLIMITED as any,
