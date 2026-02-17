@@ -345,7 +345,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     >
       <View className="flex-1">
         <PageTopBar
-          title="New Post"
+          title=""
           leftSlot={
             <TouchableOpacity
               onPress={onCancel}

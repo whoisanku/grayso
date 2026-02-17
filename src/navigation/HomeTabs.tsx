@@ -141,16 +141,15 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           ) : route.name === "Feed" ? (
             isFocused ? (
               <HomeIconFilled
-                width={27}
-                height={27}
+                width={22}
+                height={22}
                 fill={isDark ? "#f8fafc" : "#0f172a"}
               />
             ) : (
               <HomeIcon
-                width={27}
-                height={27}
-                stroke={isDark ? "#64748b" : "#94a3b8"}
-                strokeWidth={2}
+                width={22}
+                height={22}
+                fill={isDark ? "#64748b" : "#94a3b8"}
               />
             )
           ) : isFocused ? (
@@ -360,10 +359,9 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
             }}
           >
             <HomeIcon
-              width={22}
-              height={22}
-              stroke={isDark ? "#e2e8f0" : "#0f172a"}
-              strokeWidth={2}
+              width={20}
+              height={20}
+              fill={isDark ? "#e2e8f0" : "#0f172a"}
             />
             <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
               Home

@@ -57,16 +57,15 @@ export function MobileNav({ activeTab }: MobileNavProps) {
         renderIcon: (focused: boolean) =>
           focused ? (
             <HomeIconFilled
-              width={27}
-              height={27}
+              width={22}
+              height={22}
               fill={isDark ? "#f8fafc" : "#0f172a"}
             />
           ) : (
             <HomeIcon
-              width={27}
-              height={27}
-              stroke={isDark ? "#64748b" : "#94a3b8"}
-              strokeWidth={2}
+              width={22}
+              height={22}
+              fill={isDark ? "#64748b" : "#94a3b8"}
             />
           ),
       },

@@ -44,6 +44,8 @@ interface NavItemProps {
   onPress: () => void;
   minimal: boolean;
   isDark: boolean;
+  fillBased?: boolean;
+  iconSize?: number;
 }
 
 function NavItem({
@@ -54,6 +56,8 @@ function NavItem({
   onPress,
   minimal,
   isDark,
+  fillBased = false,
+  iconSize = NAV_ICON_WIDTH,
 }: NavItemProps) {
   // Filled icon when active, outline when inactive
   const InUseIcon = isActive ? ActiveIcon : Icon;
@@ -75,11 +79,11 @@ function NavItem({
         ].join(" ")}
       >
         <InUseIcon
-          width={NAV_ICON_WIDTH}
-          height={NAV_ICON_WIDTH}
-          stroke={isActive ? activeColor : inactiveColor}
-          strokeWidth={isActive ? 1.5 : 1.6}
-          fill={isActive ? activeColor : "none"}
+          width={iconSize}
+          height={iconSize}
+          stroke={fillBased ? undefined : (isActive ? activeColor : inactiveColor)}
+          strokeWidth={fillBased ? undefined : (isActive ? 1.5 : 1.6)}
+          fill={fillBased ? (isActive ? activeColor : inactiveColor) : (isActive ? activeColor : "none")}
         />
       </View>
       {!minimal && (
@@ -137,6 +141,8 @@ export function DesktopLeftNav({
     ActiveIcon: NavIconComponent;
     isActive: boolean;
     onPress: () => void;
+    fillBased?: boolean;
+    iconSize?: number;
   }[] = [
     {
       key: "Feed",
@@ -144,6 +150,8 @@ export function DesktopLeftNav({
       Icon: HomeIcon,
       ActiveIcon: HomeIconFilled,
       isActive: isFeedActive,
+      fillBased: true,
+      iconSize: 22,
       onPress: () => {
         rootNavigation.navigate("Main", { screen: "Feed" });
       },
@@ -236,6 +244,8 @@ export function DesktopLeftNav({
                   onPress={item.onPress}
                   minimal={leftNavMinimal}
                   isDark={isDark}
+                  fillBased={item.fillBased}
+                  iconSize={item.iconSize}
                 />
               ))}
             </View>

@@ -393,8 +393,34 @@ const FOLLOW_FEEDS_HASHES_QUERY = `
   }
 `;
 
+const FOR_YOU_FEED_HASHES_QUERY = `
+  query ForYouFeedHashes(
+    $filter: FeedWeightedPostScoreFilter
+    $first: Int
+    $offset: Int
+    $orderBy: [FeedWeightedPostScoresOrderBy!]
+  ) {
+    feedWeightedPostScores(
+      filter: $filter
+      first: $first
+      offset: $offset
+      orderBy: $orderBy
+    ) {
+      nodes {
+        postHash
+      }
+      pageInfo {
+        endCursor
+        hasNextPage
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+
 const POST_BY_POST_HASH_QUERY = `
-  query PostByPostHash($postHash: String!) {
+  query PostByPostHash($postHash: String!, $readerPublicKey: String!) {
     postByPostHash(postHash: $postHash) {
       body
       postHash
@@ -441,8 +467,171 @@ const POST_BY_POST_HASH_QUERY = `
         repostCount
         __typename
       }
+      reactionAssociations: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+      ) {
+        totalCount
+      }
+      likeReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LIKE" } }
+      ) {
+        totalCount
+      }
+      dislikeReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "DISLIKE" } }
+      ) {
+        totalCount
+      }
+      loveReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LOVE" } }
+      ) {
+        totalCount
+      }
+      laughReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LAUGH" } }
+      ) {
+        totalCount
+      }
+      sadReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "SAD" } }
+      ) {
+        totalCount
+      }
+      cryReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "CRY" } }
+      ) {
+        totalCount
+      }
+      angryReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "ANGRY" } }
+      ) {
+        totalCount
+      }
+      viewerReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { transactorPkid: { equalTo: $readerPublicKey } }
+        first: 10
+      ) {
+        nodes {
+          associationId
+          associationType
+          associationValue
+        }
+      }
       __typename
     }
+  }
+`;
+
+const POST_BY_POST_HASH_REACTION_LIST_QUERY = `
+  query PostByPostHashReactionList(
+    $postHash: String!
+    $filter: PostAssociationFilter
+    $first: Int
+    $offset: Int
+    $orderBy: [PostAssociationsOrderBy!]
+  ) {
+    postByPostHash(postHash: $postHash) {
+      postHash
+      postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: $filter
+        first: $first
+        offset: $offset
+        orderBy: $orderBy
+      ) {
+        totalCount
+        nodes {
+          associationId
+          associationValue
+          associationType
+          transactor {
+            ...CoreAccountFields
+            ...FollowingStats
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      likes {
+        totalCount
+        __typename
+      }
+      __typename
+    }
+  }
+
+  fragment AccountModerationFields on Account {
+    isBlacklisted
+    isGreylisted: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "GREYLIST" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isNSFW: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "NSFW" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isVerifier: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "VERIFIER" }, associationValue: { equalTo: "VERIFIER" } }
+    ) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+
+  fragment CoreAccountFields on Account {
+    id
+    publicKey
+    username
+    extraData
+    description
+    pkid
+    isVerified
+    creatorBasisPoints
+    totalBalanceUsdCents
+    daoCoinMintingDisabled
+    daoCoinsInCirculationNanosHex
+    isVerified
+    subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+      totalCount
+      nodes {
+        id
+        __typename
+      }
+      __typename
+    }
+    ...AccountModerationFields
+    __typename
+  }
+
+  fragment FollowingStats on Account {
+    followingCounts {
+      totalFollowing
+      totalWhaleFollowing
+      __typename
+    }
+    followerCounts {
+      totalFollowers
+      totalWhaleFollowers
+      __typename
+    }
+    __typename
   }
 `;
 
@@ -638,6 +827,20 @@ const feedRepostedPostSchema = z.object({
   poster: feedPosterSchema.nullish(),
 });
 
+const reactionCountConnectionSchema = z.object({
+  totalCount: numberLike.nullish(),
+});
+
+const viewerReactionNodeSchema = z.object({
+  associationId: z.string().nullish(),
+  associationType: z.string().nullish(),
+  associationValue: z.string().nullish(),
+});
+
+const viewerReactionsConnectionSchema = z.object({
+  nodes: z.array(viewerReactionNodeSchema).default([]),
+});
+
 const feedPostSchema = z.object({
   body: z.string().nullish(),
   postHash: z.string(),
@@ -665,6 +868,36 @@ const feedPostSchema = z.object({
       repostCount: numberLike.nullish(),
     })
     .nullish(),
+  reactionAssociations: reactionCountConnectionSchema.nullish(),
+  likeReactions: reactionCountConnectionSchema.nullish(),
+  dislikeReactions: reactionCountConnectionSchema.nullish(),
+  loveReactions: reactionCountConnectionSchema.nullish(),
+  laughReactions: reactionCountConnectionSchema.nullish(),
+  sadReactions: reactionCountConnectionSchema.nullish(),
+  cryReactions: reactionCountConnectionSchema.nullish(),
+  angryReactions: reactionCountConnectionSchema.nullish(),
+  viewerReactions: viewerReactionsConnectionSchema.nullish(),
+});
+
+const forYouFeedHashNodeSchema = z.object({
+  postHash: z.string(),
+});
+
+const forYouFeedHashesResponseSchema = z.object({
+  data: z.object({
+    feedWeightedPostScores: z
+      .object({
+        nodes: z.array(forYouFeedHashNodeSchema).default([]),
+        pageInfo: z
+          .object({
+            endCursor: z.string().nullish(),
+            hasNextPage: z.boolean().nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
 
 const postByHashResponseSchema = z.object({
@@ -674,10 +907,103 @@ const postByHashResponseSchema = z.object({
   errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
 
+const postReactionModerationStateSchema = z.object({
+  totalCount: numberLike.nullish(),
+});
+
+const postReactionTransactorSchema = z
+  .object({
+    id: z.string().nullish(),
+    publicKey: z.string().nullish(),
+    username: z.string().nullish(),
+    extraData: z.record(z.string(), z.unknown()).nullish(),
+    description: z.string().nullish(),
+    pkid: z.string().nullish(),
+    isVerified: z.boolean().nullish(),
+    creatorBasisPoints: z.union([z.number(), z.string()]).nullish(),
+    totalBalanceUsdCents: numberLike.nullish(),
+    daoCoinMintingDisabled: z.boolean().nullish(),
+    daoCoinsInCirculationNanosHex: z.string().nullish(),
+    subscriptionTiers: z
+      .object({
+        totalCount: numberLike.nullish(),
+        nodes: z
+          .array(
+            z
+              .object({
+                id: z.string().nullish(),
+              })
+              .passthrough(),
+          )
+          .default([]),
+      })
+      .nullish(),
+    isBlacklisted: z.boolean().nullish(),
+    isGreylisted: postReactionModerationStateSchema.nullish(),
+    isNSFW: postReactionModerationStateSchema.nullish(),
+    isVerifier: postReactionModerationStateSchema.nullish(),
+    followingCounts: z
+      .object({
+        totalFollowing: numberLike.nullish(),
+        totalWhaleFollowing: numberLike.nullish(),
+      })
+      .nullish(),
+    followerCounts: z
+      .object({
+        totalFollowers: numberLike.nullish(),
+        totalWhaleFollowers: numberLike.nullish(),
+      })
+      .nullish(),
+  })
+  .passthrough();
+
+const postReactionAssociationNodeSchema = z
+  .object({
+    associationId: z.string().nullish(),
+    associationValue: z.string().nullish(),
+    associationType: z.string().nullish(),
+    transactor: postReactionTransactorSchema.nullish(),
+  })
+  .passthrough();
+
+const postReactionAssociationsConnectionSchema = z.object({
+  totalCount: numberLike.nullish(),
+  nodes: z.array(postReactionAssociationNodeSchema).default([]),
+});
+
+const postByHashReactionListResponseSchema = z.object({
+  data: z.object({
+    postByPostHash: z
+      .object({
+        postHash: z.string().nullish(),
+        postAssociationsByPostHash:
+          postReactionAssociationsConnectionSchema.nullish(),
+        likes: z
+          .object({
+            totalCount: numberLike.nullish(),
+          })
+          .nullish(),
+      })
+      .nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
 export type FocusAccount = z.infer<typeof focusAccountSchema>;
 export type FocusFollowEdge = z.infer<typeof followNodeSchema>;
 export type FocusFollowFeedHashNode = z.infer<typeof followFeedHashNodeSchema>;
+export type FocusForYouFeedHashNode = z.infer<typeof forYouFeedHashNodeSchema>;
 export type FocusFeedPost = z.infer<typeof feedPostSchema>;
+export type FocusPostReactionAssociationNode = z.infer<
+  typeof postReactionAssociationNodeSchema
+>;
+
+export type FocusPostReactionListResult = {
+  totalCount: number;
+  likesCount: number;
+  nodes: FocusPostReactionAssociationNode[];
+  nextOffset: number | null;
+};
 
 async function performGraphqlRequest(
   body: Record<string, unknown>,
@@ -965,12 +1291,89 @@ export async function fetchFollowFeedHashes({
   };
 }
 
+export async function fetchForYouFeedHashes({
+  first = 20,
+  offset = 0,
+  orderBy = ["WEIGHTED_SCORE_WITH_WEALTH_DESC"],
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  graphqlEndpoint?: string;
+}): Promise<{
+  nodes: FocusForYouFeedHashNode[];
+  pageInfo: FocusFeedPageInfo;
+  nextOffset: number | null;
+}> {
+  const body = {
+    operationName: "ForYouFeedHashes",
+    query: FOR_YOU_FEED_HASHES_QUERY,
+    variables: {
+      first,
+      offset,
+      orderBy,
+      filter: {
+        isComment: { equalTo: false },
+        isHidden: { equalTo: false },
+        isHiddenByMod: { equalTo: false },
+      },
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+  const parsed = forYouFeedHashesResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse for you feed hashes response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "For you feed hashes query returned errors",
+    );
+  }
+
+  const nodes = parsed.data.data.feedWeightedPostScores?.nodes ?? [];
+  const pageInfo = parsed.data.data.feedWeightedPostScores?.pageInfo ?? {};
+  const hasNextPage = Boolean(pageInfo?.hasNextPage);
+  const nextOffset = hasNextPage ? offset + nodes.length : null;
+
+  return {
+    nodes,
+    pageInfo,
+    nextOffset,
+  };
+}
+
 export async function fetchPostByPostHash({
   postHash,
+  readerPublicKey = "",
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
     DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   postHash: string;
+  readerPublicKey?: string;
   graphqlEndpoint?: string;
 }): Promise<FocusFeedPost | null> {
   const body = {
@@ -978,6 +1381,7 @@ export async function fetchPostByPostHash({
     query: POST_BY_POST_HASH_QUERY,
     variables: {
       postHash,
+      readerPublicKey,
     },
   };
 
@@ -1014,6 +1418,96 @@ export async function fetchPostByPostHash({
   }
 
   return parsed.data.data.postByPostHash ?? null;
+}
+
+export async function fetchPostByPostHashReactionList({
+  postHash,
+  first = 40,
+  offset = 0,
+  orderBy = ["TRANSACTOR_TOTAL_BALANCE_USD_CENTS_DESC"],
+  reactionValue,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  postHash: string;
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  reactionValue?: string | null;
+  graphqlEndpoint?: string;
+}): Promise<FocusPostReactionListResult> {
+  const body = {
+    operationName: "PostByPostHashReactionList",
+    query: POST_BY_POST_HASH_REACTION_LIST_QUERY,
+    variables: {
+      postHash,
+      first,
+      offset,
+      orderBy,
+      filter: reactionValue
+        ? {
+            associationValue: {
+              equalTo: reactionValue,
+            },
+          }
+        : null,
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+  const parsed = postByHashReactionListResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse post reactions response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Post reactions query returned errors",
+    );
+  }
+
+  const post = parsed.data.data.postByPostHash;
+  const reactionConnection = post?.postAssociationsByPostHash;
+  const nodes = reactionConnection?.nodes ?? [];
+
+  const parsedTotalCount = Number(reactionConnection?.totalCount ?? nodes.length);
+  const totalCount = Number.isFinite(parsedTotalCount)
+    ? Math.max(0, Math.floor(parsedTotalCount))
+    : nodes.length;
+
+  const parsedLikesCount = Number(post?.likes?.totalCount ?? 0);
+  const likesCount = Number.isFinite(parsedLikesCount)
+    ? Math.max(0, Math.floor(parsedLikesCount))
+    : 0;
+
+  const nextOffset = totalCount > offset + nodes.length ? offset + nodes.length : null;
+
+  return {
+    totalCount,
+    likesCount,
+    nodes,
+    nextOffset,
+  };
 }
 
 // Backward-compatible alias while callers are migrated.

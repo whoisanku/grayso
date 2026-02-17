@@ -736,21 +736,6 @@ export function HomeScreen() {
               </PageTopBarIconButton>
             ) : undefined
           }
-          rightSlot={
-            <>
-              <PageTopBarIconButton
-                onPress={() => setShowGroupComposerModal(true)}
-                accessibilityLabel="Create group chat"
-              >
-                <UserGroupIcon
-                  width={18}
-                  height={18}
-                  stroke={isDark ? "#f8fafc" : "#0f172a"}
-                  strokeWidth={2}
-                />
-              </PageTopBarIconButton>
-            </>
-          }
         />
 
         {/* WhatsApp-style filter chips */}
@@ -808,6 +793,42 @@ export function HomeScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={() => setShowGroupComposerModal(true)}
+            className="active:opacity-90"
+            accessibilityRole="button"
+            accessibilityLabel="Create group chat"
+            style={{
+              marginLeft: "auto",
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              backgroundColor: isDark
+                ? "rgba(30, 41, 59, 0.6)"
+                : "rgba(241, 245, 249, 0.9)",
+              borderWidth: 1,
+              borderColor: getBorderColor(isDark, "subtle"),
+            }}
+          >
+            <UserGroupIcon
+              width={14}
+              height={14}
+              stroke={isDark ? "#cbd5e1" : "#334155"}
+              strokeWidth={2}
+            />
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "600",
+                color: isDark ? "#cbd5e1" : "#334155",
+              }}
+            >
+              New group
+            </Text>
+          </Pressable>
         </View>
 
         <ChatListShimmer />
@@ -862,21 +883,6 @@ export function HomeScreen() {
                   />
                 </PageTopBarIconButton>
               ) : undefined
-            }
-            rightSlot={
-              <>
-                <PageTopBarIconButton
-                  onPress={() => setShowGroupComposerModal(true)}
-                  accessibilityLabel="Create group chat"
-                >
-                  <UserGroupIcon
-                    width={18}
-                    height={18}
-                    stroke={isDark ? "#f8fafc" : "#0f172a"}
-                    strokeWidth={2}
-                  />
-                </PageTopBarIconButton>
-              </>
             }
           />
 
@@ -937,6 +943,42 @@ export function HomeScreen() {
                 </Pressable>
               );
             })}
+            <Pressable
+              onPress={() => setShowGroupComposerModal(true)}
+              className="active:opacity-90"
+              accessibilityRole="button"
+              accessibilityLabel="Create group chat"
+              style={{
+                marginLeft: "auto",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: isDark
+                  ? "rgba(30, 41, 59, 0.6)"
+                  : "rgba(241, 245, 249, 0.9)",
+                borderWidth: 1,
+                borderColor: getBorderColor(isDark, "subtle"),
+              }}
+            >
+              <UserGroupIcon
+                width={14}
+                height={14}
+                stroke={isDark ? "#cbd5e1" : "#334155"}
+                strokeWidth={2}
+              />
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "600",
+                  color: isDark ? "#cbd5e1" : "#334155",
+                }}
+              >
+                New group
+              </Text>
+            </Pressable>
           </View>
 
           <View

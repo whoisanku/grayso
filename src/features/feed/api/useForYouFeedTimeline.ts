@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { type InfiniteData, useInfiniteQuery } from "@tanstack/react-query";
 
 import {
-  fetchFollowFeedHashes,
+  fetchForYouFeedHashes,
   fetchPostByPostHash,
   type FocusFeedPost,
 } from "@/lib/focus/graphql";
@@ -16,13 +16,11 @@ type TimelinePage = {
   hasMore: boolean;
 };
 
-export function useFollowFeedTimeline({
-  followerPublicKey,
+export function useForYouFeedTimeline({
   readerPublicKey,
   enabled = true,
   pageSize = DEFAULT_PAGE_SIZE,
 }: {
-  followerPublicKey?: string;
   readerPublicKey?: string;
   enabled?: boolean;
   pageSize?: number;
@@ -33,25 +31,17 @@ export function useFollowFeedTimeline({
     TimelinePage,
     Error,
     InfiniteData<TimelinePage>,
-    ReturnType<typeof feedKeys.timeline>,
+    ReturnType<typeof feedKeys.forYouTimeline>,
     number
   >({
-    queryKey: feedKeys.timeline(
-      followerPublicKey ?? "",
-      normalizedReaderPublicKey,
-    ),
-    enabled: Boolean(followerPublicKey) && enabled,
+    queryKey: feedKeys.forYouTimeline(normalizedReaderPublicKey),
+    enabled,
     initialPageParam: 0,
     staleTime: 0,
     gcTime: 0,
     refetchOnWindowFocus: true,
     queryFn: async ({ pageParam }) => {
-      if (!followerPublicKey) {
-        throw new Error("Follower public key is required");
-      }
-
-      const result = await fetchFollowFeedHashes({
-        followerPublicKey,
+      const result = await fetchForYouFeedHashes({
         first: pageSize,
         offset: pageParam ?? 0,
       });

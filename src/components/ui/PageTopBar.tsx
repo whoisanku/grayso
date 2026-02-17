@@ -7,6 +7,7 @@ function joinClassNames(...values: (string | null | undefined | false)[]) {
 
 export function PageTopBar({
   title,
+  titleSlot,
   subtitle,
   leftSlot,
   rightSlot,
@@ -16,7 +17,8 @@ export function PageTopBar({
   noBorder = false,
   lockScroll = true,
 }: {
-  title: string;
+  title?: string;
+  titleSlot?: React.ReactNode;
   subtitle?: string;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
@@ -40,15 +42,19 @@ export function PageTopBar({
       {leftSlot ? <View className="shrink-0">{leftSlot}</View> : null}
 
       <View className="min-w-0 flex-1">
-        <Text
-          numberOfLines={1}
-          className={joinClassNames(
-            "text-[24px] font-bold tracking-[-0.3px] text-slate-900 dark:text-white",
-            titleClassName,
-          )}
-        >
-          {title}
-        </Text>
+        {titleSlot ? (
+          titleSlot
+        ) : (
+          <Text
+            numberOfLines={1}
+            className={joinClassNames(
+              "text-[24px] font-bold tracking-[-0.3px] text-slate-900 dark:text-white",
+              titleClassName,
+            )}
+          >
+            {title}
+          </Text>
+        )}
 
         {subtitle ? (
           <Text
