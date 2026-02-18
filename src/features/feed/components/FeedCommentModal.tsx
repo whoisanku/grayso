@@ -44,6 +44,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
 
 const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
+const MOBILE_KEYBOARD_BAR_GAP = 8;
 
 type FeedCommentModalProps = {
   visible: boolean;
@@ -218,19 +219,22 @@ export function FeedCommentModal({
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
   const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb && isMobileWeb;
-  const composerFooterOffset = isMobileWebComposer ? keyboardInset : 0;
+  const composerFooterOffset =
+    isMobileWebComposer && keyboardInset > 0
+      ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
+      : 0;
   const animatedFooterOffset = useSharedValue(0);
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
 
   useEffect(() => {
     animatedFooterOffset.value = withTiming(composerFooterOffset, {
-      duration: 140,
+      duration: 110,
       easing: Easing.out(Easing.quad),
     });
   }, [animatedFooterOffset, composerFooterOffset]);
 
   const composerFooterAnimatedStyle = useAnimatedStyle(() => ({
-    marginBottom: animatedFooterOffset.value,
+    transform: [{ translateY: -animatedFooterOffset.value }],
   }));
 
   const canSubmit = Boolean(

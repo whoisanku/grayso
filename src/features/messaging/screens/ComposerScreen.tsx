@@ -53,6 +53,7 @@ if (isIOS26OrAbove) {
 
 const MAX_LENGTH = 280;
 const TOOLBAR_RESERVE_HEIGHT = 96;
+const MOBILE_KEYBOARD_BAR_GAP = 8;
 
 type ComposerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Composer">;
@@ -75,6 +76,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const isWebDesktop = Platform.OS === "web" && isDesktop;
   const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
   const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop && isMobileWeb;
+  const toolbarBottomInsetTarget =
+    isMobileWebComposer && keyboardInset > 0
+      ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
+      : 0;
 
   // Keyboard animation for toolbar positioning
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
@@ -83,17 +88,17 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   useEffect(() => {
     if (!isMobileWebComposer) {
       webToolbarBottomInset.value = withTiming(0, {
-        duration: 120,
+        duration: 100,
         easing: Easing.out(Easing.quad),
       });
       return;
     }
 
-    webToolbarBottomInset.value = withTiming(keyboardInset, {
-      duration: 140,
+    webToolbarBottomInset.value = withTiming(toolbarBottomInsetTarget, {
+      duration: 110,
       easing: Easing.out(Easing.quad),
     });
-  }, [isMobileWebComposer, keyboardInset, webToolbarBottomInset]);
+  }, [isMobileWebComposer, toolbarBottomInsetTarget, webToolbarBottomInset]);
 
   const toolbarAnimatedStyle = useAnimatedStyle(() => {
     if (Platform.OS === "web") {
