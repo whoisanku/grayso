@@ -87,16 +87,31 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   // Keyboard animation for toolbar positioning
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const webToolbarBottomInset = useSharedValue(0);
+  const previousToolbarBottomInset = useSharedValue(0);
 
   useEffect(() => {
+    const targetInset = isMobileWebComposer ? toolbarBottomInsetTarget : 0;
+    const isOpening = targetInset > previousToolbarBottomInset.value;
+    previousToolbarBottomInset.value = targetInset;
+
+    if (isOpening) {
+      webToolbarBottomInset.value = targetInset;
+      return;
+    }
+
     webToolbarBottomInset.value = withTiming(
-      isMobileWebComposer ? toolbarBottomInsetTarget : 0,
+      targetInset,
       {
         duration: 120,
         easing: Easing.linear,
       },
     );
-  }, [isMobileWebComposer, toolbarBottomInsetTarget, webToolbarBottomInset]);
+  }, [
+    isMobileWebComposer,
+    previousToolbarBottomInset,
+    toolbarBottomInsetTarget,
+    webToolbarBottomInset,
+  ]);
 
   const toolbarAnimatedStyle = useAnimatedStyle(() => {
     if (Platform.OS === "web") {

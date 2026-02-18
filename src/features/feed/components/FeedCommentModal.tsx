@@ -228,6 +228,7 @@ export function FeedCommentModal({
       ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
       : 0;
   const animatedFooterOffset = useSharedValue(0);
+  const previousFooterOffset = useSharedValue(0);
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
   const resolvedCommentInputHeight = Math.min(
     commentInputMaxHeight,
@@ -250,6 +251,9 @@ export function FeedCommentModal({
   }, [isDark, isMobileWebComposer]);
 
   useEffect(() => {
+    const isOpening = composerFooterOffset > previousFooterOffset.value;
+    previousFooterOffset.value = composerFooterOffset;
+
     if (!isMobileWebComposer) {
       animatedFooterOffset.value = withTiming(0, {
         duration: 120,
@@ -258,11 +262,21 @@ export function FeedCommentModal({
       return;
     }
 
+    if (isOpening) {
+      animatedFooterOffset.value = composerFooterOffset;
+      return;
+    }
+
     animatedFooterOffset.value = withTiming(composerFooterOffset, {
       duration: 120,
       easing: Easing.linear,
     });
-  }, [animatedFooterOffset, composerFooterOffset, isMobileWebComposer]);
+  }, [
+    animatedFooterOffset,
+    composerFooterOffset,
+    isMobileWebComposer,
+    previousFooterOffset,
+  ]);
 
   useEffect(() => {
     if (!visible) {

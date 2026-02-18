@@ -4,6 +4,8 @@ import { Platform } from "react-native";
 const MOBILE_WEB_BREAKPOINT = 1024;
 const KEYBOARD_INSET_THRESHOLD = 4;
 const KEYBOARD_SYNC_DELAY_MS = 0;
+const FOCUS_INSET_PRIME_RATIO = 0.45;
+const FOCUS_INSET_PRIME_MAX = 72;
 
 function isEditableElement(element: Element | null): boolean {
   if (!element) {
@@ -80,6 +82,7 @@ export function useMobileWebKeyboardInset() {
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineViewportBottomRef = useRef(0);
+  const lastKnownKeyboardInsetRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") {
@@ -162,6 +165,10 @@ export function useMobileWebKeyboardInset() {
           ? clampKeyboardInset(rawInset, viewportHeight)
           : 0;
 
+      if (nextInset > 0) {
+        lastKnownKeyboardInsetRef.current = nextInset;
+      }
+
       if (nextInset === 0) {
         baselineViewportBottomRef.current = viewportBottom;
       }
@@ -185,6 +192,16 @@ export function useMobileWebKeyboardInset() {
     };
 
     const handleFocusIn = () => {
+      if (hasFocusedEditableElement() && lastKnownKeyboardInsetRef.current > 0) {
+        const primedInset = Math.min(
+          FOCUS_INSET_PRIME_MAX,
+          lastKnownKeyboardInsetRef.current * FOCUS_INSET_PRIME_RATIO,
+        );
+        setKeyboardInset((currentInset) =>
+          currentInset > 0 ? currentInset : primedInset,
+        );
+      }
+
       queueKeyboardSync();
     };
 
