@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useCallback, useEffect } from "react";
+import React, { useState, useLayoutEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -23,21 +23,12 @@ import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
 import { BlurView } from "expo-blur";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
 import { Toast } from "@/components/ui/Toast";
 import { PageTopBar } from "@/components/ui/PageTopBar";
-import { useMobileWebKeyboardInset } from "@/lib/keyboard/useMobileWebKeyboardInset";
-
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
 
@@ -52,8 +43,6 @@ if (isIOS26OrAbove) {
 }
 
 const MAX_LENGTH = 280;
-const TOOLBAR_RESERVE_HEIGHT = 96;
-const MOBILE_KEYBOARD_BAR_GAP = 14;
 
 type ComposerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Composer">;
@@ -75,58 +64,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const { currentUser } = React.useContext(DeSoIdentityContext);
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
-  const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
-  const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop && isMobileWeb;
+  const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop;
   const composerInputMinHeight = 110;
   const composerInputMaxHeight = 260;
-  const toolbarBottomInsetTarget =
-    isMobileWebComposer && keyboardInset > 0
-      ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
-      : 0;
-
-  // Keyboard animation for toolbar positioning
-  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
-  const webToolbarBottomInset = useSharedValue(0);
-  const previousToolbarBottomInset = useSharedValue(0);
-
-  useEffect(() => {
-    const targetInset = isMobileWebComposer ? toolbarBottomInsetTarget : 0;
-    const isOpening = targetInset > previousToolbarBottomInset.value;
-    previousToolbarBottomInset.value = targetInset;
-
-    if (isOpening) {
-      webToolbarBottomInset.value = targetInset;
-      return;
-    }
-
-    webToolbarBottomInset.value = withTiming(
-      targetInset,
-      {
-        duration: 120,
-        easing: Easing.linear,
-      },
-    );
-  }, [
-    isMobileWebComposer,
-    previousToolbarBottomInset,
-    toolbarBottomInsetTarget,
-    webToolbarBottomInset,
-  ]);
-
-  const toolbarAnimatedStyle = useAnimatedStyle(() => {
-    if (Platform.OS === "web") {
-      return {
-        bottom: webToolbarBottomInset.value,
-      };
-    }
-
-    return {
-      transform: [{ translateY: keyboardHeight.value }],
-    };
-  });
-
-  const scrollBottomPadding =
-    20 + TOOLBAR_RESERVE_HEIGHT + (isMobileWebComposer ? 20 : 0);
+  const scrollBottomPadding = isMobileWebComposer ? 24 : 20;
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -357,7 +298,9 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
           backgroundColor: isDark ? "rgba(11, 22, 41, 0.76)" : "rgba(255, 255, 255, 0.88)",
           backdropFilter: "blur(14px)",
           WebkitBackdropFilter: "blur(14px)",
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 10px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingLeft: "calc(env(safe-area-inset-left, 0px) + 16px)",
+          paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)",
         } as any)
       : undefined;
 
@@ -401,9 +344,11 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   const content = (
     <ScreenWrapper
-      edges={['top', 'left', 'right']}
-      keyboardAvoiding={false}
+      edges={['top', 'left', 'right', 'bottom']}
+      keyboardAvoiding={Platform.OS === "ios"}
+      keyboardVerticalOffset={0}
       backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
+      useKeyboardController={true}
     >
       <View className="flex-1">
         <PageTopBar
@@ -580,20 +525,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
           </ScrollView>
         </View>
 
-        {/* Toolbar at bottom - animated to move with keyboard */}
-        <Animated.View 
-          style={[
-            { 
-              position: 'absolute', 
-              bottom: 0, 
-              left: 0, 
-              right: 0,
-            },
-            toolbarAnimatedStyle
-          ]}
-        >
+        {/* Toolbar stays in flow so mobile web viewport resize keeps it pinned to keyboard */}
+        <View>
           {renderToolbar()}
-        </Animated.View>
+        </View>
       </View>
     </ScreenWrapper>
   );

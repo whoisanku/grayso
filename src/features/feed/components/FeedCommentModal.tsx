@@ -16,12 +16,6 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { Feather } from "@expo/vector-icons";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -32,7 +26,6 @@ import {
   normalizeVideoSource,
   toPlatformSafeImageUrl,
 } from "@/lib/mediaUrl";
-import { useMobileWebKeyboardInset } from "@/lib/keyboard/useMobileWebKeyboardInset";
 import { Toast } from "@/components/ui/Toast";
 import CircularProgressIndicator from "@/components/CircularProgressIndicator";
 import {
@@ -44,8 +37,6 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
 
 const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
-const MOBILE_KEYBOARD_BAR_GAP = 14;
-const MOBILE_COMPOSER_FOOTER_PADDING_BOTTOM = 96;
 
 type FeedCommentModalProps = {
   visible: boolean;
@@ -221,14 +212,7 @@ export function FeedCommentModal({
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   const commentInputMinHeight = isDesktopWeb ? 180 : 120;
   const commentInputMaxHeight = isDesktopWeb ? 280 : 220;
-  const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
-  const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb && isMobileWeb;
-  const composerFooterOffset =
-    isMobileWebComposer && keyboardInset > 0
-      ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
-      : 0;
-  const animatedFooterOffset = useSharedValue(0);
-  const previousFooterOffset = useSharedValue(0);
+  const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb;
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
   const resolvedCommentInputHeight = Math.min(
     commentInputMaxHeight,
@@ -246,37 +230,11 @@ export function FeedCommentModal({
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        paddingLeft: "calc(env(safe-area-inset-left, 0px) + 20px)",
+        paddingRight: "calc(env(safe-area-inset-right, 0px) + 20px)",
       }),
     } as any;
   }, [isDark, isMobileWebComposer]);
-
-  useEffect(() => {
-    const isOpening = composerFooterOffset > previousFooterOffset.value;
-    previousFooterOffset.value = composerFooterOffset;
-
-    if (!isMobileWebComposer) {
-      animatedFooterOffset.value = withTiming(0, {
-        duration: 120,
-        easing: Easing.linear,
-      });
-      return;
-    }
-
-    if (isOpening) {
-      animatedFooterOffset.value = composerFooterOffset;
-      return;
-    }
-
-    animatedFooterOffset.value = withTiming(composerFooterOffset, {
-      duration: 120,
-      easing: Easing.linear,
-    });
-  }, [
-    animatedFooterOffset,
-    composerFooterOffset,
-    isMobileWebComposer,
-    previousFooterOffset,
-  ]);
 
   useEffect(() => {
     if (!visible) {
@@ -285,10 +243,6 @@ export function FeedCommentModal({
 
     setCommentInputHeight(commentInputMinHeight);
   }, [commentInputMinHeight, visible, post?.postHash]);
-
-  const composerFooterAnimatedStyle = useAnimatedStyle(() => ({
-    bottom: animatedFooterOffset.value,
-  }));
 
   const canSubmit = Boolean(
     post?.postHash &&
@@ -579,9 +533,7 @@ export function FeedCommentModal({
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingBottom: isMobileWebComposer
-            ? MOBILE_COMPOSER_FOOTER_PADDING_BOTTOM
-            : 24,
+          paddingBottom: 24,
         }}
       >
         <View className="px-4 pb-4 pt-3.5">
@@ -755,31 +707,18 @@ export function FeedCommentModal({
         </View>
       </ScrollView>
 
-      {isMobileWebComposer ? (
-        <Animated.View
-          className="absolute left-0 right-0 px-5 pt-3"
-          style={[
-            {
-              borderTopWidth: 1,
-              borderTopColor: getBorderColor(isDark, "subtle"),
-            },
-            mobileWebFooterSurfaceStyle,
-            composerFooterAnimatedStyle,
-          ]}
-        >
-          {composerFooterControls}
-        </Animated.View>
-      ) : (
-        <View
-          className="px-5 pb-3.5 pt-3"
-          style={{
+      <View
+        className="px-5 pb-3.5 pt-3"
+        style={[
+          {
             borderTopWidth: 1,
             borderTopColor: getBorderColor(isDark, "subtle"),
-          }}
-        >
-          {composerFooterControls}
-        </View>
-      )}
+          },
+          mobileWebFooterSurfaceStyle,
+        ]}
+      >
+        {composerFooterControls}
+      </View>
     </View>
   );
 
