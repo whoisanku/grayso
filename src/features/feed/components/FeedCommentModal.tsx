@@ -45,6 +45,7 @@ import { parseRichTextContent } from "@/lib/richText";
 
 const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 const MOBILE_KEYBOARD_BAR_GAP = 8;
+const MOBILE_COMPOSER_FOOTER_PADDING_BOTTOM = 96;
 
 type FeedCommentModalProps = {
   visible: boolean;
@@ -234,7 +235,7 @@ export function FeedCommentModal({
   }, [animatedFooterOffset, composerFooterOffset]);
 
   const composerFooterAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -animatedFooterOffset.value }],
+    bottom: animatedFooterOffset.value,
   }));
 
   const canSubmit = Boolean(
@@ -391,6 +392,91 @@ export function FeedCommentModal({
     setCommentText(value.slice(0, MAX_COMMENT_LENGTH));
   };
 
+  const composerFooterControls = (
+    <View className="flex-row items-center gap-3">
+      <Pressable
+        onPress={handlePickReplyImage}
+        disabled={isUploadingReplyImage || isPending}
+        className="h-8 w-8 items-center justify-center rounded-md"
+        style={{
+          borderWidth: 1,
+          borderColor: replyImageLocalUri
+            ? accentColor
+            : getBorderColor(isDark, "input"),
+          backgroundColor: replyImageLocalUri ? accentSoft : accentSurface,
+          opacity: isUploadingReplyImage ? 0.7 : 1,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Attach image"
+      >
+        {isUploadingReplyImage ? (
+          <ActivityIndicator size="small" color={accentStrong} />
+        ) : (
+          <Feather
+            name="image"
+            size={16}
+            color={replyImageLocalUri ? accentStrong : accentColor}
+          />
+        )}
+      </Pressable>
+
+      <View className="ml-auto flex-row items-center gap-2.5">
+        <Text
+          className="text-[14px]"
+          style={{
+            color:
+              remainingCharacters < 20
+                ? "#ef4444"
+                : isDark
+                  ? "#cbd5e1"
+                  : "#334155",
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {remainingCharacters}
+        </Text>
+
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${remainingCharacters} characters remaining`}
+          accessibilityValue={{
+            min: 0,
+            max: MAX_COMMENT_LENGTH,
+            now: commentText.length,
+          }}
+        >
+          <CircularProgressIndicator
+            current={commentText.length}
+            max={MAX_COMMENT_LENGTH}
+            size={24}
+            strokeWidth={2.25}
+          />
+        </View>
+      </View>
+
+      <Pressable
+        onPress={handleSubmit}
+        disabled={!canSubmit}
+        className="h-9 min-w-[88px] items-center justify-center rounded-full px-4"
+        style={{
+          backgroundColor: canSubmit
+            ? accentColor
+            : isDark
+              ? "rgba(51, 65, 85, 0.7)"
+              : "rgba(203, 213, 225, 0.9)",
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Submit reply"
+      >
+        {isPending ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <Text className="text-[16px] font-semibold text-white">Reply</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+
   const composerContent = (
     <View className="flex-1">
       <View
@@ -430,7 +516,11 @@ export function FeedCommentModal({
       <ScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{
+          paddingBottom: isMobileWebComposer
+            ? MOBILE_COMPOSER_FOOTER_PADDING_BOTTOM
+            : 24,
+        }}
       >
         <View className="px-4 pb-4 pt-3.5">
           <View className="flex-row items-start gap-3">
@@ -594,99 +684,30 @@ export function FeedCommentModal({
         </View>
       </ScrollView>
 
-      <Animated.View
-        className="px-4 pb-2.5 pt-2"
-        style={[
-          {
+      {isMobileWebComposer ? (
+        <Animated.View
+          className="absolute left-0 right-0 px-4 pb-2.5 pt-2"
+          style={[
+            {
+              borderTopWidth: 1,
+              borderTopColor: getBorderColor(isDark, "subtle"),
+            },
+            composerFooterAnimatedStyle,
+          ]}
+        >
+          {composerFooterControls}
+        </Animated.View>
+      ) : (
+        <View
+          className="px-4 pb-2.5 pt-2"
+          style={{
             borderTopWidth: 1,
             borderTopColor: getBorderColor(isDark, "subtle"),
-          },
-          composerFooterAnimatedStyle,
-        ]}
-      >
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={handlePickReplyImage}
-            disabled={isUploadingReplyImage || isPending}
-            className="h-8 w-8 items-center justify-center rounded-md"
-            style={{
-              borderWidth: 1,
-              borderColor: replyImageLocalUri
-                ? accentColor
-                : getBorderColor(isDark, "input"),
-              backgroundColor: replyImageLocalUri ? accentSoft : accentSurface,
-              opacity: isUploadingReplyImage ? 0.7 : 1,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Attach image"
-          >
-            {isUploadingReplyImage ? (
-              <ActivityIndicator size="small" color={accentStrong} />
-            ) : (
-              <Feather
-                name="image"
-                size={16}
-                color={replyImageLocalUri ? accentStrong : accentColor}
-              />
-            )}
-          </Pressable>
-
-          <View className="ml-auto flex-row items-center gap-2.5">
-            <Text
-              className="text-[14px]"
-              style={{
-                color:
-                  remainingCharacters < 20
-                    ? "#ef4444"
-                    : isDark
-                      ? "#cbd5e1"
-                      : "#334155",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {remainingCharacters}
-            </Text>
-
-            <View
-              accessibilityRole="progressbar"
-              accessibilityLabel={`${remainingCharacters} characters remaining`}
-              accessibilityValue={{
-                min: 0,
-                max: MAX_COMMENT_LENGTH,
-                now: commentText.length,
-              }}
-            >
-              <CircularProgressIndicator
-                current={commentText.length}
-                max={MAX_COMMENT_LENGTH}
-                size={24}
-                strokeWidth={2.25}
-              />
-            </View>
-          </View>
-
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            className="h-9 min-w-[88px] items-center justify-center rounded-full px-4"
-            style={{
-              backgroundColor: canSubmit
-                ? accentColor
-                : isDark
-                  ? "rgba(51, 65, 85, 0.7)"
-                  : "rgba(203, 213, 225, 0.9)",
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Submit reply"
-          >
-            {isPending ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text className="text-[16px] font-semibold text-white">Reply</Text>
-            )}
-          </Pressable>
+          }}
+        >
+          {composerFooterControls}
         </View>
-      </Animated.View>
+      )}
     </View>
   );
 

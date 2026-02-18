@@ -48,6 +48,19 @@ function getViewportHeight(): number {
   return window.visualViewport?.height ?? window.innerHeight;
 }
 
+function getViewportBottom(): number {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  const visualViewport = window.visualViewport;
+  if (visualViewport) {
+    return visualViewport.offsetTop + visualViewport.height;
+  }
+
+  return window.innerHeight;
+}
+
 function isLikelyMobileWebDevice(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -66,6 +79,7 @@ export function useMobileWebKeyboardInset() {
   const [keyboardInset, setKeyboardInset] = useState(0);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const baselineViewportBottomRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") {
@@ -108,6 +122,7 @@ export function useMobileWebKeyboardInset() {
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined" || !isMobileWeb) {
+      baselineViewportBottomRef.current = 0;
       const resetTimer = setTimeout(() => {
         setKeyboardInset(0);
       }, 0);
@@ -119,34 +134,38 @@ export function useMobileWebKeyboardInset() {
 
     const visualViewport = window.visualViewport;
 
-    const readKeyboardInset = () => {
+    const updateKeyboardInset = () => {
       const viewportHeight = getViewportHeight();
+      const viewportBottom = getViewportBottom();
 
-      if (viewportHeight <= 0) {
-        return 0;
+      if (viewportHeight <= 0 || viewportBottom <= 0) {
+        return;
       }
 
       if (!hasFocusedEditableElement()) {
-        return 0;
+        baselineViewportBottomRef.current = viewportBottom;
+        setKeyboardInset((currentInset) => (currentInset === 0 ? currentInset : 0));
+        return;
       }
 
-      if (!visualViewport) {
-        return 0;
+      if (baselineViewportBottomRef.current <= 0) {
+        baselineViewportBottomRef.current = viewportBottom;
       }
 
-      const layoutViewportHeight = window.innerHeight;
-      const rawInset =
-        layoutViewportHeight - visualViewport.height - visualViewport.offsetTop;
-
-      if (rawInset <= KEYBOARD_INSET_THRESHOLD) {
-        return 0;
+      if (viewportBottom > baselineViewportBottomRef.current) {
+        baselineViewportBottomRef.current = viewportBottom;
       }
 
-      return clampKeyboardInset(rawInset, layoutViewportHeight);
-    };
+      const rawInset = baselineViewportBottomRef.current - viewportBottom;
+      const nextInset =
+        rawInset > KEYBOARD_INSET_THRESHOLD
+          ? clampKeyboardInset(rawInset, viewportHeight)
+          : 0;
 
-    const updateKeyboardInset = () => {
-      const nextInset = readKeyboardInset();
+      if (nextInset === 0) {
+        baselineViewportBottomRef.current = viewportBottom;
+      }
+
       setKeyboardInset((currentInset) =>
         Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset,
       );
