@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useCallback, useEffect, useRef } from "react";
+import React, { useState, useLayoutEffect, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -53,7 +53,7 @@ if (isIOS26OrAbove) {
 
 const MAX_LENGTH = 280;
 const TOOLBAR_RESERVE_HEIGHT = 96;
-const MOBILE_KEYBOARD_BAR_GAP = 12;
+const MOBILE_KEYBOARD_BAR_GAP = 14;
 
 type ComposerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Composer">;
@@ -84,12 +84,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   // Keyboard animation for toolbar positioning
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const webToolbarBottomInset = useSharedValue(0);
-  const previousToolbarInsetRef = useRef(0);
 
   useEffect(() => {
-    const isOpeningKeyboard = toolbarBottomInsetTarget > previousToolbarInsetRef.current;
-    previousToolbarInsetRef.current = toolbarBottomInsetTarget;
-
     if (!isMobileWebComposer) {
       webToolbarBottomInset.value = withTiming(0, {
         duration: 90,
@@ -98,15 +94,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
       return;
     }
 
-    if (isOpeningKeyboard) {
-      webToolbarBottomInset.value = toolbarBottomInsetTarget;
-      return;
-    }
-
-    webToolbarBottomInset.value = withTiming(toolbarBottomInsetTarget, {
-      duration: 90,
-      easing: Easing.out(Easing.quad),
-    });
+    webToolbarBottomInset.value = toolbarBottomInsetTarget;
   }, [isMobileWebComposer, toolbarBottomInsetTarget, webToolbarBottomInset]);
 
   const toolbarAnimatedStyle = useAnimatedStyle(() => {
