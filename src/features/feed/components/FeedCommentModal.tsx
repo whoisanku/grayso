@@ -26,6 +26,7 @@ import {
   normalizeVideoSource,
   toPlatformSafeImageUrl,
 } from "@/lib/mediaUrl";
+import { useMobileWebKeyboardInset } from "@/lib/keyboard/useMobileWebKeyboardInset";
 import { Toast } from "@/components/ui/Toast";
 import CircularProgressIndicator from "@/components/CircularProgressIndicator";
 import {
@@ -209,6 +210,9 @@ export function FeedCommentModal({
   const hasReplyImage = Boolean(replyImageUploadedUrl);
   const hasReplyContent = commentText.trim().length > 0 || hasReplyImage;
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
+  const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb && isMobileWeb;
+  const composerFooterOffset = isMobileWebComposer ? keyboardInset : 0;
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
 
   const canSubmit = Boolean(
@@ -573,6 +577,7 @@ export function FeedCommentModal({
         style={{
           borderTopWidth: 1,
           borderTopColor: getBorderColor(isDark, "subtle"),
+          marginBottom: composerFooterOffset,
         }}
       >
         <View className="flex-row items-center gap-3">

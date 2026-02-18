@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useCallback } from "react";
+import React, { useState, useLayoutEffect, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -23,7 +23,11 @@ import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
 import { BlurView } from "expo-blur";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
@@ -31,6 +35,7 @@ import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
 import { Toast } from "@/components/ui/Toast";
 import { PageTopBar } from "@/components/ui/PageTopBar";
+import { useMobileWebKeyboardInset } from "@/lib/keyboard/useMobileWebKeyboardInset";
 
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
@@ -46,6 +51,7 @@ if (isIOS26OrAbove) {
 }
 
 const MAX_LENGTH = 280;
+const TOOLBAR_RESERVE_HEIGHT = 96;
 
 type ComposerScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, "Composer">;
@@ -66,13 +72,38 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const { currentUser } = React.useContext(DeSoIdentityContext);
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
+  const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
+  const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop && isMobileWeb;
 
   // Keyboard animation for toolbar positioning
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
-  
-  const toolbarAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: keyboardHeight.value }],
-  }));
+  const webToolbarBottomInset = useSharedValue(0);
+
+  useEffect(() => {
+    if (!isMobileWebComposer) {
+      webToolbarBottomInset.value = 0;
+      return;
+    }
+
+    webToolbarBottomInset.value = withTiming(keyboardInset, {
+      duration: 180,
+    });
+  }, [isMobileWebComposer, keyboardInset, webToolbarBottomInset]);
+
+  const toolbarAnimatedStyle = useAnimatedStyle(() => {
+    if (Platform.OS === "web") {
+      return {
+        bottom: webToolbarBottomInset.value,
+      };
+    }
+
+    return {
+      transform: [{ translateY: keyboardHeight.value }],
+    };
+  });
+
+  const scrollBottomPadding =
+    20 + TOOLBAR_RESERVE_HEIGHT + (isMobileWebComposer ? keyboardInset : 0);
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -403,7 +434,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
           <ScrollView
             className="flex-1 px-4 pt-4"
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 20 }}
+            contentContainerStyle={{ paddingBottom: scrollBottomPadding }}
           >
             <View className="flex-row">
               <View className="mr-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" style={{ width: 48, height: 48 }}>
