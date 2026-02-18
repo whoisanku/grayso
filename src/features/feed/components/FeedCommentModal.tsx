@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -44,7 +44,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
 
 const DEFAULT_IMAGE_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
-const MOBILE_KEYBOARD_BAR_GAP = 8;
+const MOBILE_KEYBOARD_BAR_GAP = 12;
 const MOBILE_COMPOSER_FOOTER_PADDING_BOTTOM = 96;
 
 type FeedCommentModalProps = {
@@ -225,11 +225,20 @@ export function FeedCommentModal({
       ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
       : 0;
   const animatedFooterOffset = useSharedValue(0);
+  const previousFooterOffsetRef = useRef(0);
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
 
   useEffect(() => {
+    const isOpeningKeyboard = composerFooterOffset > previousFooterOffsetRef.current;
+    previousFooterOffsetRef.current = composerFooterOffset;
+
+    if (isOpeningKeyboard) {
+      animatedFooterOffset.value = composerFooterOffset;
+      return;
+    }
+
     animatedFooterOffset.value = withTiming(composerFooterOffset, {
-      duration: 110,
+      duration: 90,
       easing: Easing.out(Easing.quad),
     });
   }, [animatedFooterOffset, composerFooterOffset]);
@@ -686,7 +695,7 @@ export function FeedCommentModal({
 
       {isMobileWebComposer ? (
         <Animated.View
-          className="absolute left-0 right-0 px-4 pb-2.5 pt-2"
+          className="absolute left-0 right-0 px-4 pb-3 pt-2.5"
           style={[
             {
               borderTopWidth: 1,
@@ -699,7 +708,7 @@ export function FeedCommentModal({
         </Animated.View>
       ) : (
         <View
-          className="px-4 pb-2.5 pt-2"
+          className="px-4 pb-3 pt-2.5"
           style={{
             borderTopWidth: 1,
             borderTopColor: getBorderColor(isDark, "subtle"),

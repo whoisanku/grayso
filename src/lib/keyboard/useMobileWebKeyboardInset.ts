@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 
 const MOBILE_WEB_BREAKPOINT = 1024;
 const KEYBOARD_INSET_THRESHOLD = 24;
-const KEYBOARD_SYNC_DELAY_MS = 12;
+const KEYBOARD_SYNC_DELAY_MS = 0;
 
 function isEditableElement(element: Element | null): boolean {
   if (!element) {
@@ -80,6 +80,7 @@ export function useMobileWebKeyboardInset() {
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineViewportBottomRef = useRef(0);
+  const lastKnownKeyboardInsetRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") {
@@ -162,6 +163,10 @@ export function useMobileWebKeyboardInset() {
           ? clampKeyboardInset(rawInset, viewportHeight)
           : 0;
 
+      if (nextInset > 0) {
+        lastKnownKeyboardInsetRef.current = nextInset;
+      }
+
       if (nextInset === 0) {
         baselineViewportBottomRef.current = viewportBottom;
       }
@@ -176,9 +181,25 @@ export function useMobileWebKeyboardInset() {
         clearTimeout(syncTimerRef.current);
       }
 
-      syncTimerRef.current = setTimeout(() => {
+      if (KEYBOARD_SYNC_DELAY_MS === 0) {
         updateKeyboardInset();
-      }, KEYBOARD_SYNC_DELAY_MS);
+        return;
+      }
+
+      syncTimerRef.current = setTimeout(updateKeyboardInset, KEYBOARD_SYNC_DELAY_MS);
+    };
+
+    const handleFocusIn = () => {
+      if (hasFocusedEditableElement() && lastKnownKeyboardInsetRef.current > 0) {
+        const viewportHeight = getViewportHeight();
+        const inferredInset = clampKeyboardInset(
+          lastKnownKeyboardInsetRef.current,
+          viewportHeight > 0 ? viewportHeight : window.innerHeight,
+        );
+        setKeyboardInset(inferredInset);
+      }
+
+      queueKeyboardSync();
     };
 
     const handleFocusOut = () => {
@@ -197,7 +218,7 @@ export function useMobileWebKeyboardInset() {
     visualViewport?.addEventListener("scroll", queueKeyboardSync);
     window.addEventListener("resize", queueKeyboardSync);
     window.addEventListener("orientationchange", queueKeyboardSync);
-    window.addEventListener("focusin", queueKeyboardSync);
+    window.addEventListener("focusin", handleFocusIn);
     window.addEventListener("focusout", handleFocusOut);
 
     return () => {
@@ -215,7 +236,7 @@ export function useMobileWebKeyboardInset() {
       visualViewport?.removeEventListener("scroll", queueKeyboardSync);
       window.removeEventListener("resize", queueKeyboardSync);
       window.removeEventListener("orientationchange", queueKeyboardSync);
-      window.removeEventListener("focusin", queueKeyboardSync);
+      window.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("focusout", handleFocusOut);
     };
   }, [isMobileWeb]);
