@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,6 +16,12 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { Feather } from "@expo/vector-icons";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -213,7 +219,19 @@ export function FeedCommentModal({
   const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
   const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb && isMobileWeb;
   const composerFooterOffset = isMobileWebComposer ? keyboardInset : 0;
+  const animatedFooterOffset = useSharedValue(0);
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
+
+  useEffect(() => {
+    animatedFooterOffset.value = withTiming(composerFooterOffset, {
+      duration: 140,
+      easing: Easing.out(Easing.quad),
+    });
+  }, [animatedFooterOffset, composerFooterOffset]);
+
+  const composerFooterAnimatedStyle = useAnimatedStyle(() => ({
+    marginBottom: animatedFooterOffset.value,
+  }));
 
   const canSubmit = Boolean(
     post?.postHash &&
@@ -572,13 +590,15 @@ export function FeedCommentModal({
         </View>
       </ScrollView>
 
-      <View
+      <Animated.View
         className="px-4 pb-2.5 pt-2"
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: getBorderColor(isDark, "subtle"),
-          marginBottom: composerFooterOffset,
-        }}
+        style={[
+          {
+            borderTopWidth: 1,
+            borderTopColor: getBorderColor(isDark, "subtle"),
+          },
+          composerFooterAnimatedStyle,
+        ]}
       >
         <View className="flex-row items-center gap-3">
           <Pressable
@@ -662,7 +682,42 @@ export function FeedCommentModal({
             )}
           </Pressable>
         </View>
+      </Animated.View>
+    </View>
+  );
+
+  const modalBody = isDesktopWeb ? (
+    <View
+      className="flex-1 items-center justify-center px-6 py-8"
+      pointerEvents="box-none"
+    >
+      <Pressable
+        className="absolute inset-0"
+        onPress={handleClose}
+        style={{
+          backgroundColor: isDark ? "rgba(2, 6, 23, 0.72)" : "rgba(15, 23, 42, 0.35)",
+        }}
+      />
+      <View
+        className="w-full overflow-hidden rounded-3xl border"
+        style={{
+          maxWidth: 640,
+          height: desktopModalHeight,
+          backgroundColor: isDark ? "#0b1629" : "#ffffff",
+          borderColor: getBorderColor(isDark, "contrast_low"),
+        }}
+      >
+        {composerContent}
       </View>
+    </View>
+  ) : (
+    <View
+      className="flex-1"
+      style={{
+        backgroundColor: isDark ? "#0b1629" : "#ffffff",
+      }}
+    >
+      {composerContent}
     </View>
   );
 
@@ -688,45 +743,16 @@ export function FeedCommentModal({
               : "#ffffff",
         }}
       >
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          {isDesktopWeb ? (
-            <View
-              className="flex-1 items-center justify-center px-6 py-8"
-              pointerEvents="box-none"
-            >
-              <Pressable
-                className="absolute inset-0"
-                onPress={handleClose}
-                style={{
-                  backgroundColor: isDark ? "rgba(2, 6, 23, 0.72)" : "rgba(15, 23, 42, 0.35)",
-                }}
-              />
-              <View
-                className="w-full overflow-hidden rounded-3xl border"
-                style={{
-                  maxWidth: 640,
-                  height: desktopModalHeight,
-                  backgroundColor: isDark ? "#0b1629" : "#ffffff",
-                  borderColor: getBorderColor(isDark, "contrast_low"),
-                }}
-              >
-                {composerContent}
-              </View>
-            </View>
-          ) : (
-            <View
-              className="flex-1"
-              style={{
-                backgroundColor: isDark ? "#0b1629" : "#ffffff",
-              }}
-            >
-              {composerContent}
-            </View>
-          )}
-        </KeyboardAvoidingView>
+        {Platform.OS === "web" ? (
+          modalBody
+        ) : (
+          <KeyboardAvoidingView
+            className="flex-1"
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            {modalBody}
+          </KeyboardAvoidingView>
+        )}
       </SafeAreaView>
     </Modal>
   );

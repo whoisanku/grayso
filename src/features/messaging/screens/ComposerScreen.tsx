@@ -24,6 +24,7 @@ import ScreenWrapper from "../../../components/ScreenWrapper";
 import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
 import { BlurView } from "expo-blur";
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -81,12 +82,16 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   useEffect(() => {
     if (!isMobileWebComposer) {
-      webToolbarBottomInset.value = 0;
+      webToolbarBottomInset.value = withTiming(0, {
+        duration: 120,
+        easing: Easing.out(Easing.quad),
+      });
       return;
     }
 
     webToolbarBottomInset.value = withTiming(keyboardInset, {
-      duration: 180,
+      duration: 140,
+      easing: Easing.out(Easing.quad),
     });
   }, [isMobileWebComposer, keyboardInset, webToolbarBottomInset]);
 
@@ -102,8 +107,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     };
   });
 
-  const scrollBottomPadding =
-    20 + TOOLBAR_RESERVE_HEIGHT + (isMobileWebComposer ? keyboardInset : 0);
+  const scrollBottomPadding = 20 + TOOLBAR_RESERVE_HEIGHT;
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {

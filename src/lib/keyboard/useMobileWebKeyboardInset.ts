@@ -2,8 +2,43 @@ import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 const MOBILE_WEB_BREAKPOINT = 1024;
-const KEYBOARD_INSET_THRESHOLD = 80;
+const KEYBOARD_INSET_THRESHOLD = 24;
 const ORIENTATION_RESET_DELAY_MS = 220;
+
+function isEditableElement(element: Element | null): boolean {
+  if (!element) {
+    return false;
+  }
+
+  const htmlElement = element as HTMLElement;
+  const tagName = htmlElement.tagName;
+
+  if (htmlElement.isContentEditable) {
+    return true;
+  }
+
+  if (tagName !== "INPUT" && tagName !== "TEXTAREA") {
+    return false;
+  }
+
+  const input = htmlElement as HTMLInputElement;
+  const type = input.type?.toLowerCase() ?? "text";
+
+  return type !== "button" && type !== "checkbox" && type !== "radio";
+}
+
+function hasFocusedEditableElement(): boolean {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  return isEditableElement(document.activeElement);
+}
+
+function clampKeyboardInset(rawInset: number, viewportHeight: number): number {
+  const maxInset = Math.round(viewportHeight * 0.75);
+  return Math.max(0, Math.min(Math.round(rawInset), maxInset));
+}
 
 function getViewportHeight(): number {
   if (typeof window === "undefined") {
@@ -31,6 +66,7 @@ export function useMobileWebKeyboardInset() {
   const [keyboardInset, setKeyboardInset] = useState(0);
   const baselineViewportHeightRef = useRef(0);
   const orientationResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") {
@@ -92,6 +128,12 @@ export function useMobileWebKeyboardInset() {
         return;
       }
 
+      if (!hasFocusedEditableElement()) {
+        baselineViewportHeightRef.current = viewportHeight;
+        setKeyboardInset((currentInset) => (currentInset === 0 ? currentInset : 0));
+        return;
+      }
+
       if (
         baselineViewportHeightRef.current <= 0 ||
         viewportHeight > baselineViewportHeightRef.current
@@ -101,7 +143,9 @@ export function useMobileWebKeyboardInset() {
 
       const rawInset = baselineViewportHeightRef.current - viewportHeight;
       const nextInset =
-        rawInset > KEYBOARD_INSET_THRESHOLD ? Math.round(rawInset) : 0;
+        rawInset > KEYBOARD_INSET_THRESHOLD
+          ? clampKeyboardInset(rawInset, viewportHeight)
+          : 0;
 
       setKeyboardInset((currentInset) =>
         Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset,
@@ -123,13 +167,23 @@ export function useMobileWebKeyboardInset() {
       }, ORIENTATION_RESET_DELAY_MS);
     };
 
+    const handleFocusOut = () => {
+      if (focusOutTimerRef.current) {
+        clearTimeout(focusOutTimerRef.current);
+      }
+
+      focusOutTimerRef.current = setTimeout(() => {
+        updateKeyboardInset();
+      }, 0);
+    };
+
     resetBaselineAndSync();
 
     visualViewport?.addEventListener("resize", updateKeyboardInset);
     visualViewport?.addEventListener("scroll", updateKeyboardInset);
     window.addEventListener("orientationchange", handleOrientationChange);
     window.addEventListener("focusin", updateKeyboardInset);
-    window.addEventListener("focusout", updateKeyboardInset);
+    window.addEventListener("focusout", handleFocusOut);
 
     return () => {
       if (orientationResetTimerRef.current) {
@@ -137,11 +191,16 @@ export function useMobileWebKeyboardInset() {
         orientationResetTimerRef.current = null;
       }
 
+      if (focusOutTimerRef.current) {
+        clearTimeout(focusOutTimerRef.current);
+        focusOutTimerRef.current = null;
+      }
+
       visualViewport?.removeEventListener("resize", updateKeyboardInset);
       visualViewport?.removeEventListener("scroll", updateKeyboardInset);
       window.removeEventListener("orientationchange", handleOrientationChange);
       window.removeEventListener("focusin", updateKeyboardInset);
-      window.removeEventListener("focusout", updateKeyboardInset);
+      window.removeEventListener("focusout", handleFocusOut);
     };
   }, [isMobileWeb]);
 
