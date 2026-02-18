@@ -6,6 +6,7 @@ const KEYBOARD_INSET_THRESHOLD = 4;
 const KEYBOARD_SYNC_DELAY_MS = 0;
 const FOCUS_INSET_PRIME_RATIO = 0.45;
 const FOCUS_INSET_PRIME_MAX = 72;
+const FOCUS_OUT_TRACKING_MS = 280;
 
 function isEditableElement(element: Element | null): boolean {
   if (!element) {
@@ -80,9 +81,11 @@ export function useMobileWebKeyboardInset() {
   const [isMobileWeb, setIsMobileWeb] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const focusOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineViewportBottomRef = useRef(0);
   const lastKnownKeyboardInsetRef = useRef(0);
+  const keyboardInsetRef = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
+  const trackUntilRef = useRef(0);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") {
@@ -128,6 +131,7 @@ export function useMobileWebKeyboardInset() {
       baselineViewportBottomRef.current = 0;
       const resetTimer = setTimeout(() => {
         setKeyboardInset(0);
+        keyboardInsetRef.current = 0;
       }, 0);
 
       return () => {
@@ -136,6 +140,13 @@ export function useMobileWebKeyboardInset() {
     }
 
     const visualViewport = window.visualViewport;
+
+    const setKeyboardInsetValue = (nextInset: number) => {
+      keyboardInsetRef.current = nextInset;
+      setKeyboardInset((currentInset) =>
+        Math.abs(currentInset - nextInset) > 0.25 ? nextInset : currentInset,
+      );
+    };
 
     const updateKeyboardInset = () => {
       const viewportHeight = getViewportHeight();
@@ -147,7 +158,7 @@ export function useMobileWebKeyboardInset() {
 
       if (!hasFocusedEditableElement()) {
         baselineViewportBottomRef.current = viewportBottom;
-        setKeyboardInset((currentInset) => (currentInset === 0 ? currentInset : 0));
+        setKeyboardInsetValue(0);
         return;
       }
 
@@ -173,9 +184,35 @@ export function useMobileWebKeyboardInset() {
         baselineViewportBottomRef.current = viewportBottom;
       }
 
-      setKeyboardInset((currentInset) =>
-        Math.abs(currentInset - nextInset) > 0.25 ? nextInset : currentInset,
+      setKeyboardInsetValue(nextInset);
+    };
+
+    const shouldKeepRafTracking = () => {
+      const now = Date.now();
+      return (
+        hasFocusedEditableElement() ||
+        keyboardInsetRef.current > 0 ||
+        now < trackUntilRef.current
       );
+    };
+
+    const runRafFrame = () => {
+      rafIdRef.current = null;
+      updateKeyboardInset();
+
+      if (!shouldKeepRafTracking()) {
+        return;
+      }
+
+      rafIdRef.current = window.requestAnimationFrame(runRafFrame);
+    };
+
+    const startRafTracking = () => {
+      if (rafIdRef.current !== null) {
+        return;
+      }
+
+      rafIdRef.current = window.requestAnimationFrame(runRafFrame);
     };
 
     const queueKeyboardSync = () => {
@@ -185,10 +222,14 @@ export function useMobileWebKeyboardInset() {
 
       if (KEYBOARD_SYNC_DELAY_MS === 0) {
         updateKeyboardInset();
+        startRafTracking();
         return;
       }
 
-      syncTimerRef.current = setTimeout(updateKeyboardInset, KEYBOARD_SYNC_DELAY_MS);
+      syncTimerRef.current = setTimeout(() => {
+        updateKeyboardInset();
+        startRafTracking();
+      }, KEYBOARD_SYNC_DELAY_MS);
     };
 
     const handleFocusIn = () => {
@@ -197,22 +238,22 @@ export function useMobileWebKeyboardInset() {
           FOCUS_INSET_PRIME_MAX,
           lastKnownKeyboardInsetRef.current * FOCUS_INSET_PRIME_RATIO,
         );
-        setKeyboardInset((currentInset) =>
-          currentInset > 0 ? currentInset : primedInset,
-        );
+        setKeyboardInset((currentInset) => {
+          if (currentInset > 0) {
+            return currentInset;
+          }
+
+          keyboardInsetRef.current = primedInset;
+          return primedInset;
+        });
       }
 
       queueKeyboardSync();
     };
 
     const handleFocusOut = () => {
-      if (focusOutTimerRef.current) {
-        clearTimeout(focusOutTimerRef.current);
-      }
-
-      focusOutTimerRef.current = setTimeout(() => {
-        updateKeyboardInset();
-      }, 0);
+      trackUntilRef.current = Date.now() + FOCUS_OUT_TRACKING_MS;
+      queueKeyboardSync();
     };
 
     queueKeyboardSync();
@@ -230,9 +271,9 @@ export function useMobileWebKeyboardInset() {
         syncTimerRef.current = null;
       }
 
-      if (focusOutTimerRef.current) {
-        clearTimeout(focusOutTimerRef.current);
-        focusOutTimerRef.current = null;
+      if (rafIdRef.current !== null) {
+        window.cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
 
       visualViewport?.removeEventListener("resize", queueKeyboardSync);
