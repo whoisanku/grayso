@@ -61,6 +61,7 @@ type ComposerScreenProps = {
 
 export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const [text, setText] = useState("");
+  const [composerInputHeight, setComposerInputHeight] = useState(110);
   // Track media with their upload status and URLs
   const [mediaItems, setMediaItems] = useState<{
     localUri: string;
@@ -76,6 +77,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const isWebDesktop = Platform.OS === "web" && isDesktop;
   const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
   const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop && isMobileWeb;
+  const composerInputMinHeight = 110;
+  const composerInputMaxHeight = 260;
   const toolbarBottomInsetTarget =
     isMobileWebComposer && keyboardInset > 0
       ? keyboardInset + MOBILE_KEYBOARD_BAR_GAP
@@ -86,15 +89,13 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const webToolbarBottomInset = useSharedValue(0);
 
   useEffect(() => {
-    if (!isMobileWebComposer) {
-      webToolbarBottomInset.value = withTiming(0, {
-        duration: 90,
-        easing: Easing.out(Easing.quad),
-      });
-      return;
-    }
-
-    webToolbarBottomInset.value = toolbarBottomInsetTarget;
+    webToolbarBottomInset.value = withTiming(
+      isMobileWebComposer ? toolbarBottomInsetTarget : 0,
+      {
+        duration: 120,
+        easing: Easing.linear,
+      },
+    );
   }, [isMobileWebComposer, toolbarBottomInsetTarget, webToolbarBottomInset]);
 
   const toolbarAnimatedStyle = useAnimatedStyle(() => {
@@ -109,7 +110,8 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     };
   });
 
-  const scrollBottomPadding = 20 + TOOLBAR_RESERVE_HEIGHT;
+  const scrollBottomPadding =
+    20 + TOOLBAR_RESERVE_HEIGHT + (isMobileWebComposer ? 20 : 0);
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -335,6 +337,14 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     );
 
     const containerClasses = `w-full overflow-hidden rounded-[24px] px-4 py-3 border border-black/10 dark:border-white/15`;
+    const toolbarShellStyle = isMobileWebComposer
+      ? ({
+          backgroundColor: isDark ? "rgba(11, 22, 41, 0.76)" : "rgba(255, 255, 255, 0.88)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 10px)",
+        } as any)
+      : undefined;
 
     // Fallback shadow style
     const shadowStyle = {
@@ -347,7 +357,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     if (LiquidGlassView) {
       return (
-        <View className="bg-transparent px-4 py-2">
+        <View className="bg-transparent px-4 pt-2" style={toolbarShellStyle}>
           <LiquidGlassView
             effect="regular"
             className={containerClasses}
@@ -361,7 +371,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     // Fallback to BlurView
     return (
-      <View className="bg-transparent px-4 py-2">
+      <View className="bg-transparent px-4 pt-2" style={toolbarShellStyle}>
         <BlurView
           intensity={Platform.OS === "ios" ? 60 : 100}
           tint={isDark ? "dark" : "light"}
@@ -461,12 +471,33 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
                   accessibilityHint="Type your message here"
                   value={text}
                   onChangeText={setText}
+                  onContentSizeChange={(event) => {
+                    const nextHeight = Math.min(
+                      composerInputMaxHeight,
+                      Math.max(
+                        composerInputMinHeight,
+                        event.nativeEvent.contentSize.height + 2,
+                      ),
+                    );
+                    setComposerInputHeight((currentHeight) =>
+                      Math.abs(currentHeight - nextHeight) < 0.5
+                        ? currentHeight
+                        : nextHeight,
+                    );
+                  }}
                   maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
                   autoFocus
                   textAlignVertical="top"
                   style={{ 
                     paddingTop: 0,
-                    ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                    height: composerInputHeight,
+                    ...(Platform.OS === 'web' && {
+                      outlineStyle: 'none' as any,
+                      fieldSizing: 'content' as any,
+                      transitionProperty: 'height' as any,
+                      transitionDuration: '120ms' as any,
+                      transitionTimingFunction: 'ease' as any,
+                    }),
                   }}
                 />
               </View>

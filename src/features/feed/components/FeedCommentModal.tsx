@@ -17,8 +17,10 @@ import * as ImagePicker from "expo-image-picker";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { Feather } from "@expo/vector-icons";
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 
 import { type FocusFeedPost } from "@/lib/focus/graphql";
@@ -188,6 +190,7 @@ export function FeedCommentModal({
     accentSoft,
   } = useAccentColor();
   const [commentText, setCommentText] = useState("");
+  const [commentInputHeight, setCommentInputHeight] = useState(0);
   const [replyImageLocalUri, setReplyImageLocalUri] = useState<string | null>(null);
   const [replyImageUploadedUrl, setReplyImageUploadedUrl] = useState<string | null>(null);
   const [isUploadingReplyImage, setIsUploadingReplyImage] = useState(false);
@@ -216,6 +219,8 @@ export function FeedCommentModal({
   const hasReplyImage = Boolean(replyImageUploadedUrl);
   const hasReplyContent = commentText.trim().length > 0 || hasReplyImage;
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const commentInputMinHeight = isDesktopWeb ? 180 : 120;
+  const commentInputMaxHeight = isDesktopWeb ? 280 : 220;
   const { keyboardInset, isMobileWeb } = useMobileWebKeyboardInset();
   const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb && isMobileWeb;
   const composerFooterOffset =
@@ -224,10 +229,48 @@ export function FeedCommentModal({
       : 0;
   const animatedFooterOffset = useSharedValue(0);
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
+  const resolvedCommentInputHeight = Math.min(
+    commentInputMaxHeight,
+    Math.max(commentInputMinHeight, commentInputHeight || commentInputMinHeight),
+  );
+
+  const mobileWebFooterSurfaceStyle = useMemo(() => {
+    if (!isMobileWebComposer) {
+      return null;
+    }
+
+    return {
+      backgroundColor: isDark ? "rgba(11, 22, 41, 0.78)" : "rgba(255, 255, 255, 0.9)",
+      ...(Platform.OS === "web" && {
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+      }),
+    } as any;
+  }, [isDark, isMobileWebComposer]);
 
   useEffect(() => {
-    animatedFooterOffset.value = composerFooterOffset;
-  }, [animatedFooterOffset, composerFooterOffset]);
+    if (!isMobileWebComposer) {
+      animatedFooterOffset.value = withTiming(0, {
+        duration: 120,
+        easing: Easing.linear,
+      });
+      return;
+    }
+
+    animatedFooterOffset.value = withTiming(composerFooterOffset, {
+      duration: 120,
+      easing: Easing.linear,
+    });
+  }, [animatedFooterOffset, composerFooterOffset, isMobileWebComposer]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    setCommentInputHeight(commentInputMinHeight);
+  }, [commentInputMinHeight, visible, post?.postHash]);
 
   const composerFooterAnimatedStyle = useAnimatedStyle(() => ({
     bottom: animatedFooterOffset.value,
@@ -385,6 +428,16 @@ export function FeedCommentModal({
       return;
     }
     setCommentText(value.slice(0, MAX_COMMENT_LENGTH));
+  };
+
+  const handleCommentInputContentSizeChange = (nextHeight: number) => {
+    const clampedHeight = Math.min(
+      commentInputMaxHeight,
+      Math.max(commentInputMinHeight, nextHeight),
+    );
+    setCommentInputHeight((currentHeight) =>
+      Math.abs(currentHeight - clampedHeight) < 0.5 ? currentHeight : clampedHeight,
+    );
   };
 
   const composerFooterControls = (
@@ -593,10 +646,15 @@ export function FeedCommentModal({
                 autoFocus
                 value={commentText}
                 onChangeText={handleCommentChange}
+                onContentSizeChange={(event) => {
+                  handleCommentInputContentSizeChange(
+                    event.nativeEvent.contentSize.height + 2,
+                  );
+                }}
                 placeholder="What's new?"
                 placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                 style={{
-                  minHeight: isDesktopWeb ? 180 : 220,
+                  height: resolvedCommentInputHeight,
                   fontSize: 22,
                   lineHeight: 30,
                   color: isDark ? "#f8fafc" : "#0f172a",
@@ -606,6 +664,10 @@ export function FeedCommentModal({
                     outlineStyle: "none" as any,
                     outlineWidth: 0 as any,
                     boxShadow: "none" as any,
+                    fieldSizing: "content" as any,
+                    transitionProperty: "height" as any,
+                    transitionDuration: "120ms" as any,
+                    transitionTimingFunction: "ease" as any,
                   }),
                 }}
               />
@@ -681,12 +743,13 @@ export function FeedCommentModal({
 
       {isMobileWebComposer ? (
         <Animated.View
-          className="absolute left-0 right-0 px-5 pb-3.5 pt-3"
+          className="absolute left-0 right-0 px-5 pt-3"
           style={[
             {
               borderTopWidth: 1,
               borderTopColor: getBorderColor(isDark, "subtle"),
             },
+            mobileWebFooterSurfaceStyle,
             composerFooterAnimatedStyle,
           ]}
         >

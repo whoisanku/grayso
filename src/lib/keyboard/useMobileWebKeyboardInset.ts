@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 const MOBILE_WEB_BREAKPOINT = 1024;
-const KEYBOARD_INSET_THRESHOLD = 8;
+const KEYBOARD_INSET_THRESHOLD = 4;
 const KEYBOARD_SYNC_DELAY_MS = 0;
 
 function isEditableElement(element: Element | null): boolean {
@@ -36,8 +36,8 @@ function hasFocusedEditableElement(): boolean {
 }
 
 function clampKeyboardInset(rawInset: number, viewportHeight: number): number {
-  const maxInset = Math.round(viewportHeight * 0.65);
-  return Math.max(0, Math.min(Math.round(rawInset), maxInset));
+  const maxInset = viewportHeight * 0.65;
+  return Math.max(0, Math.min(rawInset, maxInset));
 }
 
 function getViewportHeight(): number {
@@ -167,7 +167,7 @@ export function useMobileWebKeyboardInset() {
       }
 
       setKeyboardInset((currentInset) =>
-        Math.abs(currentInset - nextInset) > 1 ? nextInset : currentInset,
+        Math.abs(currentInset - nextInset) > 0.25 ? nextInset : currentInset,
       );
     };
 
