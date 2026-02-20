@@ -1,7 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +10,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -172,6 +173,7 @@ export function FeedCommentModal({
   onSubmitted,
 }: FeedCommentModalProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { height: visualHeight, offsetTop: visualOffsetTop } = useVisualViewport();
   const { currentUser } = useContext(DeSoIdentityContext);
   const {
     isDark,
@@ -770,13 +772,20 @@ export function FeedCommentModal({
     >
       <SafeAreaView
         edges={isDesktopWeb ? [] : ["top", "bottom"]}
-        className="flex-1"
+        className={Platform.OS === "web" && !isDesktopWeb ? "absolute w-full" : "flex-1"}
         style={{
           backgroundColor: isDesktopWeb
             ? "transparent"
             : isDark
               ? "#0b1629"
               : "#ffffff",
+          ...(Platform.OS === "web" && !isDesktopWeb
+            ? {
+                height: visualHeight,
+                top: visualOffsetTop,
+                left: 0,
+              }
+            : { flex: 1 }),
         }}
       >
         {Platform.OS === "web" ? (
