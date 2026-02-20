@@ -269,7 +269,7 @@ function ReactionListRow({
 export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { currentUser } = useContext(DeSoIdentityContext);
-  const { isDark, accentColor, accentSoft } = useAccentColor();
+  const { isDark, accentColor } = useAccentColor();
   const [activeFilter, setActiveFilter] = useState<ReactionFilter>("ALL");
 
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
@@ -366,9 +366,9 @@ export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalP
                 className="flex-row items-center gap-1 rounded-full border px-3 py-1.5"
                 style={{
                   alignSelf: "flex-start",
-                  borderColor: isActive ? accentColor : getBorderColor(isDark, "input"),
-                  backgroundColor: isActive
-                    ? accentSoft
+                borderColor: isActive ? accentColor : getBorderColor(isDark, "input"),
+                backgroundColor: isActive
+                    ? accentColor
                     : isDark
                       ? "rgba(15, 23, 42, 0.6)"
                       : "rgba(248, 250, 252, 1)",
@@ -381,13 +381,19 @@ export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalP
                 ) : null}
                 <Text
                   className="text-[13px] font-medium"
-                  style={{ color: isActive ? accentColor : isDark ? "#cbd5e1" : "#334155" }}
+                  style={{ color: isActive ? "#ffffff" : isDark ? "#cbd5e1" : "#334155" }}
                 >
                   {item.label}
                 </Text>
                 <Text
                   className="text-[12px]"
-                  style={{ color: isDark ? "#94a3b8" : "#64748b" }}
+                  style={{
+                    color: isActive
+                      ? "rgba(255,255,255,0.85)"
+                      : isDark
+                        ? "#94a3b8"
+                        : "#64748b",
+                  }}
                 >
                   {item.count}
                 </Text>

@@ -1,12 +1,13 @@
 // src/view/components/desktop/DesktopLeftNav.tsx
 // Fixed-position left navigation for desktop web, inspired by Bluesky
 
-import React from "react";
+import React, { useContext } from "react";
 import { View, Text, Pressable, ScrollView, Platform } from "react-native";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
+import { DeSoIdentityContext } from "react-deso-protocol";
 
 import { RootStackParamList, HomeTabParamList } from "@/navigation/types";
 import {
@@ -26,6 +27,12 @@ import UserIconFilled from "@/assets/navIcons/user-filled.svg";
 import SettingsIcon from "@/assets/navIcons/settings.svg";
 import SettingsIconFilled from "@/assets/navIcons/settings-filled.svg";
 import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
+import {
+  NotificationBellFilledIcon,
+  NotificationBellOutlineIcon,
+} from "@/components/ui/NotificationBellIcon";
+import { useNotificationCounts } from "@/features/notifications/api/useNotificationCounts";
+import { resolveCurrentUserPublicKey } from "@/utils/deso";
 
 const NAV_ICON_WIDTH = 26;
 type NavIconComponent = React.ComponentType<{
@@ -46,6 +53,32 @@ interface NavItemProps {
   isDark: boolean;
   fillBased?: boolean;
   iconSize?: number;
+  badgeCount?: number;
+}
+
+function BellNavIcon({
+  width = NAV_ICON_WIDTH,
+  height = NAV_ICON_WIDTH,
+  stroke,
+  strokeWidth: _strokeWidth,
+  fill,
+}: {
+  width?: number;
+  height?: number;
+  stroke?: string;
+  strokeWidth?: number | string;
+  fill?: string;
+}) {
+  const baseSize = Math.max(width, height);
+  const color = stroke ?? fill ?? "#64748b";
+  const isFilled = typeof fill === "string" && fill !== "none";
+  const iconSize = isFilled ? baseSize + 2 : baseSize;
+
+  return isFilled ? (
+    <NotificationBellFilledIcon size={iconSize} color={color} />
+  ) : (
+    <NotificationBellOutlineIcon size={iconSize} color={color} />
+  );
 }
 
 function NavItem({
@@ -58,11 +91,14 @@ function NavItem({
   isDark,
   fillBased = false,
   iconSize = NAV_ICON_WIDTH,
+  badgeCount = 0,
 }: NavItemProps) {
   // Filled icon when active, outline when inactive
   const InUseIcon = isActive ? ActiveIcon : Icon;
   const activeColor = isDark ? "#f8fafc" : "#0f172a"; // Dark text for light mode, light for dark mode
   const inactiveColor = isDark ? "#94a3b8" : "#64748b";
+  const badgeLabel = badgeCount > 99 ? "99+" : String(badgeCount);
+  const isSingleDigitBadge = badgeLabel.length === 1;
 
   return (
     <Pressable
@@ -74,7 +110,7 @@ function NavItem({
     >
       <View
         className={[
-          "items-center justify-center",
+          "relative items-center justify-center",
           minimal ? "w-11 h-11" : "w-7 h-7",
         ].join(" ")}
       >
@@ -85,6 +121,20 @@ function NavItem({
           strokeWidth={fillBased ? undefined : (isActive ? 1.5 : 1.6)}
           fill={fillBased ? (isActive ? activeColor : inactiveColor) : (isActive ? activeColor : "none")}
         />
+        {badgeCount > 0 ? (
+          <View
+            className={[
+              "absolute -top-1.5 items-center justify-center rounded-full bg-rose-600",
+              isSingleDigitBadge
+                ? "-right-2.5 h-5 w-5"
+                : "-right-3 h-5 min-w-[20px] px-1.5",
+            ].join(" ")}
+          >
+            <Text className="text-[10px] font-bold text-white">
+              {badgeLabel}
+            </Text>
+          </View>
+        ) : null}
       </View>
       {!minimal && (
         <Text
@@ -103,18 +153,25 @@ function NavItem({
 
 interface DesktopLeftNavProps {
   activeTab?: keyof HomeTabParamList | "Settings";
+  unreadNotificationsCount?: number;
 }
 
 export function DesktopLeftNav({
   activeTab = "Messages",
+  unreadNotificationsCount,
 }: DesktopLeftNavProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
+  const { currentUser } = useContext(DeSoIdentityContext);
   const rootNavigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { leftNavMinimal, centerColumnOffset } = useLayoutBreakpoints();
   const { accentColor } = useAccentColor();
+  const publicKey = resolveCurrentUserPublicKey(currentUser);
+  const { counts } = useNotificationCounts(publicKey);
+  const resolvedUnreadNotificationsCount =
+    unreadNotificationsCount ?? counts.unreadNotificationCount;
 
   // Get current route to determine if we're on Settings or Profile screen
   const currentRouteName = useNavigationState((state) => {
@@ -127,10 +184,13 @@ export function DesktopLeftNav({
   const isFeedActive = currentRouteName === "Feed" || activeTab === "Feed";
   const isProfileActive =
     currentRouteName === "Profile" || activeTab === "Profile";
+  const isNotificationsActive =
+    currentRouteName === "Notifications" || activeTab === "Notifications";
   const isSettingsActive = currentRouteName === "Settings";
   const isChatsActive =
     !isFeedActive &&
     !isProfileActive &&
+    !isNotificationsActive &&
     !isSettingsActive &&
     (activeTab === "Messages" || currentRouteName === "Main");
 
@@ -143,6 +203,7 @@ export function DesktopLeftNav({
     onPress: () => void;
     fillBased?: boolean;
     iconSize?: number;
+    badgeCount?: number;
   }[] = [
     {
       key: "Feed",
@@ -165,6 +226,18 @@ export function DesktopLeftNav({
       onPress: () => {
         // Navigate to Main with Messages screen
         rootNavigation.navigate("Main", { screen: "Messages" });
+      },
+    },
+    {
+      key: "Notifications",
+      label: "Notifications",
+      Icon: BellNavIcon,
+      ActiveIcon: BellNavIcon,
+      isActive: isNotificationsActive,
+      badgeCount: resolvedUnreadNotificationsCount,
+      iconSize: 28,
+      onPress: () => {
+        rootNavigation.navigate("Main", { screen: "Notifications" });
       },
     },
     {
@@ -246,6 +319,7 @@ export function DesktopLeftNav({
                   isDark={isDark}
                   fillBased={item.fillBased}
                   iconSize={item.iconSize}
+                  badgeCount={item.badgeCount}
                 />
               ))}
             </View>

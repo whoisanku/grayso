@@ -23,6 +23,7 @@ export type ConversationRouteParams = {
 export type HomeTabParamList = {
   Messages: undefined;
   Feed: undefined;
+  Notifications: undefined;
   Post: undefined;
   Profile:
     | {

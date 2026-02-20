@@ -1,7 +1,7 @@
 import React from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Repeat2, ThumbsUp } from "lucide-react-native";
 
@@ -10,10 +10,12 @@ import { getProfileImageUrl } from "@/utils/deso";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { FeedVideo } from "@/features/feed/components/FeedVideo";
 import { FeedImageGrid } from "@/features/feed/components/FeedImageGrid";
+import { ExpandablePostText } from "@/features/feed/components/ExpandablePostText";
 import { getValidHttpUrl, toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
 import { Toast } from "@/components/ui/Toast";
+import { ChatBubbleLeftIcon } from "@/components/ui/ChatBubbleLeftIcon";
 import { feedKeys } from "@/features/feed/api/keys";
 import {
   FOCUS_POST_REACTION_OPTIONS,
@@ -668,9 +670,12 @@ export function FeedCard({
           )}
 
           {primaryBody ? (
-            <Text className="mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100">
-              {primaryBody}
-            </Text>
+            <ExpandablePostText
+              text={primaryBody}
+              collapsedChars={430}
+              textClassName="mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100"
+              toggleClassName="text-[13px] font-semibold text-sky-600 dark:text-sky-400"
+            />
           ) : null}
 
           {renderMedia({
@@ -706,9 +711,12 @@ export function FeedCard({
               </View>
 
               {repostBody ? (
-                <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
-                  {repostBody}
-                </Text>
+                <ExpandablePostText
+                  text={repostBody}
+                  collapsedChars={260}
+                  textClassName="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100"
+                  toggleClassName="text-[12px] font-semibold text-sky-600 dark:text-sky-400"
+                />
               ) : null}
 
               {renderMedia({
@@ -932,7 +940,11 @@ export function FeedCard({
           accessibilityLabel="Comment on this post"
           style={actionButtonStyle}
         >
-          <Ionicons name="chatbubble-outline" size={16} color={mutedIconColor} />
+          <ChatBubbleLeftIcon
+            size={16}
+            color={mutedIconColor}
+            strokeWidth={1.7}
+          />
           <Text className="text-[13px] font-medium" style={{ color: mutedCountColor }}>
             Comment
           </Text>

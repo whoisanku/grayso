@@ -42,6 +42,7 @@ const linking: LinkingOptions<RootStackParamList> = {
         screens: {
           Feed: "feed",
           Messages: "messages",
+          Notifications: "notifications",
           Profile: "u/:username?",
         },
       },
