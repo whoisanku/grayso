@@ -755,25 +755,10 @@ export function FeedCommentModal({
         backgroundColor: isDark ? "#0b1629" : "#ffffff",
         ...(Platform.OS === "web" && {
           overscrollBehavior: "none",
-          display: "flex",
-          flexDirection: "column",
         } as any),
       }}
     >
-      <View className="flex-1">{composerContent}</View>
-      {Platform.OS === "web" && !isDesktopWeb && (
-        <View
-          style={
-            {
-              // Use 100% of the fixed container height instead of 100vh for consistency
-              height: "calc(100% - var(--vvh))",
-              backgroundColor: isDark ? "#0b1629" : "#ffffff",
-              willChange: "height",
-              transform: "translateZ(0)",
-            } as any
-          }
-        />
-      )}
+      {composerContent}
     </View>
   );
   return (
@@ -810,10 +795,13 @@ export function FeedCommentModal({
         style={{
           ...(Platform.OS === "web" && !isDesktopWeb
             ? ({
-                height: "100%",
-                top: 0,
+                height: "var(--vvh)",
+                top: "var(--vvt)",
                 left: 0,
                 position: "fixed",
+                // Zero-lag hardware accelerated transitions
+                willChange: "height, top",
+                transform: "translateZ(0)",
               } as any)
             : {
                 flex: 1,
