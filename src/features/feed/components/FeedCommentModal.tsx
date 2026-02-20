@@ -753,32 +753,54 @@ export function FeedCommentModal({
       className="flex-1"
       style={{
         backgroundColor: isDark ? "#0b1629" : "#ffffff",
+        ...(Platform.OS === "web" && {
+          overscrollBehavior: "none",
+        } as any),
       }}
     >
       {composerContent}
     </View>
   );
-
   return (
     <Modal
-      visible={visible}
-      transparent={isDesktopWeb}
       animationType="fade"
-      presentationStyle={
-        isDesktopWeb ? "overFullScreen" : Platform.OS === "ios" ? "fullScreen" : "overFullScreen"
-      }
-      statusBarTranslucent={Platform.OS === "android"}
+      transparent={Platform.OS === "web" || isDesktopWeb}
+      visible={visible}
       onRequestClose={handleClose}
+      statusBarTranslucent={Platform.OS === "android"}
+      presentationStyle={
+        isDesktopWeb
+          ? "overFullScreen"
+          : Platform.OS === "ios"
+            ? "fullScreen"
+            : "overFullScreen"
+      }
+
     >
+      {Platform.OS === "web" && !isDesktopWeb && (
+        <View
+          style={{
+            position: "fixed" as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: isDark ? "#0b1629" : "#ffffff",
+            zIndex: -1,
+          }}
+        />
+      )}
       <SafeAreaView
         edges={isDesktopWeb ? [] : ["top", "bottom"]}
         className={Platform.OS === "web" && !isDesktopWeb ? "absolute w-full" : "flex-1"}
         style={{
           backgroundColor: isDesktopWeb
             ? "transparent"
-            : isDark
-              ? "#0b1629"
-              : "#ffffff",
+            : Platform.OS === "web" && !isDesktopWeb
+              ? "transparent"
+              : isDark
+                ? "#0b1629"
+                : "#ffffff",
           ...(Platform.OS === "web" && !isDesktopWeb
             ? {
                 height: visualHeight,

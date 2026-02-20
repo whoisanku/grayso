@@ -8,13 +8,28 @@ export function useVisualViewport() {
   }));
 
   useEffect(() => {
-    function updateViewport() {
-      setViewport({
+    const updateViewport = () => {
+      const newViewport = {
         width: window.visualViewport?.width || window.innerWidth,
         height: window.visualViewport?.height || window.innerHeight,
         offsetTop: window.visualViewport?.offsetTop || 0,
-      });
-    }
+      };
+      setViewport(newViewport);
+
+      // Update CSS variables
+      document.documentElement.style.setProperty(
+        "--svh",
+        `${newViewport.height}px`
+      );
+      document.documentElement.style.setProperty(
+        "--svw",
+        `${newViewport.width}px`
+      );
+      document.documentElement.style.setProperty(
+        "--svo",
+        `${newViewport.offsetTop}px`
+      );
+    };
 
     const vv = window.visualViewport;
     if (vv) {
