@@ -23,15 +23,12 @@ import { FALLBACK_PROFILE_IMAGE } from "@/utils/deso";
 import ScreenWrapper from "../../../components/ScreenWrapper";
 import CircularProgressIndicator from "../../../components/CircularProgressIndicator";
 import { BlurView } from "expo-blur";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { DesktopLeftNav } from "../components/desktop/DesktopLeftNav";
 import { DesktopRightNav } from "../components/desktop/DesktopRightNav";
 import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
 import { Toast } from "@/components/ui/Toast";
 import { PageTopBar } from "@/components/ui/PageTopBar";
-
 // Check if iOS 26+ for Liquid Glass support
 const isIOS26OrAbove = Platform.OS === "ios" && parseInt(Platform.Version as string, 10) >= 26;
 
@@ -53,6 +50,7 @@ type ComposerScreenProps = {
 
 export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const [text, setText] = useState("");
+  const [composerInputHeight, setComposerInputHeight] = useState(110);
   // Track media with their upload status and URLs
   const [mediaItems, setMediaItems] = useState<{
     localUri: string;
@@ -66,13 +64,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
   const { currentUser } = React.useContext(DeSoIdentityContext);
   const { isDesktop } = useLayoutBreakpoints();
   const isWebDesktop = Platform.OS === "web" && isDesktop;
-
-  // Keyboard animation for toolbar positioning
-  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
-  
-  const toolbarAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: keyboardHeight.value }],
-  }));
+  const isMobileWebComposer = Platform.OS === "web" && !isWebDesktop;
+  const composerInputMinHeight = 110;
+  const composerInputMaxHeight = 260;
+  const scrollBottomPadding = isMobileWebComposer ? 24 : 20;
 
   const avatarUri = React.useMemo(() => {
     if (!currentUser?.PublicKeyBase58Check) {
@@ -298,6 +293,16 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
     );
 
     const containerClasses = `w-full overflow-hidden rounded-[24px] px-4 py-3 border border-black/10 dark:border-white/15`;
+    const toolbarShellStyle = isMobileWebComposer
+      ? ({
+          backgroundColor: isDark ? "rgba(11, 22, 41, 0.76)" : "rgba(255, 255, 255, 0.88)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingLeft: "calc(env(safe-area-inset-left, 0px) + 16px)",
+          paddingRight: "calc(env(safe-area-inset-right, 0px) + 16px)",
+        } as any)
+      : undefined;
 
     // Fallback shadow style
     const shadowStyle = {
@@ -310,7 +315,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     if (LiquidGlassView) {
       return (
-        <View className="bg-transparent px-4 py-2">
+        <View className="bg-transparent px-4 pt-2" style={toolbarShellStyle}>
           <LiquidGlassView
             effect="regular"
             className={containerClasses}
@@ -324,7 +329,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
     // Fallback to BlurView
     return (
-      <View className="bg-transparent px-4 py-2">
+      <View className="bg-transparent px-4 pt-2" style={toolbarShellStyle}>
         <BlurView
           intensity={Platform.OS === "ios" ? 60 : 100}
           tint={isDark ? "dark" : "light"}
@@ -339,9 +344,11 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
 
   const content = (
     <ScreenWrapper
-      edges={['top', 'left', 'right']}
-      keyboardAvoiding={false}
+      edges={['top', 'left', 'right', 'bottom']}
+      keyboardAvoiding={Platform.OS === "ios"}
+      keyboardVerticalOffset={0}
       backgroundColor={isDark ? "#0a0f1a" : "#ffffff"}
+      useKeyboardController={true}
     >
       <View className="flex-1">
         <PageTopBar
@@ -403,7 +410,7 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
           <ScrollView
             className="flex-1 px-4 pt-4"
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 20 }}
+            contentContainerStyle={{ paddingBottom: scrollBottomPadding }}
           >
             <View className="flex-row">
               <View className="mr-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" style={{ width: 48, height: 48 }}>
@@ -424,12 +431,33 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
                   accessibilityHint="Type your message here"
                   value={text}
                   onChangeText={setText}
+                  onContentSizeChange={(event) => {
+                    const nextHeight = Math.min(
+                      composerInputMaxHeight,
+                      Math.max(
+                        composerInputMinHeight,
+                        event.nativeEvent.contentSize.height + 2,
+                      ),
+                    );
+                    setComposerInputHeight((currentHeight) =>
+                      Math.abs(currentHeight - nextHeight) < 0.5
+                        ? currentHeight
+                        : nextHeight,
+                    );
+                  }}
                   maxLength={MAX_LENGTH + 20} // Allow slight overflow for UX
                   autoFocus
                   textAlignVertical="top"
                   style={{ 
                     paddingTop: 0,
-                    ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }),
+                    height: composerInputHeight,
+                    ...(Platform.OS === 'web' && {
+                      outlineStyle: 'none' as any,
+                      fieldSizing: 'content' as any,
+                      transitionProperty: 'height' as any,
+                      transitionDuration: '120ms' as any,
+                      transitionTimingFunction: 'ease' as any,
+                    }),
                   }}
                 />
               </View>
@@ -497,20 +525,10 @@ export function ComposerScreen({ navigation }: ComposerScreenProps) {
           </ScrollView>
         </View>
 
-        {/* Toolbar at bottom - animated to move with keyboard */}
-        <Animated.View 
-          style={[
-            { 
-              position: 'absolute', 
-              bottom: 0, 
-              left: 0, 
-              right: 0,
-            },
-            toolbarAnimatedStyle
-          ]}
-        >
+        {/* Toolbar stays in flow so mobile web viewport resize keeps it pinned to keyboard */}
+        <View>
           {renderToolbar()}
-        </Animated.View>
+        </View>
       </View>
     </ScreenWrapper>
   );

@@ -1,7 +1,6 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +10,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useVisualViewport } from "@/hooks/useVisualViewport";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -172,6 +173,7 @@ export function FeedCommentModal({
   onSubmitted,
 }: FeedCommentModalProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { height: visualHeight, offsetTop: visualOffsetTop } = useVisualViewport();
   const { currentUser } = useContext(DeSoIdentityContext);
   const {
     isDark,
@@ -181,6 +183,7 @@ export function FeedCommentModal({
     accentSoft,
   } = useAccentColor();
   const [commentText, setCommentText] = useState("");
+  const [commentInputHeight, setCommentInputHeight] = useState(0);
   const [replyImageLocalUri, setReplyImageLocalUri] = useState<string | null>(null);
   const [replyImageUploadedUrl, setReplyImageUploadedUrl] = useState<string | null>(null);
   const [isUploadingReplyImage, setIsUploadingReplyImage] = useState(false);
@@ -209,7 +212,39 @@ export function FeedCommentModal({
   const hasReplyImage = Boolean(replyImageUploadedUrl);
   const hasReplyContent = commentText.trim().length > 0 || hasReplyImage;
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const commentInputMinHeight = isDesktopWeb ? 180 : 120;
+  const commentInputMaxHeight = isDesktopWeb ? 280 : 220;
+  const isMobileWebComposer = Platform.OS === "web" && !isDesktopWeb;
   const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
+  const resolvedCommentInputHeight = Math.min(
+    commentInputMaxHeight,
+    Math.max(commentInputMinHeight, commentInputHeight || commentInputMinHeight),
+  );
+
+  const mobileWebFooterSurfaceStyle = useMemo(() => {
+    if (!isMobileWebComposer) {
+      return null;
+    }
+
+    return {
+      backgroundColor: isDark ? "rgba(11, 22, 41, 0.78)" : "rgba(255, 255, 255, 0.9)",
+      ...(Platform.OS === "web" && {
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        paddingLeft: "calc(env(safe-area-inset-left, 0px) + 20px)",
+        paddingRight: "calc(env(safe-area-inset-right, 0px) + 20px)",
+      }),
+    } as any;
+  }, [isDark, isMobileWebComposer]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    setCommentInputHeight(commentInputMinHeight);
+  }, [commentInputMinHeight, visible, post?.postHash]);
 
   const canSubmit = Boolean(
     post?.postHash &&
@@ -365,6 +400,101 @@ export function FeedCommentModal({
     setCommentText(value.slice(0, MAX_COMMENT_LENGTH));
   };
 
+  const handleCommentInputContentSizeChange = (nextHeight: number) => {
+    const clampedHeight = Math.min(
+      commentInputMaxHeight,
+      Math.max(commentInputMinHeight, nextHeight),
+    );
+    setCommentInputHeight((currentHeight) =>
+      Math.abs(currentHeight - clampedHeight) < 0.5 ? currentHeight : clampedHeight,
+    );
+  };
+
+  const composerFooterControls = (
+    <View className="flex-row items-center gap-3">
+      <Pressable
+        onPress={handlePickReplyImage}
+        disabled={isUploadingReplyImage || isPending}
+        className="h-8 w-8 items-center justify-center rounded-md"
+        style={{
+          borderWidth: 1,
+          borderColor: replyImageLocalUri
+            ? accentColor
+            : getBorderColor(isDark, "input"),
+          backgroundColor: replyImageLocalUri ? accentSoft : accentSurface,
+          opacity: isUploadingReplyImage ? 0.7 : 1,
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Attach image"
+      >
+        {isUploadingReplyImage ? (
+          <ActivityIndicator size="small" color={accentStrong} />
+        ) : (
+          <Feather
+            name="image"
+            size={16}
+            color={replyImageLocalUri ? accentStrong : accentColor}
+          />
+        )}
+      </Pressable>
+
+      <View className="ml-auto flex-row items-center gap-2.5">
+        <Text
+          className="text-[14px]"
+          style={{
+            color:
+              remainingCharacters < 20
+                ? "#ef4444"
+                : isDark
+                  ? "#cbd5e1"
+                  : "#334155",
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {remainingCharacters}
+        </Text>
+
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${remainingCharacters} characters remaining`}
+          accessibilityValue={{
+            min: 0,
+            max: MAX_COMMENT_LENGTH,
+            now: commentText.length,
+          }}
+        >
+          <CircularProgressIndicator
+            current={commentText.length}
+            max={MAX_COMMENT_LENGTH}
+            size={24}
+            strokeWidth={2.25}
+          />
+        </View>
+      </View>
+
+      <Pressable
+        onPress={handleSubmit}
+        disabled={!canSubmit}
+        className="h-9 min-w-[88px] items-center justify-center rounded-full px-4"
+        style={{
+          backgroundColor: canSubmit
+            ? accentColor
+            : isDark
+              ? "rgba(51, 65, 85, 0.7)"
+              : "rgba(203, 213, 225, 0.9)",
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Submit reply"
+      >
+        {isPending ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <Text className="text-[16px] font-semibold text-white">Reply</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+
   const composerContent = (
     <View className="flex-1">
       <View
@@ -404,7 +534,9 @@ export function FeedCommentModal({
       <ScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{
+          paddingBottom: 24,
+        }}
       >
         <View className="px-4 pb-4 pt-3.5">
           <View className="flex-row items-start gap-3">
@@ -482,10 +614,15 @@ export function FeedCommentModal({
                 autoFocus
                 value={commentText}
                 onChangeText={handleCommentChange}
+                onContentSizeChange={(event) => {
+                  handleCommentInputContentSizeChange(
+                    event.nativeEvent.contentSize.height + 2,
+                  );
+                }}
                 placeholder="What's new?"
                 placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                 style={{
-                  minHeight: isDesktopWeb ? 180 : 220,
+                  height: resolvedCommentInputHeight,
                   fontSize: 22,
                   lineHeight: 30,
                   color: isDark ? "#f8fafc" : "#0f172a",
@@ -495,6 +632,10 @@ export function FeedCommentModal({
                     outlineStyle: "none" as any,
                     outlineWidth: 0 as any,
                     boxShadow: "none" as any,
+                    fieldSizing: "content" as any,
+                    transitionProperty: "height" as any,
+                    transitionDuration: "120ms" as any,
+                    transitionTimingFunction: "ease" as any,
                   }),
                 }}
               />
@@ -569,159 +710,119 @@ export function FeedCommentModal({
       </ScrollView>
 
       <View
-        className="px-4 pb-2.5 pt-2"
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: getBorderColor(isDark, "subtle"),
-        }}
+        className="px-5 pb-3.5 pt-3"
+        style={[
+          {
+            borderTopWidth: 1,
+            borderTopColor: getBorderColor(isDark, "subtle"),
+          },
+          mobileWebFooterSurfaceStyle,
+        ]}
       >
-        <View className="flex-row items-center gap-3">
-          <Pressable
-            onPress={handlePickReplyImage}
-            disabled={isUploadingReplyImage || isPending}
-            className="h-8 w-8 items-center justify-center rounded-md"
-            style={{
-              borderWidth: 1,
-              borderColor: replyImageLocalUri
-                ? accentColor
-                : getBorderColor(isDark, "input"),
-              backgroundColor: replyImageLocalUri ? accentSoft : accentSurface,
-              opacity: isUploadingReplyImage ? 0.7 : 1,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Attach image"
-          >
-            {isUploadingReplyImage ? (
-              <ActivityIndicator size="small" color={accentStrong} />
-            ) : (
-              <Feather
-                name="image"
-                size={16}
-                color={replyImageLocalUri ? accentStrong : accentColor}
-              />
-            )}
-          </Pressable>
-
-          <View className="ml-auto flex-row items-center gap-2.5">
-            <Text
-              className="text-[14px]"
-              style={{
-                color:
-                  remainingCharacters < 20
-                    ? "#ef4444"
-                    : isDark
-                      ? "#cbd5e1"
-                      : "#334155",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {remainingCharacters}
-            </Text>
-
-            <View
-              accessibilityRole="progressbar"
-              accessibilityLabel={`${remainingCharacters} characters remaining`}
-              accessibilityValue={{
-                min: 0,
-                max: MAX_COMMENT_LENGTH,
-                now: commentText.length,
-              }}
-            >
-              <CircularProgressIndicator
-                current={commentText.length}
-                max={MAX_COMMENT_LENGTH}
-                size={24}
-                strokeWidth={2.25}
-              />
-            </View>
-          </View>
-
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            className="h-9 min-w-[88px] items-center justify-center rounded-full px-4"
-            style={{
-              backgroundColor: canSubmit
-                ? accentColor
-                : isDark
-                  ? "rgba(51, 65, 85, 0.7)"
-                  : "rgba(203, 213, 225, 0.9)",
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Submit reply"
-          >
-            {isPending ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text className="text-[16px] font-semibold text-white">Reply</Text>
-            )}
-          </Pressable>
-        </View>
+        {composerFooterControls}
       </View>
     </View>
   );
 
-  return (
-    <Modal
-      visible={visible}
-      transparent={isDesktopWeb}
-      animationType="fade"
-      presentationStyle={
-        isDesktopWeb ? "overFullScreen" : Platform.OS === "ios" ? "fullScreen" : "overFullScreen"
-      }
-      statusBarTranslucent={Platform.OS === "android"}
-      onRequestClose={handleClose}
+  const modalBody = isDesktopWeb ? (
+    <View
+      className="flex-1 items-center justify-center px-6 py-8"
+      pointerEvents="box-none"
     >
-      <SafeAreaView
-        edges={isDesktopWeb ? [] : ["top", "bottom"]}
-        className="flex-1"
+      <Pressable
+        className="absolute inset-0"
+        onPress={handleClose}
         style={{
-          backgroundColor: isDesktopWeb
-            ? "transparent"
-            : isDark
-              ? "#0b1629"
-              : "#ffffff",
+          backgroundColor: isDark ? "rgba(2, 6, 23, 0.72)" : "rgba(15, 23, 42, 0.35)",
+        }}
+      />
+      <View
+        className="w-full overflow-hidden rounded-3xl border"
+        style={{
+          maxWidth: 640,
+          height: desktopModalHeight,
+          backgroundColor: isDark ? "#0b1629" : "#ffffff",
+          borderColor: getBorderColor(isDark, "contrast_low"),
         }}
       >
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          {isDesktopWeb ? (
-            <View
-              className="flex-1 items-center justify-center px-6 py-8"
-              pointerEvents="box-none"
-            >
-              <Pressable
-                className="absolute inset-0"
-                onPress={handleClose}
-                style={{
-                  backgroundColor: isDark ? "rgba(2, 6, 23, 0.72)" : "rgba(15, 23, 42, 0.35)",
-                }}
-              />
-              <View
-                className="w-full overflow-hidden rounded-3xl border"
-                style={{
-                  maxWidth: 640,
-                  height: desktopModalHeight,
-                  backgroundColor: isDark ? "#0b1629" : "#ffffff",
-                  borderColor: getBorderColor(isDark, "contrast_low"),
-                }}
-              >
-                {composerContent}
-              </View>
-            </View>
-          ) : (
-            <View
-              className="flex-1"
-              style={{
-                backgroundColor: isDark ? "#0b1629" : "#ffffff",
-              }}
-            >
-              {composerContent}
-            </View>
-          )}
-        </KeyboardAvoidingView>
+        {composerContent}
+      </View>
+    </View>
+  ) : (
+    <View
+      className="flex-1"
+      style={{
+        backgroundColor: isDark ? "#0b1629" : "#ffffff",
+        ...(Platform.OS === "web" && {
+          overscrollBehavior: "none",
+        } as any),
+      }}
+    >
+      {composerContent}
+    </View>
+  );
+  return (
+    <Modal
+      animationType="fade"
+      transparent={Platform.OS === "web" || isDesktopWeb}
+      visible={visible}
+      onRequestClose={handleClose}
+      statusBarTranslucent={Platform.OS === "android"}
+      presentationStyle={
+        isDesktopWeb
+          ? "overFullScreen"
+          : Platform.OS === "ios"
+            ? "fullScreen"
+            : "overFullScreen"
+      }
+    >
+      {Platform.OS === "web" && !isDesktopWeb && (
+        <View
+          style={{
+            position: "fixed" as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: isDark ? "#0b1629" : "#ffffff",
+            zIndex: -1,
+          }}
+        />
+      )}
+      <SafeAreaView
+        edges={isDesktopWeb ? [] : Platform.OS === "web" ? ["top"] : ["top", "bottom"]}
+        className={Platform.OS === "web" && !isDesktopWeb ? "absolute w-full" : "flex-1"}
+        style={{
+          ...(Platform.OS === "web" && !isDesktopWeb
+            ? ({
+                height: "var(--vvh)",
+                top: "var(--vvt)",
+                left: 0,
+                position: "fixed",
+                // Zero-lag hardware accelerated transitions
+                willChange: "height, top",
+                transform: "translateZ(0)",
+              } as any)
+            : {
+                flex: 1,
+                backgroundColor: isDesktopWeb
+                  ? "transparent"
+                  : isDark
+                    ? "#0b1629"
+                    : "#ffffff",
+              }),
+        } as any}
+      >
+        {Platform.OS === "web" ? (
+          modalBody
+        ) : (
+          <KeyboardAvoidingView
+            className="flex-1"
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            {modalBody}
+          </KeyboardAvoidingView>
+        )}
       </SafeAreaView>
     </Modal>
   );
