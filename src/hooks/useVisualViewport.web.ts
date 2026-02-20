@@ -8,27 +8,23 @@ export function useVisualViewport() {
   }));
 
   useEffect(() => {
-    const updateViewport = () => {
-      const newViewport = {
-        width: window.visualViewport?.width || window.innerWidth,
-        height: window.visualViewport?.height || window.innerHeight,
-        offsetTop: window.visualViewport?.offsetTop || 0,
-      };
-      setViewport(newViewport);
+    let rafId: number;
 
-      // Update CSS variables
-      document.documentElement.style.setProperty(
-        "--svh",
-        `${newViewport.height}px`
-      );
-      document.documentElement.style.setProperty(
-        "--svw",
-        `${newViewport.width}px`
-      );
-      document.documentElement.style.setProperty(
-        "--svo",
-        `${newViewport.offsetTop}px`
-      );
+    const updateViewport = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      
+      rafId = requestAnimationFrame(() => {
+        const vv = window.visualViewport;
+        const width = vv?.width || window.innerWidth;
+        const height = vv?.height || window.innerHeight;
+        const offsetTop = vv?.offsetTop || 0;
+
+        setViewport({ width, height, offsetTop });
+
+        // High-performance CSS variable sync
+        document.documentElement.style.setProperty("--vvh", `${height}px`);
+        document.documentElement.style.setProperty("--vvt", `${offsetTop}px`);
+      });
     };
 
     const vv = window.visualViewport;
@@ -42,6 +38,7 @@ export function useVisualViewport() {
     updateViewport();
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       if (vv) {
         vv.removeEventListener("resize", updateViewport);
         vv.removeEventListener("scroll", updateViewport);

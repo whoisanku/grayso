@@ -775,7 +775,6 @@ export function FeedCommentModal({
             ? "fullScreen"
             : "overFullScreen"
       }
-
     >
       {Platform.OS === "web" && !isDesktopWeb && (
         <View
@@ -794,21 +793,24 @@ export function FeedCommentModal({
         edges={isDesktopWeb ? [] : ["top", "bottom"]}
         className={Platform.OS === "web" && !isDesktopWeb ? "absolute w-full" : "flex-1"}
         style={{
-          backgroundColor: isDesktopWeb
-            ? "transparent"
-            : Platform.OS === "web" && !isDesktopWeb
-              ? "transparent"
-              : isDark
-                ? "#0b1629"
-                : "#ffffff",
           ...(Platform.OS === "web" && !isDesktopWeb
-            ? {
-                height: visualHeight,
-                top: visualOffsetTop,
+            ? ({
+                height: "var(--vvh)",
+                top: "var(--vvt)",
                 left: 0,
-              }
-            : { flex: 1 }),
-        }}
+                // Zero-lag hardware accelerated transitions
+                willChange: "height, top",
+                transform: "translateZ(0)",
+              } as any)
+            : {
+                flex: 1,
+                backgroundColor: isDesktopWeb
+                  ? "transparent"
+                  : isDark
+                    ? "#0b1629"
+                    : "#ffffff",
+              }),
+        } as any}
       >
         {Platform.OS === "web" ? (
           modalBody
