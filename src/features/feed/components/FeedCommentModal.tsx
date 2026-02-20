@@ -765,7 +765,8 @@ export function FeedCommentModal({
         <View
           style={
             {
-              height: "calc(100vh - var(--vvh) - var(--vvt))",
+              // Use 100% of the fixed container height instead of 100vh for consistency
+              height: "calc(100% - var(--vvh))",
               backgroundColor: isDark ? "#0b1629" : "#ffffff",
               willChange: "height",
               transform: "translateZ(0)",
@@ -804,7 +805,7 @@ export function FeedCommentModal({
         />
       )}
       <SafeAreaView
-        edges={isDesktopWeb ? [] : ["top", "bottom"]}
+        edges={isDesktopWeb ? [] : Platform.OS === "web" ? ["top"] : ["top", "bottom"]}
         className={Platform.OS === "web" && !isDesktopWeb ? "absolute w-full" : "flex-1"}
         style={{
           ...(Platform.OS === "web" && !isDesktopWeb
