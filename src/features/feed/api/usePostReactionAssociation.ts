@@ -6,20 +6,26 @@ import {
 } from "deso-protocol";
 
 import { type FocusFeedPost } from "@/lib/focus/graphql";
+import { type ReactionIconName } from "@/lib/reactions";
 
 const HEX_HASH_PATTERN = /^[0-9a-fA-F]+$/;
 
 export const FOCUS_REACTION_ASSOCIATION_TYPE = "REACTION";
 
 export const FOCUS_POST_REACTION_OPTIONS = [
-  { value: "LIKE", label: "Like", emoji: "👍", color: "#2563eb" },
-  { value: "DISLIKE", label: "Dislike", emoji: "👎", color: "#64748b" },
-  { value: "LOVE", label: "Love", emoji: "❤️", color: "#ef4444" },
-  { value: "LAUGH", label: "Haha", emoji: "🤣", color: "#f59e0b" },
-  { value: "SAD", label: "Sad", emoji: "😔", color: "#f59e0b" },
-  { value: "CRY", label: "Cry", emoji: "😭", color: "#3b82f6" },
-  { value: "ANGRY", label: "Angry", emoji: "🤬", color: "#f97316" },
-] as const;
+  { value: "LIKE", label: "Like", iconName: "like", color: "#2563eb" },
+  { value: "DISLIKE", label: "Dislike", iconName: "dislike", color: "#64748b" },
+  { value: "LOVE", label: "Love", iconName: "heart", color: "#ef4444" },
+  { value: "LAUGH", label: "Haha", iconName: "laugh", color: "#f59e0b" },
+  { value: "SAD", label: "Sad", iconName: "sad", color: "#f59e0b" },
+  { value: "CRY", label: "Cry", iconName: "sad", color: "#3b82f6" },
+  { value: "ANGRY", label: "Angry", iconName: "angry", color: "#f97316" },
+] as const satisfies readonly {
+  value: string;
+  label: string;
+  iconName: ReactionIconName;
+  color: string;
+}[];
 
 export type FocusPostReactionValue =
   (typeof FOCUS_POST_REACTION_OPTIONS)[number]["value"];
@@ -137,6 +143,33 @@ export function extractViewerReactionAssociations(
   );
 }
 
+async function fetchReaderReactionAssociationsByValue({
+  readerPublicKey,
+  postHash,
+  reactionValue,
+}: {
+  readerPublicKey: string;
+  postHash: string;
+  reactionValue: FocusPostReactionValue;
+}): Promise<PostReactionAssociation[]> {
+  const response = await getPostAssociations({
+    PostHashHex: postHash,
+    TransactorPublicKeyBase58Check: readerPublicKey,
+    AssociationType: FOCUS_REACTION_ASSOCIATION_TYPE,
+    AssociationValue: reactionValue,
+    Limit: 20,
+    SortDescending: true,
+  });
+
+  const associations = response?.Associations ?? [];
+  return normalizeReactionAssociations(
+    associations.map((association) => ({
+      associationId: association.AssociationID,
+      associationValue: association.AssociationValue,
+    })),
+  );
+}
+
 export async function fetchReaderReactionAssociations({
   readerPublicKey,
   postHash,
@@ -149,21 +182,17 @@ export async function fetchReaderReactionAssociations({
   }
 
   const normalizedPostHash = assertValidPostHash(postHash);
-  const response = await getPostAssociations({
-    PostHashHex: normalizedPostHash,
-    TransactorPublicKeyBase58Check: readerPublicKey,
-    AssociationType: FOCUS_REACTION_ASSOCIATION_TYPE,
-    Limit: 20,
-    SortDescending: true,
-  });
-
-  const associations = response?.Associations ?? [];
-  return normalizeReactionAssociations(
-    associations.map((association) => ({
-      associationId: association.AssociationID,
-      associationValue: association.AssociationValue,
-    })),
+  const associationGroups = await Promise.all(
+    FOCUS_POST_REACTION_OPTIONS.map((option) =>
+      fetchReaderReactionAssociationsByValue({
+        readerPublicKey,
+        postHash: normalizedPostHash,
+        reactionValue: option.value,
+      }),
+    ),
   );
+
+  return normalizeReactionAssociations(associationGroups.flat());
 }
 
 export async function setPostReactionAssociation({

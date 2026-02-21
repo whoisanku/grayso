@@ -1657,15 +1657,6 @@ function buildNotificationActionText(
   amountUsdCents: number,
 ): string {
   const subcategory = toUpperToken(rawSubcategory);
-  const reactionEmojiByType: Record<string, string> = {
-    LIKE: "👍",
-    DISLIKE: "👎",
-    LOVE: "❤️",
-    LAUGH: "😂",
-    ASTONISHED: "😮",
-    SAD: "😢",
-    ANGRY: "😡",
-  };
 
   if (subcategory === "FOLLOW") {
     return "followed you";
@@ -1689,9 +1680,7 @@ function buildNotificationActionText(
     return `tipped you ${formatUsdCentsLabel(amountUsdCents)} 💎`;
   }
   if (subcategory.startsWith("REACTION_")) {
-    const reactionType = subcategory.replace("REACTION_", "");
-    const emoji = reactionEmojiByType[reactionType] ?? "✨";
-    return `reacted ${emoji} on your post`;
+    return "reacted on your post";
   }
   if (subcategory.startsWith("RECEIVED_") && amountUsdCents > 0) {
     return `sent you ${formatUsdCentsLabel(amountUsdCents)}`;

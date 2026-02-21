@@ -14,6 +14,7 @@ import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 
+import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Shimmer } from "@/components/ui/Shimmer";
 import { Toast } from "@/components/ui/Toast";
@@ -31,6 +32,7 @@ import {
   type FocusPostReactionValue,
 } from "@/features/feed/api/usePostReactionAssociation";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
+import { type ReactionIconName } from "@/lib/reactions";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { getBorderColor } from "@/theme/borders";
 
@@ -44,7 +46,7 @@ type ReactionFilter = FocusPostReactionValue | "ALL";
 
 type ReactionListRowProps = {
   reaction: PostReactionItem;
-  reactionEmoji: string;
+  reactionIconName: ReactionIconName;
   isLast: boolean;
   isDark: boolean;
   accentColor: string;
@@ -119,7 +121,7 @@ function ReactionRowsShimmer({ isDark }: ReactionRowsShimmerProps) {
 
 function ReactionListRow({
   reaction,
-  reactionEmoji,
+  reactionIconName,
   isLast,
   isDark,
   accentColor,
@@ -196,7 +198,7 @@ function ReactionListRow({
             backgroundColor: isDark ? "rgba(2, 6, 23, 0.9)" : "#ffffff",
           }}
         >
-          <Text className="text-[10px] leading-[12px]">{reactionEmoji}</Text>
+          <ReactionIcon name={reactionIconName} size={12} />
         </View>
       </View>
 
@@ -308,13 +310,13 @@ export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalP
     () => [
       {
         value: "ALL" as const,
-        emoji: null,
+        iconName: null,
         label: "All",
         count: Math.max(totalCount, reactions.length),
       },
       ...FOCUS_POST_REACTION_OPTIONS.map((option) => ({
         value: option.value,
-        emoji: option.emoji,
+        iconName: option.iconName,
         label: option.label,
         count: reactionCounts[option.value],
       })).filter((option) => option.count > 0),
@@ -376,8 +378,8 @@ export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalP
                 accessibilityRole="button"
                 accessibilityLabel={`Show ${item.label} reactions`}
               >
-                {item.emoji ? (
-                  <Text className="text-[15px] leading-[18px]">{item.emoji}</Text>
+                {item.iconName ? (
+                  <ReactionIcon name={item.iconName} size={16} />
                 ) : null}
                 <Text
                   className="text-[13px] font-medium"
@@ -471,7 +473,7 @@ export function FeedReactionModal({ visible, post, onClose }: FeedReactionModalP
               <ReactionListRow
                 key={reaction.associationId}
                 reaction={reaction}
-                reactionEmoji={reactionOption?.emoji ?? "👍"}
+                reactionIconName={reactionOption?.iconName ?? "like"}
                 isLast={index === filteredReactions.length - 1}
                 isDark={isDark}
                 accentColor={accentColor}

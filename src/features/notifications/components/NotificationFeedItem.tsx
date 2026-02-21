@@ -6,8 +6,14 @@ import { useColorScheme } from "nativewind";
 
 import { UserAvatar } from "@/components/UserAvatar";
 import { ChatBubbleLeftIcon } from "@/components/ui/ChatBubbleLeftIcon";
+import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { type FocusNotificationItem } from "@/lib/focus/graphql";
 import { normalizeVideoSource, toPlatformSafeImageUrl } from "@/lib/mediaUrl";
+import {
+  getReactionIconNameFromSubcategory,
+  getReactionLabelFromSubcategory,
+  type ReactionIconName,
+} from "@/lib/reactions";
 import { formatPublicKey, getProfileImageUrl } from "@/utils/deso";
 
 const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -43,6 +49,7 @@ function getNotificationVisual(
   isDark: boolean,
 ): {
   icon?: React.ComponentProps<typeof Feather>["name"];
+  reactionIconName?: ReactionIconName;
   useCommentIcon?: boolean;
   bg: string;
   iconColor: string;
@@ -82,17 +89,41 @@ function getNotificationVisual(
   }
 
   if (subcategory.startsWith("REACTION_")) {
-    const reactionType = subcategory.replace("REACTION_", "");
-    if (reactionType === "LOVE") {
+    const reactionIconName = getReactionIconNameFromSubcategory(subcategory);
+    if (reactionIconName === "heart") {
       return {
-        icon: "heart",
+        reactionIconName,
         bg: isDark ? "#3f1d2e" : "#ffe4e6",
         iconColor: isDark ? "#fda4af" : "#be123c",
       };
     }
 
+    if (reactionIconName === "angry") {
+      return {
+        reactionIconName,
+        bg: isDark ? "#3f1d1d" : "#fee2e2",
+        iconColor: isDark ? "#fca5a5" : "#b91c1c",
+      };
+    }
+
+    if (reactionIconName === "sad") {
+      return {
+        reactionIconName,
+        bg: isDark ? "#082f49" : "#e0f2fe",
+        iconColor: isDark ? "#7dd3fc" : "#0369a1",
+      };
+    }
+
+    if (reactionIconName === "dislike") {
+      return {
+        reactionIconName,
+        bg: isDark ? "#1f2937" : "#e2e8f0",
+        iconColor: isDark ? "#cbd5e1" : "#475569",
+      };
+    }
+
     return {
-      icon: "thumbs-up",
+      reactionIconName: reactionIconName ?? "like",
       bg: isDark ? "#082f49" : "#e0f2fe",
       iconColor: isDark ? "#7dd3fc" : "#0369a1",
     };
@@ -196,6 +227,11 @@ export function NotificationFeedItem({
   const timestampLabel = formatTimestamp(item.timestamp);
   const actionText = getActionText(item);
   const visual = getNotificationVisual(item, isDark);
+  const reactionIconName = getReactionIconNameFromSubcategory(item.rawSubcategory);
+  const reactionLabel = getReactionLabelFromSubcategory(item.rawSubcategory);
+  const accessibilityActionText = reactionIconName
+    ? `reacted with ${reactionLabel ?? "a reaction"} on your post`
+    : actionText;
   const previewMedia = getNotificationPreviewMedia(item);
   const hasPreviewCard = item.previewText.trim().length > 0 || Boolean(previewMedia.uri);
 
@@ -207,7 +243,9 @@ export function NotificationFeedItem({
           backgroundColor: visual.bg,
         }}
       >
-        {visual.useCommentIcon ? (
+        {visual.reactionIconName ? (
+          <ReactionIcon name={visual.reactionIconName} size={16} />
+        ) : visual.useCommentIcon ? (
           <ChatBubbleLeftIcon
             size={15}
             color={visual.iconColor}
@@ -227,15 +265,30 @@ export function NotificationFeedItem({
       <View className="min-w-0 flex-1 gap-1.5">
         <View className="flex-row items-start justify-between gap-2">
           <View className="min-w-0 flex-1">
-            <Text
-              numberOfLines={2}
-              className="text-[15px] leading-[20px] text-slate-900 dark:text-slate-100"
-            >
-              <Text className="font-semibold text-slate-900 dark:text-white">
-                {actorName || "Activity"}
-              </Text>{" "}
-              <Text className="text-slate-600 dark:text-slate-300">{actionText}</Text>
-            </Text>
+            {reactionIconName ? (
+              <View className="flex-row flex-wrap items-center gap-1">
+                <Text className="text-[15px] font-semibold leading-[20px] text-slate-900 dark:text-white">
+                  {actorName || "Activity"}
+                </Text>
+                <Text className="text-[15px] leading-[20px] text-slate-600 dark:text-slate-300">
+                  reacted
+                </Text>
+                <ReactionIcon name={reactionIconName} size={15} />
+                <Text className="text-[15px] leading-[20px] text-slate-600 dark:text-slate-300">
+                  on your post
+                </Text>
+              </View>
+            ) : (
+              <Text
+                numberOfLines={2}
+                className="text-[15px] leading-[20px] text-slate-900 dark:text-slate-100"
+              >
+                <Text className="font-semibold text-slate-900 dark:text-white">
+                  {actorName || "Activity"}
+                </Text>{" "}
+                <Text className="text-slate-600 dark:text-slate-300">{actionText}</Text>
+              </Text>
+            )}
             <Text
               numberOfLines={1}
               className="mt-0.5 text-xs text-slate-500 dark:text-slate-400"
@@ -304,7 +357,7 @@ export function NotificationFeedItem({
   return (
     <Pressable
       onPress={() => onPress(item)}
-      accessibilityLabel={`${actorName || "Activity"} ${actionText}`}
+      accessibilityLabel={`${actorName || "Activity"} ${accessibilityActionText}`}
       className="border-b border-slate-200 px-4 py-3 active:opacity-85 dark:border-slate-800"
       style={({ pressed }) => ({
         opacity: pressed ? 0.86 : 1,

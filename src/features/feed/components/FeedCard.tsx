@@ -5,6 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Repeat2, ThumbsUp } from "lucide-react-native";
 
+import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { getProfileImageUrl } from "@/utils/deso";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -753,9 +754,7 @@ export function FeedCard({
                       zIndex: topReactionBadges.length - index,
                     }}
                   >
-                    <Text className="text-[10px] leading-[10px]">
-                      {reaction.emoji}
-                    </Text>
+                    <ReactionIcon name={reaction.iconName} size={13} />
                   </View>
                 ))}
 
@@ -836,7 +835,12 @@ export function FeedCard({
                     >
                       <Pressable
                         className="items-center justify-center rounded-full"
-                        style={reactionPickerStyles.emojiButton}
+                        style={[
+                          reactionPickerStyles.emojiButton,
+                          currentReactionValue === reactionOption.value
+                            ? reactionPickerStyles.activeEmojiButton
+                            : null,
+                        ]}
                         onPress={(event) => {
                           const nextReactionValue =
                             currentReactionValue === reactionOption.value
@@ -857,9 +861,7 @@ export function FeedCard({
                         accessibilityRole="button"
                         accessibilityLabel={`React with ${reactionOption.label}`}
                       >
-                        <Text style={reactionPickerStyles.emojiText}>
-                          {reactionOption.emoji}
-                        </Text>
+                        <ReactionIcon name={reactionOption.iconName} size={24} />
                       </Pressable>
                     </Animated.View>
                   );
@@ -886,9 +888,7 @@ export function FeedCard({
             style={actionButtonStyle}
           >
             {selectedReactionOption ? (
-              <Text className="text-[18px] leading-[20px]">
-                {selectedReactionOption.emoji}
-              </Text>
+              <ReactionIcon name={selectedReactionOption.iconName} size={19} />
             ) : (
               <ThumbsUp
                 size={16}
@@ -959,18 +959,20 @@ const reactionPickerStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    borderRadius: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    gap: 0,
+    borderRadius: 24,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     backgroundColor: Platform.select({
-      web: "rgba(15, 23, 42, 0.92)",
-      default: "rgba(15, 23, 42, 0.95)",
+      web: "rgba(2, 6, 23, 0.95)",
+      default: "rgba(2, 6, 23, 0.97)",
     }),
+    borderWidth: 1,
+    borderColor: "rgba(71, 85, 105, 0.6)",
     // Subtle shadow for depth
     ...(Platform.OS === "web"
       ? {
-          boxShadow: "0 4px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(148,163,184,0.12)",
+          boxShadow: "0 6px 26px rgba(0,0,0,0.38)",
           backdropFilter: "blur(12px)",
         }
       : {
@@ -982,13 +984,14 @@ const reactionPickerStyles = StyleSheet.create({
         }),
   },
   emojiButton: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
-  emojiText: {
-    fontSize: 26,
-    lineHeight: 30,
+  activeEmojiButton: {
+    borderWidth: 1.5,
+    borderColor: "#38bdf8",
+    backgroundColor: "rgba(56, 189, 248, 0.16)",
   },
 });
