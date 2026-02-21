@@ -94,6 +94,7 @@ export function FeedScreen() {
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const isMobileWeb = Platform.OS === "web" && !isDesktopWeb;
   const [activeFeedMode, setActiveFeedMode] = useState<FeedMode>("forYou");
   const [arrowProgress] = useState(() => new Animated.Value(0));
   const activeFeedLabel = activeFeedMode === "forYou" ? "For You" : "Following";
@@ -470,13 +471,10 @@ export function FeedScreen() {
         <PullToRefresh
           onRefresh={handleRefresh}
           isRefreshing={isManualRefreshing}
-          enabled={Platform.OS === "web" && !isDesktopWeb}
+          // Custom web pull-to-refresh touch interception causes gesture barriers in feed.
+          enabled={!isMobileWeb}
         >
-          <View
-            // @ts-ignore - data attribute for web touch/scroll behavior
-            dataSet={{ virtualizedList: "true", scrollable: "true" }}
-            className="flex-1"
-          >
+          <View className="flex-1">
             <FlashList
               ref={flashListRef}
               data={posts}
