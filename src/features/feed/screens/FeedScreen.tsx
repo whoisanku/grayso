@@ -48,8 +48,6 @@ import { feedKeys } from "@/features/feed/api/keys";
 import { Toast } from "@/components/ui/Toast";
 
 const SCROLL_TO_TOP_THRESHOLD = 500;
-
-const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
 
 function resolveRepostTargetPostHash(post: FocusFeedPost): string {
@@ -67,7 +65,6 @@ export function FeedScreen() {
   const setDrawerOpen = useSetDrawerOpen();
   const insets = useSafeAreaInsets();
   const isWebPlatform = Platform.OS === "web";
-  const shouldTrackVisiblePosts = !isWebPlatform;
 
   const flashListRef = useRef<FlashList<FocusFeedPost> | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -146,8 +143,6 @@ export function FeedScreen() {
     Platform.OS !== "web";
   const refreshSpinnerColor = isDark ? "#f8fafc" : "#0f172a";
 
-  const [visiblePostHashes, setVisiblePostHashes] =
-    useState<Set<string>>(EMPTY_VISIBLE_HASHES);
   const [commentTargetPost, setCommentTargetPost] = useState<FocusFeedPost | null>(
     null,
   );
@@ -163,10 +158,6 @@ export function FeedScreen() {
   } | null>(null);
   const { mutateAsync: submitRepostAsync, isPending: isSubmittingRepost } =
     useSubmitRepost();
-  const [viewabilityConfig] = useState(() => ({
-    itemVisiblePercentThreshold: 60,
-    waitForInteraction: false,
-  }));
 
   useEffect(() => {
     Animated.timing(arrowProgress, {
@@ -181,47 +172,7 @@ export function FeedScreen() {
     showScrollToTopRef.current = showScrollToTop;
   }, [showScrollToTop]);
 
-  const onViewableItemsChanged = useCallback(
-    (payload: {
-      viewableItems: { item: FocusFeedPost; isViewable?: boolean }[];
-    }) => {
-      if (!shouldTrackVisiblePosts) {
-        return;
-      }
-
-      const next = new Set<string>();
-
-      for (const token of payload.viewableItems) {
-        if (!token.isViewable) continue;
-        const hash = token.item?.postHash;
-        if (hash) {
-          next.add(hash);
-        }
-      }
-
-      setVisiblePostHashes((previous) => {
-        if (previous.size === next.size) {
-          let isSame = true;
-          for (const hash of next) {
-            if (!previous.has(hash)) {
-              isSame = false;
-              break;
-            }
-          }
-
-          if (isSame) {
-            return previous;
-          }
-        }
-
-        return next;
-      });
-    },
-    [shouldTrackVisiblePosts],
-  );
-
   const toggleFeedMode = useCallback(() => {
-    setVisiblePostHashes(EMPTY_VISIBLE_HASHES);
     setActiveFeedMode((previous) =>
       previous === "forYou" ? "following" : "forYou",
     );
@@ -480,25 +431,15 @@ export function FeedScreen() {
               data={posts}
               estimatedItemSize={420}
               keyExtractor={(item) => item.postHash}
-              renderItem={({ item, index }) => (
+              renderItem={({ item }) => (
                 <FeedCard
                   post={item}
-                  isVisible={
-                    shouldTrackVisiblePosts
-                      ? visiblePostHashes.size === 0
-                        ? index < 2
-                        : visiblePostHashes.has(item.postHash)
-                      : false
-                  }
+                  isVisible={Platform.OS !== "web"}
                   onReplyPress={openCommentComposer}
                   onRepostPress={openRepostActionMenu}
                   onReactionSummaryPress={openReactionList}
                 />
               )}
-              onViewableItemsChanged={
-                shouldTrackVisiblePosts ? onViewableItemsChanged : undefined
-              }
-              viewabilityConfig={shouldTrackVisiblePosts ? viewabilityConfig : undefined}
               onScroll={handleScroll}
               scrollEventThrottle={32}
               onEndReached={() => {
@@ -538,7 +479,7 @@ export function FeedScreen() {
               }
               showsVerticalScrollIndicator={isWebPlatform}
               keyboardShouldPersistTaps="always"
-              removeClippedSubviews={shouldTrackVisiblePosts}
+              removeClippedSubviews={Platform.OS === "android"}
             />
           </View>
         </PullToRefresh>
