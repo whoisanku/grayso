@@ -214,7 +214,7 @@ export function FeedScreen() {
   );
 
   const scrollToTop = useCallback(() => {
-    flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
   const listEmptyState = useMemo(() => {

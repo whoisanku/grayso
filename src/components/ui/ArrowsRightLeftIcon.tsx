@@ -20,8 +20,17 @@ export function ArrowsRightLeftIcon({
       viewBox="0 0 24 24"
       fill="none"
     >
+      {/* Bottom arrow (Points left) */}
       <Path
-        d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 3m0 0L16.5 7.5M21 3H7.5"
+        d="M7.5 21L3 16.5L7.5 12M3 16.5H16.5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Top arrow (Points right) */}
+      <Path
+        d="M16.5 3L21 7.5L16.5 12M21 7.5H7.5"
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"

@@ -137,6 +137,9 @@ function WebPullToRefresh({
       const clientY = e.touches[0].clientY;
       const delta = clientY - startYRef.current;
 
+      // Fast exit if dragging up (scrolling down the list) and not currently pulling
+      if (delta <= 0 && !isPullingRef.current) return;
+
       const isAtTop = checkIsAtTop(e.target as HTMLElement, container);
 
       if (delta > 0 && isAtTop) {
