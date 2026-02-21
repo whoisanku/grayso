@@ -33,6 +33,11 @@ import { useForYouFeedTimeline } from "@/features/feed/api/useForYouFeedTimeline
 import { FeedCard } from "@/features/feed/components/FeedCard";
 import { FeedCommentModal } from "@/features/feed/components/FeedCommentModal";
 import { FeedReactionModal } from "@/features/feed/components/FeedReactionModal";
+import {
+  FeedRepostActionModal,
+  type FeedRepostActionAnchor,
+} from "@/features/feed/components/FeedRepostActionModal";
+import { useSubmitRepost } from "@/features/feed/api/useSubmitRepost";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
@@ -40,11 +45,19 @@ import { PressableScale } from "@/components/ui/PressableScale";
 import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { feedKeys } from "@/features/feed/api/keys";
+import { Toast } from "@/components/ui/Toast";
 
 const SCROLL_TO_TOP_THRESHOLD = 500;
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
+
+function resolveRepostTargetPostHash(post: FocusFeedPost): string {
+  const rawPostBody = post.body?.trim() ?? "";
+  const isPureRepost = Boolean(post.repostedPost?.postHash && !rawPostBody);
+
+  return isPureRepost ? post.repostedPost?.postHash ?? post.postHash : post.postHash;
+}
 
 export function FeedScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -54,10 +67,9 @@ export function FeedScreen() {
   const setDrawerOpen = useSetDrawerOpen();
   const insets = useSafeAreaInsets();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const flashListRef = useRef<any>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
-  const scrollToTopOpacity = useRef(new Animated.Value(0)).current;
+  const [scrollToTopOpacity] = useState(() => new Animated.Value(0));
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
@@ -115,9 +127,18 @@ export function FeedScreen() {
   const [commentTargetPost, setCommentTargetPost] = useState<FocusFeedPost | null>(
     null,
   );
+  const [quoteTargetPost, setQuoteTargetPost] = useState<FocusFeedPost | null>(
+    null,
+  );
   const [reactionTargetPost, setReactionTargetPost] = useState<FocusFeedPost | null>(
     null,
   );
+  const [repostActionTarget, setRepostActionTarget] = useState<{
+    post: FocusFeedPost;
+    anchor: FeedRepostActionAnchor;
+  } | null>(null);
+  const { mutateAsync: submitRepostAsync, isPending: isSubmittingRepost } =
+    useSubmitRepost();
   const [viewabilityConfig] = useState(() => ({
     itemVisiblePercentThreshold: 60,
     waitForInteraction: false,
@@ -178,8 +199,14 @@ export function FeedScreen() {
   const openCommentComposer = useCallback((post: FocusFeedPost) => {
     setCommentTargetPost(post);
   }, []);
+  const openQuoteComposer = useCallback((post: FocusFeedPost) => {
+    setQuoteTargetPost(post);
+  }, []);
   const closeCommentComposer = useCallback(() => {
     setCommentTargetPost(null);
+  }, []);
+  const closeQuoteComposer = useCallback(() => {
+    setQuoteTargetPost(null);
   }, []);
   const openReactionList = useCallback((post: FocusFeedPost) => {
     setReactionTargetPost(post);
@@ -187,9 +214,75 @@ export function FeedScreen() {
   const closeReactionList = useCallback(() => {
     setReactionTargetPost(null);
   }, []);
-  const handleCommentSubmitted = useCallback(() => {
+  const openRepostActionMenu = useCallback(
+    (post: FocusFeedPost, anchor: FeedRepostActionAnchor) => {
+      setRepostActionTarget({ post, anchor });
+    },
+    [],
+  );
+  const closeRepostActionMenu = useCallback(() => {
+    setRepostActionTarget(null);
+  }, []);
+  const handleReplyOrQuoteSubmitted = useCallback(() => {
     void reload();
   }, [reload]);
+
+  const handleSelectQuoteFromRepostMenu = useCallback(() => {
+    if (!repostActionTarget?.post) {
+      return;
+    }
+
+    openQuoteComposer(repostActionTarget.post);
+    closeRepostActionMenu();
+  }, [closeRepostActionMenu, openQuoteComposer, repostActionTarget]);
+
+  const handleSelectRepostFromRepostMenu = useCallback(async () => {
+    if (!repostActionTarget?.post || isSubmittingRepost) {
+      return;
+    }
+
+    const updaterPublicKey = currentUser?.PublicKeyBase58Check?.trim() ?? "";
+    if (!updaterPublicKey) {
+      Toast.show({
+        type: "error",
+        text1: "Login required",
+        text2: "Sign in to repost posts.",
+      });
+      return;
+    }
+
+    try {
+      await submitRepostAsync({
+        updaterPublicKey,
+        repostedPostHash: resolveRepostTargetPostHash(repostActionTarget.post),
+      });
+
+      closeRepostActionMenu();
+      Toast.show({
+        type: "success",
+        text1: "Reposted",
+        text2: "This post was shared to your feed.",
+      });
+
+      await Promise.resolve(reload());
+    } catch (error) {
+      Toast.show({
+        type: "error",
+        text1: "Failed to repost",
+        text2:
+          error instanceof Error && error.message
+            ? error.message
+            : "Please try again.",
+      });
+    }
+  }, [
+    closeRepostActionMenu,
+    currentUser?.PublicKeyBase58Check,
+    isSubmittingRepost,
+    reload,
+    repostActionTarget,
+    submitRepostAsync,
+  ]);
 
   // Track scroll position for scroll-to-top button
   const handleScroll = useCallback(
@@ -354,6 +447,7 @@ export function FeedScreen() {
                       : visiblePostHashes.has(item.postHash)
                   }
                   onReplyPress={openCommentComposer}
+                  onRepostPress={openRepostActionMenu}
                   onReactionSummaryPress={openReactionList}
                 />
               )}
@@ -459,7 +553,27 @@ export function FeedScreen() {
           visible={Boolean(commentTargetPost)}
           post={commentTargetPost}
           onClose={closeCommentComposer}
-          onSubmitted={handleCommentSubmitted}
+          onSubmitted={handleReplyOrQuoteSubmitted}
+        />
+
+        <FeedCommentModal
+          key={quoteTargetPost?.postHash ?? "feed-quote-modal"}
+          visible={Boolean(quoteTargetPost)}
+          post={quoteTargetPost}
+          mode="quote"
+          onClose={closeQuoteComposer}
+          onSubmitted={handleReplyOrQuoteSubmitted}
+        />
+
+        <FeedRepostActionModal
+          visible={Boolean(repostActionTarget)}
+          anchor={repostActionTarget?.anchor ?? null}
+          onClose={closeRepostActionMenu}
+          onSelectRepost={() => {
+            void handleSelectRepostFromRepostMenu();
+          }}
+          onSelectQuote={handleSelectQuoteFromRepostMenu}
+          isSubmittingRepost={isSubmittingRepost}
         />
 
         <FeedReactionModal

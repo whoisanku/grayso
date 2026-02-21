@@ -33,6 +33,10 @@ import {
   MAX_COMMENT_LENGTH,
   useSubmitComment,
 } from "@/features/feed/api/useSubmitComment";
+import {
+  MAX_QUOTE_LENGTH,
+  useSubmitQuotePost,
+} from "@/features/feed/api/useSubmitQuotePost";
 import { uploadImage } from "@/lib/media";
 import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
@@ -44,6 +48,7 @@ type FeedCommentModalProps = {
   post: FocusFeedPost | null;
   onClose: () => void;
   onSubmitted?: () => void | Promise<void>;
+  mode?: "reply" | "quote";
 };
 
 type ReplyTargetPreviewMedia = {
@@ -126,6 +131,14 @@ function getReplyTarget(post: FocusFeedPost | null) {
   return { username, displayName, avatarUri, previewText, mediaPreview };
 }
 
+function getQuoteTargetPostHash(post: FocusFeedPost | null): string | null {
+  const rawPostBody = post?.body?.trim() || "";
+  const isPureRepost = Boolean(post?.repostedPost?.postHash && !rawPostBody);
+  const sourcePostHash = isPureRepost ? post?.repostedPost?.postHash : post?.postHash;
+
+  return sourcePostHash?.trim() || null;
+}
+
 function ReplyTargetMediaPreview({
   media,
   isDark,
@@ -171,9 +184,10 @@ export function FeedCommentModal({
   post,
   onClose,
   onSubmitted,
+  mode = "reply",
 }: FeedCommentModalProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const { height: visualHeight, offsetTop: visualOffsetTop } = useVisualViewport();
+  useVisualViewport();
   const { currentUser } = useContext(DeSoIdentityContext);
   const {
     isDark,
@@ -187,7 +201,19 @@ export function FeedCommentModal({
   const [replyImageLocalUri, setReplyImageLocalUri] = useState<string | null>(null);
   const [replyImageUploadedUrl, setReplyImageUploadedUrl] = useState<string | null>(null);
   const [isUploadingReplyImage, setIsUploadingReplyImage] = useState(false);
-  const { mutateAsync, isPending, reset } = useSubmitComment();
+  const isQuoteComposer = mode === "quote";
+  const maxCharacters = isQuoteComposer ? MAX_QUOTE_LENGTH : MAX_COMMENT_LENGTH;
+  const {
+    mutateAsync: submitCommentAsync,
+    isPending: isSubmittingReply,
+    reset: resetReplyMutation,
+  } = useSubmitComment();
+  const {
+    mutateAsync: submitQuoteAsync,
+    isPending: isSubmittingQuote,
+    reset: resetQuoteMutation,
+  } = useSubmitQuotePost();
+  const isPending = isSubmittingReply || isSubmittingQuote;
 
   const { username, displayName, avatarUri, previewText, mediaPreview } = useMemo(
     () => getReplyTarget(post),
@@ -208,7 +234,7 @@ export function FeedCommentModal({
     return toPlatformSafeImageUrl(raw) ?? raw;
   }, [currentUser?.PublicKeyBase58Check]);
 
-  const remainingCharacters = MAX_COMMENT_LENGTH - commentText.length;
+  const remainingCharacters = maxCharacters - commentText.length;
   const hasReplyImage = Boolean(replyImageUploadedUrl);
   const hasReplyContent = commentText.trim().length > 0 || hasReplyImage;
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
@@ -247,7 +273,7 @@ export function FeedCommentModal({
   }, [commentInputMinHeight, visible, post?.postHash]);
 
   const canSubmit = Boolean(
-    post?.postHash &&
+    post &&
       currentUser?.PublicKeyBase58Check &&
       hasReplyContent &&
       remainingCharacters >= 0 &&
@@ -260,7 +286,8 @@ export function FeedCommentModal({
     setReplyImageLocalUri(null);
     setReplyImageUploadedUrl(null);
     setIsUploadingReplyImage(false);
-    reset();
+    resetReplyMutation();
+    resetQuoteMutation();
   };
 
   const handleClose = () => {
@@ -322,11 +349,24 @@ export function FeedCommentModal({
   };
 
   const handleSubmit = async () => {
-    if (!post?.postHash) {
+    if (!post) {
       Toast.show({
         type: "error",
-        text1: "Unable to comment",
+        text1: isQuoteComposer ? "Unable to quote" : "Unable to comment",
         text2: "This post is missing an identifier.",
+      });
+      return;
+    }
+
+    const quoteTargetPostHash = isQuoteComposer
+      ? getQuoteTargetPostHash(post)
+      : null;
+
+    if (isQuoteComposer && !quoteTargetPostHash) {
+      Toast.show({
+        type: "error",
+        text1: "Unable to quote",
+        text2: "This post cannot be quoted right now.",
       });
       return;
     }
@@ -336,7 +376,9 @@ export function FeedCommentModal({
       Toast.show({
         type: "error",
         text1: "Login required",
-        text2: "Sign in to reply to posts.",
+        text2: isQuoteComposer
+          ? "Sign in to quote posts."
+          : "Sign in to reply to posts.",
       });
       return;
     }
@@ -360,17 +402,28 @@ export function FeedCommentModal({
     }
 
     try {
-      await mutateAsync({
-        updaterPublicKey: userPublicKey,
-        parentPostHash: post.postHash,
-        body: commentText,
-        imageUrls: replyImageUploadedUrl ? [replyImageUploadedUrl] : [],
-      });
+      if (isQuoteComposer && quoteTargetPostHash) {
+        await submitQuoteAsync({
+          updaterPublicKey: userPublicKey,
+          repostedPostHash: quoteTargetPostHash,
+          body: commentText,
+          imageUrls: replyImageUploadedUrl ? [replyImageUploadedUrl] : [],
+        });
+      } else {
+        await submitCommentAsync({
+          updaterPublicKey: userPublicKey,
+          parentPostHash: post.postHash,
+          body: commentText,
+          imageUrls: replyImageUploadedUrl ? [replyImageUploadedUrl] : [],
+        });
+      }
 
       Toast.show({
         type: "success",
-        text1: "Reply posted",
-        text2: `Your reply to @${username} is live.`,
+        text1: isQuoteComposer ? "Quote posted" : "Reply posted",
+        text2: isQuoteComposer
+          ? `Your quote of @${username} is live.`
+          : `Your reply to @${username} is live.`,
       });
 
       resetComposerState();
@@ -386,18 +439,18 @@ export function FeedCommentModal({
           : fallbackMessage;
       Toast.show({
         type: "error",
-        text1: "Failed to post reply",
+        text1: isQuoteComposer ? "Failed to post quote" : "Failed to post reply",
         text2: errorMessage,
       });
     }
   };
 
   const handleCommentChange = (value: string) => {
-    if (value.length <= MAX_COMMENT_LENGTH) {
+    if (value.length <= maxCharacters) {
       setCommentText(value);
       return;
     }
-    setCommentText(value.slice(0, MAX_COMMENT_LENGTH));
+    setCommentText(value.slice(0, maxCharacters));
   };
 
   const handleCommentInputContentSizeChange = (nextHeight: number) => {
@@ -459,13 +512,13 @@ export function FeedCommentModal({
           accessibilityLabel={`${remainingCharacters} characters remaining`}
           accessibilityValue={{
             min: 0,
-            max: MAX_COMMENT_LENGTH,
+            max: maxCharacters,
             now: commentText.length,
           }}
         >
           <CircularProgressIndicator
             current={commentText.length}
-            max={MAX_COMMENT_LENGTH}
+            max={maxCharacters}
             size={24}
             strokeWidth={2.25}
           />
@@ -484,12 +537,14 @@ export function FeedCommentModal({
               : "rgba(203, 213, 225, 0.9)",
         }}
         accessibilityRole="button"
-        accessibilityLabel="Submit reply"
+        accessibilityLabel={isQuoteComposer ? "Submit quote" : "Submit reply"}
       >
         {isPending ? (
           <ActivityIndicator size="small" color="#ffffff" />
         ) : (
-          <Text className="text-[16px] font-semibold text-white">Reply</Text>
+          <Text className="text-[16px] font-semibold text-white">
+            {isQuoteComposer ? "Quote" : "Reply"}
+          </Text>
         )}
       </Pressable>
     </View>
@@ -509,7 +564,7 @@ export function FeedCommentModal({
           className="mr-3 flex-1 text-[21px] font-extrabold"
           style={{ color: isDark ? "#f8fafc" : "#0f172a" }}
         >
-          Reply to @{username}
+          {isQuoteComposer ? `Quote @${username}` : `Reply to @${username}`}
         </Text>
         <Pressable
           onPress={handleClose}
@@ -521,7 +576,9 @@ export function FeedCommentModal({
               : "rgba(241, 245, 249, 1)",
           }}
           accessibilityRole="button"
-          accessibilityLabel="Close reply composer"
+          accessibilityLabel={
+            isQuoteComposer ? "Close quote composer" : "Close reply composer"
+          }
         >
           <Feather
             name="x"
@@ -619,7 +676,9 @@ export function FeedCommentModal({
                     event.nativeEvent.contentSize.height + 2,
                   );
                 }}
-                placeholder="What's new?"
+                placeholder={
+                  isQuoteComposer ? "Add your thoughts" : "What's new?"
+                }
                 placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                 style={{
                   height: resolvedCommentInputHeight,
@@ -682,7 +741,9 @@ export function FeedCommentModal({
                   >
                     {isUploadingReplyImage
                       ? "Please wait before posting."
-                      : "This image will be included in your reply."}
+                      : isQuoteComposer
+                        ? "This image will be included in your quote."
+                        : "This image will be included in your reply."}
                   </Text>
                 </View>
 

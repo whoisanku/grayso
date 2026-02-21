@@ -1,5 +1,14 @@
 import React from "react";
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { ThumbsUp } from "lucide-react-native";
@@ -202,12 +211,17 @@ export function FeedCard({
   isVisible,
   onPress,
   onReplyPress,
+  onRepostPress,
   onReactionSummaryPress,
 }: {
   post: FocusFeedPost;
   isVisible: boolean;
   onPress?: (post: FocusFeedPost) => void;
   onReplyPress?: (post: FocusFeedPost) => void;
+  onRepostPress?: (
+    post: FocusFeedPost,
+    anchor: { x: number; y: number },
+  ) => void;
   onReactionSummaryPress?: (post: FocusFeedPost) => void;
 }) {
   const { isDark } = useAccentColor();
@@ -229,12 +243,14 @@ export function FeedCard({
   const [emojiHoverAnimations] = React.useState(() =>
     FOCUS_POST_REACTION_OPTIONS.map(() => new Animated.Value(1)),
   );
+  const [repostContentOffsetX, setRepostContentOffsetX] = React.useState(0);
   const reactionPickerCloseTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const reactionPickerOpenTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const repostButtonRef = React.useRef<View>(null);
 
   const viewerReactionAssociations = React.useMemo(
     () => extractViewerReactionAssociations(post),
@@ -631,6 +647,47 @@ export function FeedCard({
     outputRange: [12, 0],
   });
 
+  const handleRepostPress = React.useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation?.();
+
+      const fallbackX = event.nativeEvent.pageX ?? 0;
+      const fallbackY = event.nativeEvent.pageY ?? 0;
+
+      if (!repostButtonRef.current) {
+        onRepostPress?.(post, { x: fallbackX, y: fallbackY });
+        return;
+      }
+
+      repostButtonRef.current.measureInWindow((x, y, width, height) => {
+        const resolvedX = Number.isFinite(x) ? x : fallbackX;
+        const resolvedY = Number.isFinite(y)
+          ? y + (Number.isFinite(height) ? height : 0)
+          : fallbackY;
+        const resolvedContentOffsetX = Number.isFinite(repostContentOffsetX)
+          ? repostContentOffsetX
+          : Number.isFinite(width)
+            ? Math.max(0, width / 2 - 16)
+            : 0;
+
+        onRepostPress?.(post, {
+          x: resolvedX + resolvedContentOffsetX,
+          y: resolvedY,
+        });
+      });
+    },
+    [onRepostPress, post, repostContentOffsetX],
+  );
+
+  const handleRepostContentLayout = React.useCallback(
+    (nextOffset: number) => {
+      setRepostContentOffsetX((currentOffset) =>
+        Math.abs(currentOffset - nextOffset) < 0.5 ? currentOffset : nextOffset,
+      );
+    },
+    [],
+  );
+
   return (
     <Pressable
       onPress={() => onPress?.(post)}
@@ -961,25 +1018,32 @@ export function FeedCard({
         </View>
 
         <Pressable
+          ref={repostButtonRef}
           className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
-          onPress={(event) => {
-            event.stopPropagation?.();
-          }}
+          onPress={handleRepostPress}
           accessibilityRole="button"
           accessibilityLabel="Repost this post"
           style={actionButtonStyle}
         >
-          <ArrowsRightLeftIcon
-            size={16}
-            color={mutedIconColor}
-            strokeWidth={1.9}
-          />
-          <Text
-            className="text-[13px] font-medium"
-            style={{ color: mutedCountColor }}
+          <View
+            className="flex-row items-center gap-1.5"
+            onLayout={(event) => {
+              handleRepostContentLayout(event.nativeEvent.layout.x);
+            }}
+            pointerEvents="none"
           >
-            Repost
-          </Text>
+            <ArrowsRightLeftIcon
+              size={16}
+              color={mutedIconColor}
+              strokeWidth={1.9}
+            />
+            <Text
+              className="text-[13px] font-medium"
+              style={{ color: mutedCountColor }}
+            >
+              Repost
+            </Text>
+          </View>
         </Pressable>
 
         <Pressable
