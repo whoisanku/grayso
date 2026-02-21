@@ -5,7 +5,7 @@ const REACTION_ICON_BY_TYPE = {
   LAUGH: "laugh",
   ASTONISHED: "wow",
   SAD: "sad",
-  CRY: "sad",
+  CRY: "wow",
   ANGRY: "angry",
 } as const;
 
@@ -16,7 +16,7 @@ const REACTION_LABEL_BY_TYPE = {
   LAUGH: "Haha",
   ASTONISHED: "Wow",
   SAD: "Sad",
-  CRY: "Cry",
+  CRY: "Wow",
   ANGRY: "Angry",
 } as const;
 

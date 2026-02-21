@@ -12,6 +12,7 @@ import { FlashList } from "@shopify/flash-list";
 import { Feather } from "@expo/vector-icons";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useIsFocused } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
@@ -19,14 +20,18 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { useSetDrawerOpen } from "@/state/shell";
 import { useNotifications } from "@/features/notifications/api/useNotifications";
 import { useMarkAllNotificationsRead } from "@/features/notifications/api/useMarkAllNotificationsRead";
+import { notificationsKeys } from "@/features/notifications/api/keys";
 import { NotificationFeedItem } from "@/features/notifications/components/NotificationFeedItem";
 import { NotificationsShimmer } from "@/features/notifications/components/NotificationsShimmer";
 import { resolveCurrentUserPublicKey } from "@/utils/deso";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 
+const NOTIFICATIONS_PAGE_SIZE = 40;
+
 export function NotificationsScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const { isDark, accentColor } = useAccentColor();
+  const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
 
   const setDrawerOpen = useSetDrawerOpen();
@@ -46,14 +51,30 @@ export function NotificationsScreen() {
   } = useNotifications({
     userPublicKey,
     enabled: Boolean(userPublicKey),
-    pageSize: 40,
+    pageSize: NOTIFICATIONS_PAGE_SIZE,
   });
   const { mutateAsync: markAllRead, isPending: isMarkAllReadPending } =
     useMarkAllNotificationsRead();
+  const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
+  const notificationsQueryKey = useMemo(
+    () =>
+      notificationsKeys.list(
+        normalizedUserPublicKey || "anonymous",
+        NOTIFICATIONS_PAGE_SIZE,
+      ),
+    [normalizedUserPublicKey],
+  );
   const { isRefreshing: isManualRefreshing, onRefresh: handleRefresh } =
-    useManualRefresh(reload);
+    useManualRefresh(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: notificationsQueryKey,
+        exact: true,
+      });
+      await reload();
+    });
   const canPullToRefresh =
     Boolean(userPublicKey) && (Platform.OS !== "web" || !isDesktopWeb);
+  const refreshSpinnerColor = isDark ? "#f8fafc" : "#0f172a";
   const didTriggerMarkReadRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -185,11 +206,22 @@ export function NotificationsScreen() {
             ) : null
           }
           ListEmptyComponent={renderEmptyState}
+          ListHeaderComponent={
+            isManualRefreshing ? (
+              <View className="items-center justify-center py-12">
+                <ActivityIndicator
+                  size="small"
+                  color={refreshSpinnerColor}
+                />
+              </View>
+            ) : null
+          }
           refreshControl={
             canPullToRefresh ? (
               <RefreshControl
-                tintColor={isDark ? "#e2e8f0" : "#334155"}
-                colors={[accentColor]}
+                tintColor={refreshSpinnerColor}
+                colors={[refreshSpinnerColor]}
+                progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
                 refreshing={isManualRefreshing}
                 onRefresh={handleRefresh}
               />

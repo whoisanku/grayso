@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { DeSoIdentityContext } from "react-deso-protocol";
+import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
@@ -32,6 +33,7 @@ import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
+import { feedKeys } from "@/features/feed/api/keys";
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
@@ -39,10 +41,12 @@ type FeedMode = "forYou" | "following";
 export function FeedScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
   const { isDark, accentColor } = useAccentColor();
+  const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
   const setDrawerOpen = useSetDrawerOpen();
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
+  const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
   const [activeFeedMode, setActiveFeedMode] = useState<FeedMode>("forYou");
   const [arrowProgress] = useState(() => new Animated.Value(0));
@@ -70,11 +74,25 @@ export function FeedScreen() {
     reload,
     loadMore,
   } = activeFeed;
+  const activeFeedQueryKey = useMemo(
+    () =>
+      activeFeedMode === "forYou"
+        ? feedKeys.forYouTimeline(normalizedUserPublicKey)
+        : feedKeys.timeline(normalizedUserPublicKey, normalizedUserPublicKey),
+    [activeFeedMode, normalizedUserPublicKey],
+  );
   const { isRefreshing: isManualRefreshing, onRefresh: handleRefresh } =
-    useManualRefresh(reload);
+    useManualRefresh(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: activeFeedQueryKey,
+        exact: true,
+      });
+      await reload();
+    });
   const canPullToRefresh =
     (activeFeedMode === "forYou" || Boolean(userPublicKey)) &&
     (Platform.OS !== "web" || !isDesktopWeb);
+  const refreshSpinnerColor = isDark ? "#f8fafc" : "#0f172a";
 
   const [visiblePostHashes, setVisiblePostHashes] =
     useState<Set<string>>(EMPTY_VISIBLE_HASHES);
@@ -307,6 +325,16 @@ export function FeedScreen() {
                 </View>
               ) : null
             }
+            ListHeaderComponent={
+              isManualRefreshing ? (
+                <View className="items-center justify-center py-12">
+                  <ActivityIndicator
+                    size="small"
+                    color={refreshSpinnerColor}
+                  />
+                </View>
+              ) : null
+            }
             contentContainerStyle={
               posts.length === 0
                 ? {
@@ -322,8 +350,9 @@ export function FeedScreen() {
                 <RefreshControl
                   refreshing={isManualRefreshing}
                   onRefresh={handleRefresh}
-                  tintColor={accentColor}
-                  colors={[accentColor]}
+                  tintColor={refreshSpinnerColor}
+                  colors={[refreshSpinnerColor]}
+                  progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
                 />
               ) : undefined
             }

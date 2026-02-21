@@ -18,7 +18,7 @@ export const FOCUS_POST_REACTION_OPTIONS = [
   { value: "LOVE", label: "Love", iconName: "heart", color: "#ef4444" },
   { value: "LAUGH", label: "Haha", iconName: "laugh", color: "#f59e0b" },
   { value: "SAD", label: "Sad", iconName: "sad", color: "#f59e0b" },
-  { value: "CRY", label: "Cry", iconName: "sad", color: "#3b82f6" },
+  { value: "CRY", label: "Wow", iconName: "wow", color: "#3b82f6" },
   { value: "ANGRY", label: "Angry", iconName: "angry", color: "#f97316" },
 ] as const satisfies readonly {
   value: string;
