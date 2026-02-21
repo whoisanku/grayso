@@ -22,6 +22,7 @@ import { useMarkAllNotificationsRead } from "@/features/notifications/api/useMar
 import { NotificationFeedItem } from "@/features/notifications/components/NotificationFeedItem";
 import { NotificationsShimmer } from "@/features/notifications/components/NotificationsShimmer";
 import { resolveCurrentUserPublicKey } from "@/utils/deso";
+import { useManualRefresh } from "@/hooks/useManualRefresh";
 
 export function NotificationsScreen() {
   const { currentUser } = useContext(DeSoIdentityContext);
@@ -37,7 +38,6 @@ export function NotificationsScreen() {
     items,
     unreadCount,
     isLoading,
-    isRefreshing,
     isFetchingNextPage,
     hasNextPage,
     error,
@@ -50,6 +50,10 @@ export function NotificationsScreen() {
   });
   const { mutateAsync: markAllRead, isPending: isMarkAllReadPending } =
     useMarkAllNotificationsRead();
+  const { isRefreshing: isManualRefreshing, onRefresh: handleRefresh } =
+    useManualRefresh(reload);
+  const canPullToRefresh =
+    Boolean(userPublicKey) && (Platform.OS !== "web" || !isDesktopWeb);
   const didTriggerMarkReadRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -182,13 +186,14 @@ export function NotificationsScreen() {
           }
           ListEmptyComponent={renderEmptyState}
           refreshControl={
-            <RefreshControl
-              tintColor={isDark ? "#e2e8f0" : "#334155"}
-              refreshing={isRefreshing}
-              onRefresh={() => {
-                void reload();
-              }}
-            />
+            canPullToRefresh ? (
+              <RefreshControl
+                tintColor={isDark ? "#e2e8f0" : "#334155"}
+                colors={[accentColor]}
+                refreshing={isManualRefreshing}
+                onRefresh={handleRefresh}
+              />
+            ) : undefined
           }
           contentContainerStyle={
             items.length === 0

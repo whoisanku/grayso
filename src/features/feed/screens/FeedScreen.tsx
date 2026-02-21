@@ -31,6 +31,7 @@ import { FeedReactionModal } from "@/features/feed/components/FeedReactionModal"
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { useManualRefresh } from "@/hooks/useManualRefresh";
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
@@ -63,13 +64,17 @@ export function FeedScreen() {
   const {
     posts,
     isLoading,
-    isRefreshing,
     isFetchingNextPage,
     hasNextPage,
     error,
     reload,
     loadMore,
   } = activeFeed;
+  const { isRefreshing: isManualRefreshing, onRefresh: handleRefresh } =
+    useManualRefresh(reload);
+  const canPullToRefresh =
+    (activeFeedMode === "forYou" || Boolean(userPublicKey)) &&
+    (Platform.OS !== "web" || !isDesktopWeb);
 
   const [visiblePostHashes, setVisiblePostHashes] =
     useState<Set<string>>(EMPTY_VISIBLE_HASHES);
@@ -313,10 +318,10 @@ export function FeedScreen() {
                   }
             }
             refreshControl={
-              Platform.OS !== "web" ? (
+              canPullToRefresh ? (
                 <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={() => void reload()}
+                  refreshing={isManualRefreshing}
+                  onRefresh={handleRefresh}
                   tintColor={accentColor}
                   colors={[accentColor]}
                 />
