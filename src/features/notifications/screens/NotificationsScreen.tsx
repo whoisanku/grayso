@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo } from "react";
+import React, { useCallback, useContext, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -39,6 +39,9 @@ export function NotificationsScreen() {
   const isDesktopWeb = Platform.OS === "web" && width >= 1024;
   const isFocused = useIsFocused();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const flashListRef = useRef<any>(null);
+
   const userPublicKey = resolveCurrentUserPublicKey(currentUser);
   const {
     items,
@@ -72,9 +75,11 @@ export function NotificationsScreen() {
         exact: true,
       });
       await reload();
+      // Scroll to top to show new content
+      flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
   const canPullToRefresh =
-    Boolean(userPublicKey) && (Platform.OS !== "web" || !isDesktopWeb);
+    Boolean(userPublicKey) && Platform.OS !== "web";
   const refreshSpinnerColor = isDark ? "#f8fafc" : "#0f172a";
   const didTriggerMarkReadRef = React.useRef(false);
 
@@ -167,7 +172,6 @@ export function NotificationsScreen() {
       <View className="flex-1">
         <PageTopBar
           title="Notifications"
-          subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
           leftSlot={
             !isDesktopWeb ? (
               <PageTopBarIconButton
@@ -187,9 +191,10 @@ export function NotificationsScreen() {
         <PullToRefresh
           onRefresh={handleRefresh}
           isRefreshing={isManualRefreshing}
-          enabled={Platform.OS === "web"}
+          enabled={Platform.OS === "web" && !isDesktopWeb}
         >
           <FlashList
+            ref={flashListRef}
             data={items}
             renderItem={({ item }) => (
               <NotificationFeedItem item={item} />

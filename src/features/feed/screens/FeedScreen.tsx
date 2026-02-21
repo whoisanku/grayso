@@ -3,6 +3,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -15,11 +16,14 @@ import {
   View,
   Pressable,
   useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -32,9 +36,12 @@ import { FeedReactionModal } from "@/features/feed/components/FeedReactionModal"
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { PressableScale } from "@/components/ui/PressableScale";
 import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { feedKeys } from "@/features/feed/api/keys";
+
+const SCROLL_TO_TOP_THRESHOLD = 500;
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
@@ -45,6 +52,12 @@ export function FeedScreen() {
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
   const setDrawerOpen = useSetDrawerOpen();
+  const insets = useSafeAreaInsets();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const flashListRef = useRef<any>(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const scrollToTopOpacity = useRef(new Animated.Value(0)).current;
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
@@ -89,10 +102,12 @@ export function FeedScreen() {
         exact: true,
       });
       await reload();
+      // Scroll to top to show new content
+      flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
   const canPullToRefresh =
     (activeFeedMode === "forYou" || Boolean(userPublicKey)) &&
-    (Platform.OS !== "web" || !isDesktopWeb);
+    Platform.OS !== "web";
   const refreshSpinnerColor = isDark ? "#f8fafc" : "#0f172a";
 
   const [visiblePostHashes, setVisiblePostHashes] =
@@ -175,6 +190,32 @@ export function FeedScreen() {
   const handleCommentSubmitted = useCallback(() => {
     void reload();
   }, [reload]);
+
+  // Track scroll position for scroll-to-top button
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y;
+      const shouldShow = offsetY > SCROLL_TO_TOP_THRESHOLD;
+
+      setShowScrollToTop((prev) => {
+        if (prev === shouldShow) return prev;
+
+        Animated.timing(scrollToTopOpacity, {
+          toValue: shouldShow ? 1 : 0,
+          duration: 200,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+
+        return shouldShow;
+      });
+    },
+    [scrollToTopOpacity],
+  );
+
+  const scrollToTop = useCallback(() => {
+    flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
 
   const listEmptyState = useMemo(() => {
     if (isLoading) {
@@ -293,7 +334,7 @@ export function FeedScreen() {
         <PullToRefresh
           onRefresh={handleRefresh}
           isRefreshing={isManualRefreshing}
-          enabled={Platform.OS === "web"}
+          enabled={Platform.OS === "web" && !isDesktopWeb}
         >
           <View
             // @ts-ignore - data attribute for web touch/scroll behavior
@@ -301,6 +342,7 @@ export function FeedScreen() {
             className="flex-1"
           >
             <FlashList
+              ref={flashListRef}
               data={posts}
               keyExtractor={(item) => item.postHash}
               renderItem={({ item, index }) => (
@@ -317,6 +359,8 @@ export function FeedScreen() {
               )}
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
               onEndReached={() => {
                 if (hasNextPage && !isFetchingNextPage) {
                   void loadMore();
@@ -357,6 +401,58 @@ export function FeedScreen() {
             />
           </View>
         </PullToRefresh>
+
+        {/* Scroll-to-top arrow button — appears when scrolled deep */}
+        {showScrollToTop ? (
+          <Animated.View
+            style={{
+              position: "absolute",
+              left: 24,
+              bottom: isDesktopWeb ? 24 : Math.max(insets.bottom, 15) + 56,
+              opacity: scrollToTopOpacity,
+              transform: [
+                {
+                  scale: scrollToTopOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1],
+                  }),
+                },
+              ],
+            }}
+          >
+            <PressableScale
+              onPress={scrollToTop}
+              targetScale={0.9}
+              accessibilityRole="button"
+              accessibilityLabel="Scroll to top"
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: isDark
+                  ? "rgba(30, 41, 59, 0.92)"
+                  : "rgba(255, 255, 255, 0.95)",
+                borderWidth: 1,
+                borderColor: isDark
+                  ? "rgba(71, 85, 105, 0.5)"
+                  : "rgba(148, 163, 184, 0.35)",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Feather
+                name="arrow-up"
+                size={20}
+                color={isDark ? "#e2e8f0" : "#334155"}
+              />
+            </PressableScale>
+          </Animated.View>
+        ) : null}
 
         <FeedCommentModal
           key={commentTargetPost?.postHash ?? "feed-comment-modal"}

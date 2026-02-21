@@ -23,6 +23,7 @@ import {
   DeviceEventEmitter,
   Text,
   useWindowDimensions,
+  Pressable,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import { Image } from "expo-image";
@@ -161,7 +162,7 @@ function CustomTabBar({
       } else if (route.name === "Notifications") {
         icon = isFocused ? (
           <NotificationBellFilledIcon
-            size={30}
+            size={28}
             color={isDark ? "#f8fafc" : "#0f172a"}
           />
         ) : (
@@ -188,12 +189,11 @@ function CustomTabBar({
       }
 
       return (
-        <PressableScale
+        <Pressable
           key={route.key}
           onPress={onPress}
           onLongPress={onLongPress}
           delayLongPress={250}
-          targetScale={0.85}
           style={{
             flex: 1,
             alignItems: "center",
@@ -206,25 +206,12 @@ function CustomTabBar({
             {icon}
             {route.name === "Notifications" && unreadNotificationsCount > 0 ? (
               <View
-                className="absolute -right-3 -top-2.5 rounded-full bg-rose-600 px-1.5"
-                style={{
-                  height: 22,
-                  minWidth: 22,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 40,
-                  elevation: 8,
-                }}
-              >
-                <Text className="text-[11px] font-bold leading-[12px] text-white">
-                  {unreadNotificationsCount > 99
-                    ? "99+"
-                    : String(unreadNotificationsCount)}
-                </Text>
-              </View>
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-600"
+                style={{ zIndex: 40, elevation: 8 }}
+              />
             ) : null}
           </View>
-        </PressableScale>
+        </Pressable>
       );
     });
 
@@ -463,7 +450,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           >
             <View className="relative">
               <NotificationBellOutlineIcon
-                size={28}
+                size={25}
                 color={isDark ? "#e2e8f0" : "#0f172a"}
               />
               {unreadNotificationsCount > 0 ? (

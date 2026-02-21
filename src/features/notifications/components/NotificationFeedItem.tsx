@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import { useColorScheme } from "nativewind";
 
 import { UserAvatar } from "@/components/UserAvatar";
+import { ArrowsRightLeftIcon } from "@/components/ui/ArrowsRightLeftIcon";
 import { ChatBubbleLeftIcon } from "@/components/ui/ChatBubbleLeftIcon";
 import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { type FocusNotificationItem } from "@/lib/focus/graphql";
@@ -51,6 +52,7 @@ function getNotificationVisual(
   icon?: React.ComponentProps<typeof Feather>["name"];
   reactionIconName?: ReactionIconName;
   useCommentIcon?: boolean;
+  useRepostIcon?: boolean;
   bg: string;
   iconColor: string;
 } {
@@ -82,7 +84,7 @@ function getNotificationVisual(
 
   if (subcategory === "POST_REPOST" || subcategory === "POST_QUOTE_REPOST") {
     return {
-      icon: "repeat",
+      useRepostIcon: true,
       bg: isDark ? "#052e16" : "#dcfce7",
       iconColor: isDark ? "#86efac" : "#15803d",
     };
@@ -247,6 +249,12 @@ export function NotificationFeedItem({
           <ReactionIcon name={visual.reactionIconName} size={16} />
         ) : visual.useCommentIcon ? (
           <ChatBubbleLeftIcon
+            size={15}
+            color={visual.iconColor}
+            strokeWidth={1.7}
+          />
+        ) : visual.useRepostIcon ? (
+          <ArrowsRightLeftIcon
             size={15}
             color={visual.iconColor}
             strokeWidth={1.7}

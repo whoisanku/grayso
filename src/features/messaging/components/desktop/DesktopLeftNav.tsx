@@ -2,8 +2,9 @@
 // Fixed-position left navigation for desktop web, inspired by Bluesky
 
 import React, { useContext } from "react";
-import { View, Text, Pressable, ScrollView, Platform } from "react-native";
+import { View, Text, Pressable, ScrollView, Platform, ActivityIndicator } from "react-native";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
@@ -33,6 +34,8 @@ import {
 } from "@/components/ui/NotificationBellIcon";
 import { useNotificationCounts } from "@/features/notifications/api/useNotificationCounts";
 import { resolveCurrentUserPublicKey } from "@/utils/deso";
+import { feedKeys } from "@/features/feed/api/keys";
+import { notificationsKeys } from "@/features/notifications/api/keys";
 
 const NAV_ICON_WIDTH = 26;
 type NavIconComponent = React.ComponentType<{
@@ -54,6 +57,7 @@ interface NavItemProps {
   fillBased?: boolean;
   iconSize?: number;
   badgeCount?: number;
+  isRefreshing?: boolean;
 }
 
 function BellNavIcon({
@@ -92,6 +96,7 @@ function NavItem({
   fillBased = false,
   iconSize = NAV_ICON_WIDTH,
   badgeCount = 0,
+  isRefreshing = false,
 }: NavItemProps) {
   // Filled icon when active, outline when inactive
   const InUseIcon = isActive ? ActiveIcon : Icon;
@@ -114,14 +119,31 @@ function NavItem({
           minimal ? "w-11 h-11" : "w-7 h-7",
         ].join(" ")}
       >
-        <InUseIcon
-          width={iconSize}
-          height={iconSize}
-          stroke={fillBased ? undefined : (isActive ? activeColor : inactiveColor)}
-          strokeWidth={fillBased ? undefined : (isActive ? 1.5 : 1.6)}
-          fill={fillBased ? (isActive ? activeColor : inactiveColor) : (isActive ? activeColor : "none")}
-        />
-        {badgeCount > 0 ? (
+        {isRefreshing ? (
+          <ActivityIndicator
+            size="small"
+            color={isActive ? activeColor : inactiveColor}
+          />
+        ) : (
+          <InUseIcon
+            width={iconSize}
+            height={iconSize}
+            stroke={
+              fillBased ? undefined : isActive ? activeColor : inactiveColor
+            }
+            strokeWidth={fillBased ? undefined : isActive ? 1.5 : 1.6}
+            fill={
+              fillBased
+                ? isActive
+                  ? activeColor
+                  : inactiveColor
+                : isActive
+                  ? activeColor
+                  : "none"
+            }
+          />
+        )}
+        {badgeCount > 0 && !isRefreshing ? (
           <View
             className={[
               "absolute -top-1.5 items-center justify-center rounded-full bg-rose-600",
@@ -170,6 +192,9 @@ export function DesktopLeftNav({
   const { accentColor } = useAccentColor();
   const publicKey = resolveCurrentUserPublicKey(currentUser);
   const { counts } = useNotificationCounts(publicKey);
+  const queryClient = useQueryClient();
+  const [refreshingKey, setRefreshingKey] = React.useState<string | null>(null);
+
   const resolvedUnreadNotificationsCount =
     unreadNotificationsCount ?? counts.unreadNotificationCount;
 
@@ -213,7 +238,19 @@ export function DesktopLeftNav({
       isActive: isFeedActive,
       fillBased: true,
       iconSize: 22,
-      onPress: () => {
+      onPress: async () => {
+        if (isFeedActive && !refreshingKey) {
+          // Trigger refresh if already active
+          setRefreshingKey("Feed");
+          try {
+            await queryClient.refetchQueries({
+              queryKey: feedKeys.base,
+            });
+          } finally {
+            setRefreshingKey(null);
+          }
+          return;
+        }
         rootNavigation.navigate("Main", { screen: "Feed" });
       },
     },
@@ -236,7 +273,25 @@ export function DesktopLeftNav({
       isActive: isNotificationsActive,
       badgeCount: resolvedUnreadNotificationsCount,
       iconSize: 28,
-      onPress: () => {
+      onPress: async () => {
+        if (isNotificationsActive && !refreshingKey) {
+          // Trigger refresh if already active
+          setRefreshingKey("Notifications");
+          try {
+            await Promise.all([
+              queryClient.refetchQueries({
+                queryKey: notificationsKeys.base,
+              }),
+              // Also refresh counts just in case
+              queryClient.refetchQueries({
+                queryKey: notificationsKeys.counts(publicKey || ""),
+              }),
+            ]);
+          } finally {
+            setRefreshingKey(null);
+          }
+          return;
+        }
         rootNavigation.navigate("Main", { screen: "Notifications" });
       },
     },
@@ -320,6 +375,7 @@ export function DesktopLeftNav({
                   fillBased={item.fillBased}
                   iconSize={item.iconSize}
                   badgeCount={item.badgeCount}
+                  isRefreshing={refreshingKey === item.key}
                 />
               ))}
             </View>

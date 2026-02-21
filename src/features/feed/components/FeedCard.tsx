@@ -1,9 +1,9 @@
 import React from "react";
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { Repeat2, ThumbsUp } from "lucide-react-native";
+import { ThumbsUp } from "lucide-react-native";
+import { ArrowsRightLeftIcon } from "@/components/ui/ArrowsRightLeftIcon";
 
 import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
@@ -614,10 +614,10 @@ export function FeedCard({
     >
       {isPureRepost ? (
         <View className="mb-1.5 flex-row items-center gap-1">
-          <Feather
-            name="repeat"
+          <ArrowsRightLeftIcon
             size={13}
             color={isDark ? "#94a3b8" : "#64748b"}
+            strokeWidth={1.9}
           />
           <Text className="text-[12px] text-slate-500 dark:text-slate-400">
             Reposted by {reposterLabel}
@@ -916,11 +916,10 @@ export function FeedCard({
           accessibilityLabel="Repost this post"
           style={actionButtonStyle}
         >
-          <Repeat2
+          <ArrowsRightLeftIcon
             size={16}
-            strokeWidth={1.9}
             color={mutedIconColor}
-            fill="none"
+            strokeWidth={1.9}
           />
           <Text
             className="text-[13px] font-medium"
