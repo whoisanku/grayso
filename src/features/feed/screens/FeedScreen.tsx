@@ -16,14 +16,11 @@ import {
   View,
   Pressable,
   useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -41,13 +38,11 @@ import { useSubmitRepost } from "@/features/feed/api/useSubmitRepost";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
-import { PressableScale } from "@/components/ui/PressableScale";
 import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { feedKeys } from "@/features/feed/api/keys";
 import { Toast } from "@/components/ui/Toast";
 
-const SCROLL_TO_TOP_THRESHOLD = 500;
 type FeedMode = "forYou" | "following";
 
 function resolveRepostTargetPostHash(post: FocusFeedPost): string {
@@ -63,35 +58,12 @@ export function FeedScreen() {
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
   const setDrawerOpen = useSetDrawerOpen();
-  const insets = useSafeAreaInsets();
-  const isWebPlatform = Platform.OS === "web";
 
   const flashListRef = useRef<FlashList<FocusFeedPost> | null>(null);
-  const [showScrollToTop, setShowScrollToTop] = useState(false);
-  const showScrollToTopRef = useRef(false);
-  const [scrollToTopOpacity] = useState(() => new Animated.Value(0));
-
-  const scrollListToTop = useCallback((animated: boolean) => {
-    const list = flashListRef.current;
-    if (!list) {
-      return;
-    }
-
-    try {
-      list.scrollToIndex({
-        index: 0,
-        animated,
-        viewPosition: 0,
-      });
-    } catch {
-      list.scrollToOffset({ offset: 0, animated });
-    }
-  }, []);
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
-  const isMobileWeb = Platform.OS === "web" && !isDesktopWeb;
   const [activeFeedMode, setActiveFeedMode] = useState<FeedMode>("forYou");
   const [arrowProgress] = useState(() => new Animated.Value(0));
   const activeFeedLabel = activeFeedMode === "forYou" ? "For You" : "Following";
@@ -132,11 +104,7 @@ export function FeedScreen() {
         exact: true,
       });
       await reload();
-      // Scroll to top to show new content
-      scrollListToTop(false);
-      requestAnimationFrame(() => {
-        scrollListToTop(false);
-      });
+      flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
   const canPullToRefresh =
     (activeFeedMode === "forYou" || Boolean(userPublicKey)) &&
@@ -167,10 +135,6 @@ export function FeedScreen() {
       useNativeDriver: true,
     }).start();
   }, [activeFeedMode, arrowProgress]);
-
-  useEffect(() => {
-    showScrollToTopRef.current = showScrollToTop;
-  }, [showScrollToTop]);
 
   const toggleFeedMode = useCallback(() => {
     setActiveFeedMode((previous) =>
@@ -266,44 +230,6 @@ export function FeedScreen() {
     repostActionTarget,
     submitRepostAsync,
   ]);
-
-  // Track scroll position for scroll-to-top button
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetY = event.nativeEvent.contentOffset.y;
-      const shouldShow = offsetY > SCROLL_TO_TOP_THRESHOLD;
-
-      if (showScrollToTopRef.current === shouldShow) {
-        return;
-      }
-
-      showScrollToTopRef.current = shouldShow;
-      setShowScrollToTop(shouldShow);
-
-      Animated.timing(scrollToTopOpacity, {
-        toValue: shouldShow ? 1 : 0,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    },
-    [scrollToTopOpacity],
-  );
-
-  const scrollToTop = useCallback(() => {
-    if (isWebPlatform) {
-      scrollListToTop(false);
-      requestAnimationFrame(() => {
-        scrollListToTop(false);
-      });
-      return;
-    }
-
-    scrollListToTop(true);
-    requestAnimationFrame(() => {
-      scrollListToTop(false);
-    });
-  }, [isWebPlatform, scrollListToTop]);
 
   const listEmptyState = useMemo(() => {
     if (isLoading) {
@@ -422,119 +348,59 @@ export function FeedScreen() {
         <PullToRefresh
           onRefresh={handleRefresh}
           isRefreshing={isManualRefreshing}
-          // Custom web pull-to-refresh touch interception causes gesture barriers in feed.
-          enabled={!isMobileWeb}
+          enabled={Platform.OS === "web" && !isDesktopWeb}
         >
-          <View className="flex-1">
-            <FlashList
-              ref={flashListRef}
-              data={posts}
-              estimatedItemSize={420}
-              keyExtractor={(item) => item.postHash}
-              renderItem={({ item }) => (
-                <FeedCard
-                  post={item}
-                  isVisible={Platform.OS !== "web"}
-                  onReplyPress={openCommentComposer}
-                  onRepostPress={openRepostActionMenu}
-                  onReactionSummaryPress={openReactionList}
-                />
-              )}
-              onScroll={handleScroll}
-              scrollEventThrottle={32}
-              onEndReached={() => {
-                if (hasNextPage && !isFetchingNextPage) {
-                  void loadMore();
-                }
-              }}
-              onEndReachedThreshold={0.35}
-              ListEmptyComponent={listEmptyState}
-              ListFooterComponent={
-                isFetchingNextPage ? (
-                  <View className="items-center py-5">
-                    <ActivityIndicator size="small" color={accentColor} />
-                  </View>
-                ) : null
-              }
-              contentContainerStyle={
-                posts.length === 0
-                  ? {
-                      flexGrow: 1,
-                      paddingBottom: isDesktopWeb ? 24 : 84,
-                    }
-                  : {
-                      paddingBottom: isDesktopWeb ? 24 : 84,
-                    }
-              }
-              refreshControl={
-                canPullToRefresh ? (
-                  <RefreshControl
-                    refreshing={isManualRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor={refreshSpinnerColor}
-                    colors={[refreshSpinnerColor]}
-                    progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
-                  />
-                ) : undefined
-              }
-              showsVerticalScrollIndicator={isWebPlatform}
-              keyboardShouldPersistTaps="always"
-              removeClippedSubviews={Platform.OS === "android"}
-            />
-          </View>
-        </PullToRefresh>
-
-        {/* Scroll-to-top arrow button — appears when scrolled deep */}
-        {showScrollToTop ? (
-          <Animated.View
-            style={{
-              position: "absolute",
-              left: 24,
-              bottom: isDesktopWeb ? 24 : Math.max(insets.bottom, 15) + 56,
-              opacity: scrollToTopOpacity,
-              transform: [
-                {
-                  scale: scrollToTopOpacity.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.8, 1],
-                  }),
-                },
-              ],
-            }}
-          >
-            <PressableScale
-              onPress={scrollToTop}
-              targetScale={0.9}
-              accessibilityRole="button"
-              accessibilityLabel="Scroll to top"
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 24,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: isDark
-                  ? "rgba(30, 41, 59, 0.92)"
-                  : "rgba(255, 255, 255, 0.95)",
-                borderWidth: 1,
-                borderColor: isDark
-                  ? "rgba(71, 85, 105, 0.5)"
-                  : "rgba(148, 163, 184, 0.35)",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
-            >
-              <Feather
-                name="arrow-up"
-                size={20}
-                color={isDark ? "#e2e8f0" : "#334155"}
+          <FlashList
+            ref={flashListRef}
+            data={posts}
+            estimatedItemSize={420}
+            keyExtractor={(item) => item.postHash}
+            renderItem={({ item }) => (
+              <FeedCard
+                post={item}
+                isVisible={Platform.OS !== "web"}
+                onReplyPress={openCommentComposer}
+                onRepostPress={openRepostActionMenu}
+                onReactionSummaryPress={openReactionList}
               />
-            </PressableScale>
-          </Animated.View>
-        ) : null}
+            )}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) {
+                void loadMore();
+              }
+            }}
+            onEndReachedThreshold={0.3}
+            ListEmptyComponent={listEmptyState}
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View className="items-center py-5">
+                  <ActivityIndicator
+                    size="small"
+                    color={isDark ? "#e2e8f0" : accentColor}
+                  />
+                </View>
+              ) : null
+            }
+            contentContainerStyle={
+              posts.length === 0
+                ? { flexGrow: 1 }
+                : undefined
+            }
+            refreshControl={
+              canPullToRefresh ? (
+                <RefreshControl
+                  tintColor={refreshSpinnerColor}
+                  colors={[refreshSpinnerColor]}
+                  progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
+                  refreshing={isManualRefreshing}
+                  onRefresh={handleRefresh}
+                />
+              ) : undefined
+            }
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          />
+        </PullToRefresh>
 
         <FeedCommentModal
           key={commentTargetPost?.postHash ?? "feed-comment-modal"}
