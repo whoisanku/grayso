@@ -232,6 +232,9 @@ export function FeedCard({
   const reactionPickerCloseTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const reactionPickerOpenTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const viewerReactionAssociations = React.useMemo(
     () => extractViewerReactionAssociations(post),
@@ -278,6 +281,9 @@ export function FeedCard({
     () => () => {
       if (reactionPickerCloseTimeoutRef.current) {
         clearTimeout(reactionPickerCloseTimeoutRef.current);
+      }
+      if (reactionPickerOpenTimeoutRef.current) {
+        clearTimeout(reactionPickerOpenTimeoutRef.current);
       }
     },
     [],
@@ -355,13 +361,32 @@ export function FeedCard({
     });
   }, [clearReactionPickerCloseTimeout, reactionPickerAnimation, emojiItemAnimations]);
 
-  // Facebook-like: 1.5 second delay before closing
+  // Facebook-like: delay before closing
   const scheduleReactionPickerClose = React.useCallback(() => {
     clearReactionPickerCloseTimeout();
     reactionPickerCloseTimeoutRef.current = setTimeout(() => {
       closeReactionPicker();
     }, 800);
   }, [clearReactionPickerCloseTimeout, closeReactionPicker]);
+
+  // Cancel any pending hover-open timer
+  const cancelReactionPickerOpen = React.useCallback(() => {
+    if (reactionPickerOpenTimeoutRef.current) {
+      clearTimeout(reactionPickerOpenTimeoutRef.current);
+      reactionPickerOpenTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Delayed open: only open after 400ms of sustained hover to prevent accidental triggers
+  const scheduleReactionPickerOpen = React.useCallback(
+    (event?: { stopPropagation?: () => void }) => {
+      cancelReactionPickerOpen();
+      reactionPickerOpenTimeoutRef.current = setTimeout(() => {
+        openReactionPicker(event);
+      }, 400);
+    },
+    [cancelReactionPickerOpen, openReactionPicker],
+  );
 
   const handleEmojiHoverIn = React.useCallback(
     (index: number) => {
@@ -789,20 +814,42 @@ export function FeedCard({
       >
         <View className="relative flex-1">
           {isReactionPickerVisible ? (
-            <Pressable
-              className="absolute bottom-full left-0 mb-1"
-              onPress={(event) => event.stopPropagation?.()}
-              onHoverIn={
-                Platform.OS === "web"
-                  ? clearReactionPickerCloseTimeout
-                  : undefined
-              }
-              onHoverOut={
-                Platform.OS === "web"
-                  ? scheduleReactionPickerClose
-                  : undefined
-              }
-            >
+            <>
+              {/* Backdrop to close the picker when tapping outside */}
+              <Pressable
+                style={
+                  Platform.OS === "web"
+                    ? ({ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 } as any)
+                    : {
+                        position: "absolute",
+                        top: -4000,
+                        bottom: -4000,
+                        left: -4000,
+                        right: -4000,
+                        zIndex: 40,
+                      }
+                }
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  closeReactionPicker();
+                }}
+                className={Platform.OS === "web" ? "cursor-default" : undefined}
+              />
+              <Pressable
+                className="absolute bottom-full left-0 mb-1"
+                style={{ zIndex: 50 }}
+                onPress={(event) => event.stopPropagation?.()}
+                onHoverIn={
+                  Platform.OS === "web"
+                    ? clearReactionPickerCloseTimeout
+                    : undefined
+                }
+                onHoverOut={
+                  Platform.OS === "web"
+                    ? scheduleReactionPickerClose
+                    : undefined
+                }
+              >
               <Animated.View
                 style={[
                   reactionPickerStyles.container,
@@ -868,6 +915,7 @@ export function FeedCard({
                 })}
               </Animated.View>
             </Pressable>
+            </>
           ) : null}
 
           <Pressable
@@ -875,9 +923,14 @@ export function FeedCard({
             onPress={handlePrimaryLikePress}
             onLongPress={openReactionPicker}
             delayLongPress={170}
-            onHoverIn={Platform.OS === "web" ? openReactionPicker : undefined}
+            onHoverIn={Platform.OS === "web" ? scheduleReactionPickerOpen : undefined}
             onHoverOut={
-              Platform.OS === "web" ? scheduleReactionPickerClose : undefined
+              Platform.OS === "web"
+                ? () => {
+                    cancelReactionPickerOpen();
+                    scheduleReactionPickerClose();
+                  }
+                : undefined
             }
             accessibilityRole="button"
             accessibilityLabel={

@@ -102,22 +102,17 @@ function WebPullToRefresh({
     }
   }, [showRefreshing, spinAnim]);
 
-  /* Find the nearest scrollable parent to check if at top */
-  const findScrollableParent = useCallback(
-    (el: HTMLElement | null): HTMLElement | null => {
-      let current = el;
-      while (current) {
-        const style = window.getComputedStyle(current);
-        const overflowY = style.overflowY;
-        if (
-          (overflowY === "auto" || overflowY === "scroll") &&
-          current.scrollHeight > current.clientHeight
-        ) {
-          return current;
+  /* Check if any element from target up to boundary is scrolled down */
+  const checkIsAtTop = useCallback(
+    (target: HTMLElement | null, boundary: HTMLElement): boolean => {
+      let current = target;
+      while (current && current !== boundary.parentElement) {
+        if (current.scrollTop > 0) {
+          return false;
         }
         current = current.parentElement;
       }
-      return null;
+      return true;
     },
     [],
   );
@@ -130,12 +125,7 @@ function WebPullToRefresh({
     const handleTouchStart = (e: TouchEvent) => {
       if (refreshingLockRef.current) return;
 
-      const scrollable = findScrollableParent(container);
-      const scrollTop = scrollable
-        ? scrollable.scrollTop
-        : document.documentElement.scrollTop || document.body.scrollTop;
-
-      if (scrollTop <= 0) {
+      if (checkIsAtTop(e.target as HTMLElement, container)) {
         startYRef.current = e.touches[0].clientY;
         isPullingRef.current = false;
       }
@@ -147,12 +137,9 @@ function WebPullToRefresh({
       const clientY = e.touches[0].clientY;
       const delta = clientY - startYRef.current;
 
-      const scrollable = findScrollableParent(container);
-      const scrollTop = scrollable
-        ? scrollable.scrollTop
-        : document.documentElement.scrollTop || document.body.scrollTop;
+      const isAtTop = checkIsAtTop(e.target as HTMLElement, container);
 
-      if (delta > 0 && scrollTop <= 0) {
+      if (delta > 0 && isAtTop) {
         // Apply resistance curve
         const dampened = Math.min(MAX_PULL_DISTANCE, delta * 0.45);
         isPullingRef.current = true;
@@ -163,7 +150,7 @@ function WebPullToRefresh({
         if (dampened > 10 && e.cancelable) {
           e.preventDefault();
         }
-      } else if (isPullingRef.current && (delta <= 0 || scrollTop > 0)) {
+      } else if (isPullingRef.current && (delta <= 0 || !isAtTop)) {
         pullDistanceRef.current = 0;
         setPullDistance(0);
         isPullingRef.current = false;
@@ -210,7 +197,7 @@ function WebPullToRefresh({
       container.removeEventListener("touchmove", handleTouchMove);
       container.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [enabled, findScrollableParent]);
+  }, [enabled, checkIsAtTop]);
 
   const progress = Math.min(pullDistance / PULL_THRESHOLD, 1);
   const spinnerColor = isDark ? "#e2e8f0" : "#475569";
