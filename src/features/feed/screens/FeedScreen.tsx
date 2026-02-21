@@ -32,6 +32,7 @@ import { FeedReactionModal } from "@/features/feed/components/FeedReactionModal"
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { feedKeys } from "@/features/feed/api/keys";
 
@@ -289,77 +290,73 @@ export function FeedScreen() {
           }
         />
 
-        <View
-          // @ts-ignore - data attribute for web touch/scroll behavior
-          dataSet={{ virtualizedList: "true", scrollable: "true" }}
-          className="flex-1"
+        <PullToRefresh
+          onRefresh={handleRefresh}
+          isRefreshing={isManualRefreshing}
+          enabled={Platform.OS === "web"}
         >
-          <FlashList
-            data={posts}
-            keyExtractor={(item) => item.postHash}
-            renderItem={({ item, index }) => (
-              <FeedCard
-                post={item}
-                isVisible={
-                  visiblePostHashes.size === 0
-                    ? index < 2
-                    : visiblePostHashes.has(item.postHash)
-                }
-                onReplyPress={openCommentComposer}
-                onReactionSummaryPress={openReactionList}
-              />
-            )}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            onEndReached={() => {
-              if (hasNextPage && !isFetchingNextPage) {
-                void loadMore();
-              }
-            }}
-            onEndReachedThreshold={0.35}
-            ListEmptyComponent={listEmptyState}
-            ListFooterComponent={
-              isFetchingNextPage ? (
-                <View className="items-center py-5">
-                  <ActivityIndicator size="small" color={accentColor} />
-                </View>
-              ) : null
-            }
-            ListHeaderComponent={
-              isManualRefreshing ? (
-                <View className="items-center justify-center py-12">
-                  <ActivityIndicator
-                    size="small"
-                    color={refreshSpinnerColor}
-                  />
-                </View>
-              ) : null
-            }
-            contentContainerStyle={
-              posts.length === 0
-                ? {
-                    flexGrow: 1,
-                    paddingBottom: isDesktopWeb ? 24 : 84,
+          <View
+            // @ts-ignore - data attribute for web touch/scroll behavior
+            dataSet={{ virtualizedList: "true", scrollable: "true" }}
+            className="flex-1"
+          >
+            <FlashList
+              data={posts}
+              keyExtractor={(item) => item.postHash}
+              renderItem={({ item, index }) => (
+                <FeedCard
+                  post={item}
+                  isVisible={
+                    visiblePostHashes.size === 0
+                      ? index < 2
+                      : visiblePostHashes.has(item.postHash)
                   }
-                : {
-                    paddingBottom: isDesktopWeb ? 24 : 84,
-                  }
-            }
-            refreshControl={
-              canPullToRefresh ? (
-                <RefreshControl
-                  refreshing={isManualRefreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={refreshSpinnerColor}
-                  colors={[refreshSpinnerColor]}
-                  progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
+                  onReplyPress={openCommentComposer}
+                  onReactionSummaryPress={openReactionList}
                 />
-              ) : undefined
-            }
-            showsVerticalScrollIndicator={Platform.OS === "web"}
-            keyboardShouldPersistTaps="always"
-          />
-        </View>
+              )}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              onEndReached={() => {
+                if (hasNextPage && !isFetchingNextPage) {
+                  void loadMore();
+                }
+              }}
+              onEndReachedThreshold={0.35}
+              ListEmptyComponent={listEmptyState}
+              ListFooterComponent={
+                isFetchingNextPage ? (
+                  <View className="items-center py-5">
+                    <ActivityIndicator size="small" color={accentColor} />
+                  </View>
+                ) : null
+              }
+              contentContainerStyle={
+                posts.length === 0
+                  ? {
+                      flexGrow: 1,
+                      paddingBottom: isDesktopWeb ? 24 : 84,
+                    }
+                  : {
+                      paddingBottom: isDesktopWeb ? 24 : 84,
+                    }
+              }
+              refreshControl={
+                canPullToRefresh ? (
+                  <RefreshControl
+                    refreshing={isManualRefreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={refreshSpinnerColor}
+                    colors={[refreshSpinnerColor]}
+                    progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
+                  />
+                ) : undefined
+              }
+              showsVerticalScrollIndicator={Platform.OS === "web"}
+              keyboardShouldPersistTaps="always"
+            />
+          </View>
+        </PullToRefresh>
 
         <FeedCommentModal
           key={commentTargetPost?.postHash ?? "feed-comment-modal"}

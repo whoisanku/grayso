@@ -25,6 +25,7 @@ import { NotificationFeedItem } from "@/features/notifications/components/Notifi
 import { NotificationsShimmer } from "@/features/notifications/components/NotificationsShimmer";
 import { resolveCurrentUserPublicKey } from "@/utils/deso";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
 
 const NOTIFICATIONS_PAGE_SIZE = 40;
 
@@ -183,58 +184,54 @@ export function NotificationsScreen() {
           }
         />
 
-        <FlashList
-          data={items}
-          renderItem={({ item }) => (
-            <NotificationFeedItem item={item} />
-          )}
-          keyExtractor={(item) => item.id}
-          onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) {
-              void loadMore();
+        <PullToRefresh
+          onRefresh={handleRefresh}
+          isRefreshing={isManualRefreshing}
+          enabled={Platform.OS === "web"}
+        >
+          <FlashList
+            data={items}
+            renderItem={({ item }) => (
+              <NotificationFeedItem item={item} />
+            )}
+            keyExtractor={(item) => item.id}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) {
+                void loadMore();
+              }
+            }}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View className="items-center py-5">
+                  <ActivityIndicator
+                    size="small"
+                    color={isDark ? "#e2e8f0" : accentColor}
+                  />
+                </View>
+              ) : null
             }
-          }}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
-            isFetchingNextPage ? (
-              <View className="items-center py-5">
-                <ActivityIndicator
-                  size="small"
-                  color={isDark ? "#e2e8f0" : accentColor}
+            ListEmptyComponent={renderEmptyState}
+            refreshControl={
+              canPullToRefresh ? (
+                <RefreshControl
+                  tintColor={refreshSpinnerColor}
+                  colors={[refreshSpinnerColor]}
+                  progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
+                  refreshing={isManualRefreshing}
+                  onRefresh={handleRefresh}
                 />
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={renderEmptyState}
-          ListHeaderComponent={
-            isManualRefreshing ? (
-              <View className="items-center justify-center py-12">
-                <ActivityIndicator
-                  size="small"
-                  color={refreshSpinnerColor}
-                />
-              </View>
-            ) : null
-          }
-          refreshControl={
-            canPullToRefresh ? (
-              <RefreshControl
-                tintColor={refreshSpinnerColor}
-                colors={[refreshSpinnerColor]}
-                progressBackgroundColor={isDark ? "#0f172a" : "#ffffff"}
-                refreshing={isManualRefreshing}
-                onRefresh={handleRefresh}
-              />
-            ) : undefined
-          }
-          contentContainerStyle={
-            items.length === 0
-              ? { flexGrow: 1 }
-              : undefined
-          }
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        />
+              ) : undefined
+            }
+            contentContainerStyle={
+              items.length === 0
+                ? { flexGrow: 1 }
+                : undefined
+            }
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          />
+        </PullToRefresh>
       </View>
     </ScreenWrapper>
   );
