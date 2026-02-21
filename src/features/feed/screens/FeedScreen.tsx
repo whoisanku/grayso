@@ -51,9 +51,6 @@ const SCROLL_TO_TOP_THRESHOLD = 500;
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
-type NativeScrollToRef = {
-  scrollTo?: (options: { x?: number; y?: number; animated?: boolean }) => void;
-};
 
 function resolveRepostTargetPostHash(post: FocusFeedPost): string {
   const rawPostBody = post.body?.trim() ?? "";
@@ -69,6 +66,8 @@ export function FeedScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const setDrawerOpen = useSetDrawerOpen();
   const insets = useSafeAreaInsets();
+  const isWebPlatform = Platform.OS === "web";
+  const shouldTrackVisiblePosts = !isWebPlatform;
 
   const flashListRef = useRef<FlashList<FocusFeedPost> | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -81,21 +80,14 @@ export function FeedScreen() {
       return;
     }
 
-    list.scrollToOffset({ offset: 0, animated });
-
-    const maybeNativeRef = (
-      list as unknown as { getNativeScrollRef?: () => unknown }
-    ).getNativeScrollRef?.();
-
-    if (
-      maybeNativeRef &&
-      typeof (maybeNativeRef as NativeScrollToRef).scrollTo === "function"
-    ) {
-      (maybeNativeRef as NativeScrollToRef).scrollTo?.({
-        x: 0,
-        y: 0,
+    try {
+      list.scrollToIndex({
+        index: 0,
         animated,
+        viewPosition: 0,
       });
+    } catch {
+      list.scrollToOffset({ offset: 0, animated });
     }
   }, []);
 
@@ -143,7 +135,7 @@ export function FeedScreen() {
       });
       await reload();
       // Scroll to top to show new content
-      scrollListToTop(true);
+      scrollListToTop(false);
       requestAnimationFrame(() => {
         scrollListToTop(false);
       });
@@ -192,6 +184,10 @@ export function FeedScreen() {
     (payload: {
       viewableItems: { item: FocusFeedPost; isViewable?: boolean }[];
     }) => {
+      if (!shouldTrackVisiblePosts) {
+        return;
+      }
+
       const next = new Set<string>();
 
       for (const token of payload.viewableItems) {
@@ -220,7 +216,7 @@ export function FeedScreen() {
         return next;
       });
     },
-    [],
+    [shouldTrackVisiblePosts],
   );
 
   const toggleFeedMode = useCallback(() => {
@@ -343,16 +339,19 @@ export function FeedScreen() {
   );
 
   const scrollToTop = useCallback(() => {
-    scrollListToTop(true);
+    if (isWebPlatform) {
+      scrollListToTop(false);
+      requestAnimationFrame(() => {
+        scrollListToTop(false);
+      });
+      return;
+    }
 
-    // Force final top snap; avoids stopping slightly above 0 on some mobile momentum states.
+    scrollListToTop(true);
     requestAnimationFrame(() => {
       scrollListToTop(false);
     });
-    setTimeout(() => {
-      scrollListToTop(false);
-    }, 180);
-  }, [scrollListToTop]);
+  }, [isWebPlatform, scrollListToTop]);
 
   const listEmptyState = useMemo(() => {
     if (isLoading) {
@@ -487,17 +486,21 @@ export function FeedScreen() {
                 <FeedCard
                   post={item}
                   isVisible={
-                    visiblePostHashes.size === 0
-                      ? index < 2
-                      : visiblePostHashes.has(item.postHash)
+                    shouldTrackVisiblePosts
+                      ? visiblePostHashes.size === 0
+                        ? index < 2
+                        : visiblePostHashes.has(item.postHash)
+                      : false
                   }
                   onReplyPress={openCommentComposer}
                   onRepostPress={openRepostActionMenu}
                   onReactionSummaryPress={openReactionList}
                 />
               )}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
+              onViewableItemsChanged={
+                shouldTrackVisiblePosts ? onViewableItemsChanged : undefined
+              }
+              viewabilityConfig={shouldTrackVisiblePosts ? viewabilityConfig : undefined}
               onScroll={handleScroll}
               scrollEventThrottle={32}
               onEndReached={() => {
@@ -535,9 +538,9 @@ export function FeedScreen() {
                   />
                 ) : undefined
               }
-              showsVerticalScrollIndicator={Platform.OS === "web"}
+              showsVerticalScrollIndicator={isWebPlatform}
               keyboardShouldPersistTaps="always"
-              removeClippedSubviews={Platform.OS !== "web"}
+              removeClippedSubviews={shouldTrackVisiblePosts}
             />
           </View>
         </PullToRefresh>
