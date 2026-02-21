@@ -51,6 +51,9 @@ const SCROLL_TO_TOP_THRESHOLD = 500;
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
+type NativeScrollToRef = {
+  scrollTo?: (options: { x?: number; y?: number; animated?: boolean }) => void;
+};
 
 function resolveRepostTargetPostHash(post: FocusFeedPost): string {
   const rawPostBody = post.body?.trim() ?? "";
@@ -67,9 +70,34 @@ export function FeedScreen() {
   const setDrawerOpen = useSetDrawerOpen();
   const insets = useSafeAreaInsets();
 
-  const flashListRef = useRef<any>(null);
+  const flashListRef = useRef<FlashList<FocusFeedPost> | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const showScrollToTopRef = useRef(false);
   const [scrollToTopOpacity] = useState(() => new Animated.Value(0));
+
+  const scrollListToTop = useCallback((animated: boolean) => {
+    const list = flashListRef.current;
+    if (!list) {
+      return;
+    }
+
+    list.scrollToOffset({ offset: 0, animated });
+
+    const maybeNativeRef = (
+      list as unknown as { getNativeScrollRef?: () => unknown }
+    ).getNativeScrollRef?.();
+
+    if (
+      maybeNativeRef &&
+      typeof (maybeNativeRef as NativeScrollToRef).scrollTo === "function"
+    ) {
+      (maybeNativeRef as NativeScrollToRef).scrollTo?.({
+        x: 0,
+        y: 0,
+        animated,
+      });
+    }
+  }, []);
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const normalizedUserPublicKey = userPublicKey?.trim() ?? "";
@@ -115,7 +143,10 @@ export function FeedScreen() {
       });
       await reload();
       // Scroll to top to show new content
-      flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      scrollListToTop(true);
+      requestAnimationFrame(() => {
+        scrollListToTop(false);
+      });
     });
   const canPullToRefresh =
     (activeFeedMode === "forYou" || Boolean(userPublicKey)) &&
@@ -152,6 +183,10 @@ export function FeedScreen() {
       useNativeDriver: true,
     }).start();
   }, [activeFeedMode, arrowProgress]);
+
+  useEffect(() => {
+    showScrollToTopRef.current = showScrollToTop;
+  }, [showScrollToTop]);
 
   const onViewableItemsChanged = useCallback(
     (payload: {
@@ -290,25 +325,34 @@ export function FeedScreen() {
       const offsetY = event.nativeEvent.contentOffset.y;
       const shouldShow = offsetY > SCROLL_TO_TOP_THRESHOLD;
 
-      setShowScrollToTop((prev) => {
-        if (prev === shouldShow) return prev;
+      if (showScrollToTopRef.current === shouldShow) {
+        return;
+      }
 
-        Animated.timing(scrollToTopOpacity, {
-          toValue: shouldShow ? 1 : 0,
-          duration: 200,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }).start();
+      showScrollToTopRef.current = shouldShow;
+      setShowScrollToTop(shouldShow);
 
-        return shouldShow;
-      });
+      Animated.timing(scrollToTopOpacity, {
+        toValue: shouldShow ? 1 : 0,
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
     },
     [scrollToTopOpacity],
   );
 
   const scrollToTop = useCallback(() => {
-    flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, []);
+    scrollListToTop(true);
+
+    // Force final top snap; avoids stopping slightly above 0 on some mobile momentum states.
+    requestAnimationFrame(() => {
+      scrollListToTop(false);
+    });
+    setTimeout(() => {
+      scrollListToTop(false);
+    }, 180);
+  }, [scrollListToTop]);
 
   const listEmptyState = useMemo(() => {
     if (isLoading) {
@@ -437,6 +481,7 @@ export function FeedScreen() {
             <FlashList
               ref={flashListRef}
               data={posts}
+              estimatedItemSize={420}
               keyExtractor={(item) => item.postHash}
               renderItem={({ item, index }) => (
                 <FeedCard
@@ -454,7 +499,7 @@ export function FeedScreen() {
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
               onScroll={handleScroll}
-              scrollEventThrottle={16}
+              scrollEventThrottle={32}
               onEndReached={() => {
                 if (hasNextPage && !isFetchingNextPage) {
                   void loadMore();
@@ -492,6 +537,7 @@ export function FeedScreen() {
               }
               showsVerticalScrollIndicator={Platform.OS === "web"}
               keyboardShouldPersistTaps="always"
+              removeClippedSubviews={Platform.OS !== "web"}
             />
           </View>
         </PullToRefresh>
