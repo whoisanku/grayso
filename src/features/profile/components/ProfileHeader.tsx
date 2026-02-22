@@ -12,6 +12,8 @@ import {
 } from "@/utils/deso";
 import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { ImageGalleryModal } from "@/features/messaging/components/ImageGalleryModal";
+import { RichText } from "@/components/ui/RichText";
+import { decodeHtmlEntities } from "@/lib/richText";
 
 const DEFAULT_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 const BANNER_BLURHASH = "LGF5]+Yk^6#M@-5c,1J5@[or[Q6.";
@@ -287,9 +289,10 @@ export function ProfileHeader({
         {/* Bio Section */}
         {bio ? (
           <View className="mb-0">
-            <Text className="text-base leading-relaxed text-slate-700 dark:text-slate-300">
-              {bio}
-            </Text>
+            <RichText
+              text={decodeHtmlEntities(bio)}
+              textClassName="text-base leading-relaxed text-slate-700 dark:text-slate-300"
+            />
           </View>
         ) : null}
       </View>

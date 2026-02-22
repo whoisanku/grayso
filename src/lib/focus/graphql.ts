@@ -98,6 +98,100 @@ const ACCOUNT_EXTENDED_BY_PUBLIC_KEY = `
   }
 `;
 
+const ACCOUNT_EXTENDED_BY_USERNAME = `
+  query AccountExtendedByUsername($username: String!) {
+    accountByUsername(username: $username) {
+      ...CoreAccountFields
+      description
+      profile {
+        publicKey
+        description
+        coinPriceDesoNanos
+        __typename
+      }
+      ...FollowingStats
+      subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+        totalCount
+        nodes {
+          id
+          subscriptions {
+            totalCount
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+
+  fragment AccountModerationFields on Account {
+    isBlacklisted
+    isGreylisted: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "GREYLIST" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isNSFW: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "USER_MODERATION" }, associationValue: { equalTo: "NSFW" } }
+    ) {
+      totalCount
+      __typename
+    }
+    isVerifier: userAssociationsAsTarget(
+      first: 1
+      filter: { associationType: { equalTo: "VERIFIER" }, associationValue: { equalTo: "VERIFIER" } }
+    ) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+
+  fragment CoreAccountFields on Account {
+    id
+    publicKey
+    username
+    extraData
+    description
+    pkid
+    isVerified
+    creatorBasisPoints
+    totalBalanceUsdCents
+    daoCoinMintingDisabled
+    daoCoinsInCirculationNanosHex
+    isVerified
+    subscriptionTiers(filter: { paymentCadenceDays: { notEqualTo: -1 } }) {
+      totalCount
+      nodes {
+        id
+        __typename
+      }
+      __typename
+    }
+    ...AccountModerationFields
+    __typename
+  }
+
+  fragment FollowingStats on Account {
+    followingCounts {
+      totalFollowing
+      totalWhaleFollowing
+      __typename
+    }
+    followerCounts {
+      totalFollowers
+      totalWhaleFollowers
+      __typename
+    }
+    __typename
+  }
+`;
+
 const ACCOUNT_FOLLOWERS_LIST = `
   query AccountFollowersList($publicKey: String!, $first: Int, $offset: Int, $orderBy: [FollowsOrderBy!] = [NATURAL]) {
     profile(publicKey: $publicKey) {
@@ -831,6 +925,13 @@ const accountExtendedResponseSchema = z.object({
   errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
 
+const accountExtendedByUsernameResponseSchema = z.object({
+  data: z.object({
+    accountByUsername: focusAccountSchema.nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
 const followFeedHashNodeSchema = z.object({
   id: z.string().nullish(),
   postHash: z.string(),
@@ -863,6 +964,7 @@ const feedPosterSchema = z.object({
 const feedRepostedPostSchema = z.object({
   body: z.string().nullish(),
   postHash: z.string(),
+  extraData: z.record(z.string(), z.unknown()).nullish(),
   imageUrls: z.array(z.string()).nullish(),
   videoUrls: z.array(z.string()).nullish(),
   timestamp: z.string().nullish(),
@@ -1131,7 +1233,7 @@ async function performGraphqlRequest(
 export async function fetchAccountExtendedByPublicKey({
   publicKey,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   publicKey: string;
   graphqlEndpoint?: string;
@@ -1161,7 +1263,7 @@ export async function fetchAccountExtendedByPublicKey({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse profile response",
+      "Unable to parse profile response",
     );
   }
 
@@ -1170,12 +1272,62 @@ export async function fetchAccountExtendedByPublicKey({
       parsed.data.errors
         .map((err) => err.message)
         .filter(Boolean)
-        .join("; ") || "Profile query returned errors",
+        .join("; ") || "Profile by public key query returned errors",
     );
   }
 
   return parsed.data.data.accountByPublicKey ?? null;
 }
+
+export async function fetchAccountExtendedByUsername({
+  username,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+  DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  username: string;
+  graphqlEndpoint?: string;
+}): Promise<FocusAccount | null> {
+  const body = {
+    operationName: "AccountExtendedByUsername",
+    query: ACCOUNT_EXTENDED_BY_USERNAME,
+    variables: { username },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+
+  const parsed = accountExtendedByUsernameResponseSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+      "Unable to parse profile response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Profile by username query returned errors",
+    );
+  }
+
+  return parsed.data.data.accountByUsername ?? null;
+}
+
 
 type FollowListResult = {
   accounts: FocusAccount[];
@@ -1188,7 +1340,7 @@ export async function fetchFollowersList({
   offset = 0,
   orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   publicKey: string;
   first?: number;
@@ -1221,7 +1373,7 @@ export async function fetchFollowersList({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse followers response",
+      "Unable to parse followers response",
     );
   }
 
@@ -1251,7 +1403,7 @@ export async function fetchFollowingList({
   offset = 0,
   orderBy = ["FOLLOWER_DESO_BALANCE_USD_CENTS_DESC"],
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   publicKey: string;
   first?: number;
@@ -1284,7 +1436,7 @@ export async function fetchFollowingList({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse following response",
+      "Unable to parse following response",
     );
   }
 
@@ -1314,7 +1466,7 @@ export async function fetchFollowFeedHashes({
   offset = 0,
   orderBy = ["TIMESTAMP_DESC"],
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   followerPublicKey: string;
   first?: number;
@@ -1358,7 +1510,7 @@ export async function fetchFollowFeedHashes({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse follow feed hashes response",
+      "Unable to parse follow feed hashes response",
     );
   }
 
@@ -1388,7 +1540,7 @@ export async function fetchForYouFeedHashes({
   offset = 0,
   orderBy = ["WEIGHTED_SCORE_WITH_WEALTH_DESC"],
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   first?: number;
   offset?: number;
@@ -1433,7 +1585,7 @@ export async function fetchForYouFeedHashes({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse for you feed hashes response",
+      "Unable to parse for you feed hashes response",
     );
   }
 
@@ -1462,7 +1614,7 @@ export async function fetchPostByPostHash({
   postHash,
   readerPublicKey = "",
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   postHash: string;
   readerPublicKey?: string;
@@ -1496,7 +1648,7 @@ export async function fetchPostByPostHash({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse post by hash response",
+      "Unable to parse post by hash response",
     );
   }
 
@@ -1519,7 +1671,7 @@ export async function fetchPostByPostHashReactionList({
   orderBy = ["TRANSACTOR_TOTAL_BALANCE_USD_CENTS_DESC"],
   reactionValue,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   postHash: string;
   first?: number;
@@ -1538,10 +1690,10 @@ export async function fetchPostByPostHashReactionList({
       orderBy,
       filter: reactionValue
         ? {
-            associationValue: {
-              equalTo: reactionValue,
-            },
-          }
+          associationValue: {
+            equalTo: reactionValue,
+          },
+        }
         : null,
     },
   };
@@ -1565,7 +1717,7 @@ export async function fetchPostByPostHashReactionList({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse post reactions response",
+      "Unable to parse post reactions response",
     );
   }
 
@@ -2011,7 +2163,7 @@ async function fetchFocusApiNotificationsPage({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse Focus notifications response",
+      "Unable to parse Focus notifications response",
     );
   }
 
@@ -2070,7 +2222,7 @@ export async function markAllFocusNotificationsRead({
   if (!parsed.success) {
     throw new Error(
       parsed.error.issues.map((issue) => issue.message).join(", ") ||
-        "Unable to parse Focus notifications read response",
+      "Unable to parse Focus notifications read response",
     );
   }
 
@@ -2168,11 +2320,11 @@ async function hydrateNotificationPostPreviews(
     return items.map((item) =>
       item.previewText === NOTIFICATION_POST_PREVIEW_PLACEHOLDER
         ? {
-            ...item,
-            previewText: "",
-            previewImageUrl: null,
-            previewVideoUrl: null,
-          }
+          ...item,
+          previewText: "",
+          previewImageUrl: null,
+          previewVideoUrl: null,
+        }
         : item
     );
   }
@@ -2363,7 +2515,7 @@ export async function fetchInboxMessageThreads({
   isSpam,
   filter,
   graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
-    DEFAULT_FOCUS_GRAPHQL_URL,
+  DEFAULT_FOCUS_GRAPHQL_URL,
 }: {
   userPublicKey: string;
   first?: number;
@@ -2381,9 +2533,9 @@ export async function fetchInboxMessageThreads({
     ...filter,
     ...(typeof isSpam === "boolean"
       ? {
-          // Explicit isSpam param takes precedence over caller-provided filter
-          isSpam: { equalTo: isSpam },
-        }
+        // Explicit isSpam param takes precedence over caller-provided filter
+        isSpam: { equalTo: isSpam },
+      }
       : {}),
   } as Record<string, unknown>;
 

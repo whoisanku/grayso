@@ -5,7 +5,7 @@ const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(((?:\\.|[^)])+)\)/g;
 const HTML_IMAGE_TAG_REGEX =
   /<img\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^>\s]+))[^>]*>/gi;
 const MARKDOWN_ESCAPED_CHAR_REGEX = /\\([\\`*_{}()[\]#+\-.!~|&<>])/g;
-const HTML_ENTITY_REGEX = /&(amp|lt|gt|quot|#39);/gi;
+const HTML_ENTITY_REGEX = /&(?:#x([0-9a-fA-F]+)|#(\d+)|(amp|lt|gt|quot|nbsp|apos));/gi;
 
 type ParseRichTextInput = {
   body?: string | null;
@@ -21,14 +21,24 @@ function decodeMarkdownEscapes(value: string): string {
   return value.replace(MARKDOWN_ESCAPED_CHAR_REGEX, "$1");
 }
 
-function decodeHtmlEntities(value: string): string {
-  return value.replace(HTML_ENTITY_REGEX, (_match, entity) => {
-    const key = String(entity).toLowerCase();
+export function decodeHtmlEntities(value: string): string {
+  return value.replace(HTML_ENTITY_REGEX, (_match, hex, decimal, named) => {
+    // Hex numeric entity: &#xNN;
+    if (hex) {
+      return String.fromCodePoint(parseInt(hex, 16));
+    }
+    // Decimal numeric entity: &#NNN;
+    if (decimal) {
+      return String.fromCodePoint(parseInt(decimal, 10));
+    }
+    // Named entity
+    const key = String(named).toLowerCase();
     if (key === "amp") return "&";
     if (key === "lt") return "<";
     if (key === "gt") return ">";
     if (key === "quot") return '"';
-    if (key === "#39") return "'";
+    if (key === "nbsp") return " ";
+    if (key === "apos") return "'";
     return _match;
   });
 }
@@ -115,6 +125,93 @@ function uniqueUrls(values: (string | null)[]): string[] {
   return urls;
 }
 
+export type RichTextSegment =
+  | { type: "text"; content: string }
+  | { type: "link"; content: string; url: string }
+  | { type: "mention"; content: string; username: string }
+  | { type: "hashtag"; content: string; tag: string };
+
+const MENTION_REGEX = /@([a-zA-Z0-9_]{1,30})/g;
+const HASHTAG_REGEX = /#([a-zA-Z0-9_]+)/g;
+const URL_REGEX =
+  /(?:https?:\/\/|www\.)[^\s<]+[^.,;!?:>\s\)]|(?:\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b(?:\/[^\s<]*[^.,;!?:>\s\)])?)/gi;
+
+export function getRichTextSegments(text: string): RichTextSegment[] {
+  if (!text) return [];
+
+  const segments: RichTextSegment[] = [];
+  let lastIndex = 0;
+
+  // Combine regexes for efficiency or just run them sequentially if expected volume is low.
+  // For simplicity and correctness with overlapping matches, we'll use a more robust approach.
+  const regex = new RegExp(
+    `${MENTION_REGEX.source}|${HASHTAG_REGEX.source}|${URL_REGEX.source}`,
+    "gi",
+  );
+
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const [fullMatch, mentionUsername, hashtagLabel] = match;
+    let startIndex = match.index;
+
+    // Add preceding text, stripping trailing `<` if it wraps a URL
+    if (startIndex > lastIndex) {
+      let preceding = text.slice(lastIndex, startIndex);
+      // Strip a trailing `<` that wraps this URL (DeSo post format: <URL>)
+      if (preceding.endsWith("<") && !mentionUsername && !hashtagLabel) {
+        preceding = preceding.slice(0, -1);
+      }
+      if (preceding) {
+        segments.push({
+          type: "text",
+          content: preceding,
+        });
+      }
+    }
+
+    if (mentionUsername) {
+      segments.push({
+        type: "mention",
+        content: fullMatch,
+        username: mentionUsername,
+      });
+    } else if (hashtagLabel) {
+      segments.push({
+        type: "hashtag",
+        content: fullMatch,
+        tag: hashtagLabel,
+      });
+    } else {
+      let url = fullMatch;
+      if (!url.startsWith("http")) {
+        url = `https://${url}`;
+      }
+      segments.push({
+        type: "link",
+        content: fullMatch,
+        url: url,
+      });
+
+      // Consume trailing `>` if the URL was wrapped in angle brackets
+      if (regex.lastIndex < text.length && text[regex.lastIndex] === ">") {
+        regex.lastIndex += 1;
+      }
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    segments.push({
+      type: "text",
+      content: text.slice(lastIndex),
+    });
+  }
+
+  return segments;
+}
+
 export function parseRichTextContent({
   body,
   imageUrls,
@@ -139,7 +236,9 @@ export function parseRichTextContent({
     MARKDOWN_IMAGE_REGEX,
     (_match, rawDestination) => {
       const url = normalizeExtractedUrl(
-        splitMarkdownDestination(typeof rawDestination === "string" ? rawDestination : ""),
+        splitMarkdownDestination(
+          typeof rawDestination === "string" ? rawDestination : "",
+        ),
       );
       if (url) {
         markdownImageUrls.push(url);
@@ -160,13 +259,15 @@ export function parseRichTextContent({
       }
 
       const safeUrl = normalizeExtractedUrl(
-        splitMarkdownDestination(typeof rawDestination === "string" ? rawDestination : ""),
+        splitMarkdownDestination(
+          typeof rawDestination === "string" ? rawDestination : "",
+        ),
       );
       return safeUrl ?? "";
     },
   );
 
-  const normalizedText = bodyWithLinkLabels
+  const normalizedText = decodeHtmlEntities(bodyWithLinkLabels)
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

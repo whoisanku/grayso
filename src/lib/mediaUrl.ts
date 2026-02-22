@@ -193,6 +193,24 @@ export function normalizeVideoSource(rawUrl: string): NormalizedVideoSource {
         };
       }
     }
+    // ── YouTube ────────────────────────────────────────────────────────
+    if (hostname.includes("youtube.com") || hostname === "youtu.be") {
+      let videoId = "";
+      if (hostname === "youtu.be") {
+        videoId = trimSlashes(parsed.pathname);
+      } else {
+        videoId = parsed.searchParams.get("v") || "";
+      }
+
+      if (videoId) {
+        return {
+          iframeUrl: `https://www.youtube.com/embed/${videoId}`,
+          playableUrl: `https://www.youtube.com/watch?v=${videoId}`,
+          isHls: false,
+          posterUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        };
+      }
+    }
   } catch {
     // Fall through to raw URL playback.
   }

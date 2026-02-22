@@ -81,15 +81,11 @@ function InactiveVideoPreview({
           />
         ) : Platform.OS === "web" && fallbackVideoUrl ? (
           <video
-            src={fallbackVideoUrl}
+            src={`${fallbackVideoUrl}#t=0.001`}
             style={styles.htmlPreviewVideo}
-            autoPlay
             muted
             playsInline
-            preload="auto"
-            onLoadedData={(event) => {
-              event.currentTarget.pause();
-            }}
+            preload="metadata"
           />
         ) : null}
         <View style={styles.previewOverlay}>
@@ -444,20 +440,26 @@ export function FeedVideo({
   const mediaAspectRatio = posterAspectRatio ?? DEFAULT_VIDEO_ASPECT_RATIO;
   const maxMediaHeight = Math.min(420, Math.max(260, viewportHeight * 0.52));
 
-  if (!isActive) {
+  // Click-to-play for web: videos start inactive, user clicks to activate
+  const [webActivated, setWebActivated] = useState(false);
+  const effectiveActive = isActive || (Platform.OS === "web" && webActivated);
+
+  if (!effectiveActive) {
     return (
-      <InactiveVideoPreview
-        posterUrl={normalized.posterUrl}
-        fallbackVideoUrl={
-          Platform.OS === "web" && !normalized.posterUrl && !normalized.iframeUrl
-            ? normalized.playableUrl
-            : undefined
-        }
-        isDark={isDark}
-        borderRadius={borderRadius}
-        aspectRatio={mediaAspectRatio}
-        maxHeight={maxMediaHeight}
-      />
+      <Pressable onPress={() => Platform.OS === "web" && setWebActivated(true)}>
+        <InactiveVideoPreview
+          posterUrl={normalized.posterUrl}
+          fallbackVideoUrl={
+            Platform.OS === "web" && !normalized.posterUrl
+              ? normalized.playableUrl
+              : undefined
+          }
+          isDark={isDark}
+          borderRadius={borderRadius}
+          aspectRatio={mediaAspectRatio}
+          maxHeight={maxMediaHeight}
+        />
+      </Pressable>
     );
   }
 

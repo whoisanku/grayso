@@ -9,6 +9,7 @@ import {
   View,
   type GestureResponderEvent,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { useQueryClient } from "@tanstack/react-query";
 import { ThumbsUp } from "lucide-react-native";
@@ -231,6 +232,7 @@ export function FeedCard({
     mutateAsync: setPostReactionAssociationAsync,
     isPending: isUpdatingReaction,
   } = useSetPostReactionAssociation();
+  const navigation = useNavigation<any>();
 
   const [isReactionPickerVisible, setIsReactionPickerVisible] =
     React.useState(false);
@@ -466,6 +468,26 @@ export function FeedCard({
     ? repostedPost?.timestamp ?? post.timestamp
     : post.timestamp;
   const formattedPrimaryTimestamp = formatRelativeTimestamp(primaryTimestamp);
+
+  const handleProfilePress = React.useCallback(
+    (event: { stopPropagation?: () => void }) => {
+      event?.stopPropagation?.();
+      if (usernameHandle) {
+        navigation.navigate("Profile", { username: usernameHandle });
+      }
+    },
+    [navigation, usernameHandle],
+  );
+
+  const handleEmbeddedProfilePress = React.useCallback(
+    (event: { stopPropagation?: () => void }) => {
+      event?.stopPropagation?.();
+      if (embeddedUsernameHandle) {
+        navigation.navigate("Profile", { username: embeddedUsernameHandle });
+      }
+    },
+    [navigation, embeddedUsernameHandle],
+  );
 
   const primaryBody = isPureRepost ? repostBody : postBody;
   const primaryImageUrls = isPureRepost
@@ -708,11 +730,20 @@ export function FeedCard({
       ) : null}
 
       <View className="flex-row items-start">
-        <UserAvatar uri={avatarUri} name={displayName} size={44} />
+        <Pressable
+          onPress={handleProfilePress}
+          style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
+        >
+          <UserAvatar uri={avatarUri} name={displayName} size={44} />
+        </Pressable>
 
         <View className="ml-3 flex-1">
           {isPureRepost ? (
-            <View className="flex-row items-center gap-1.5">
+            <Pressable
+              onPress={handleProfilePress}
+              className="flex-row items-center gap-1.5"
+              style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
+            >
               <Text
                 numberOfLines={1}
                 className="text-[15px] font-semibold text-slate-900 dark:text-white"
@@ -728,10 +759,14 @@ export function FeedCard({
                   ? ` · ${formattedPrimaryTimestamp}`
                   : ""}
               </Text>
-            </View>
+            </Pressable>
           ) : (
             <View className="flex-row items-start justify-between">
-              <View className="flex-1 pr-3">
+              <Pressable
+                onPress={handleProfilePress}
+                className="flex-1 pr-3"
+                style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
+              >
                 <Text
                   numberOfLines={1}
                   className="text-[15px] font-semibold text-slate-900 dark:text-white"
@@ -744,7 +779,7 @@ export function FeedCard({
                 >
                   @{usernameHandle}
                 </Text>
-              </View>
+              </Pressable>
 
               <Text className="text-[12px] text-slate-500 dark:text-slate-400">
                 {formattedPrimaryTimestamp}
@@ -755,6 +790,7 @@ export function FeedCard({
           {primaryBody ? (
             <ExpandablePostText
               text={primaryBody}
+              extraData={isPureRepost ? repostedPost?.extraData : post.extraData}
               collapsedChars={430}
               textClassName="mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100"
               toggleClassName="text-[13px] font-semibold text-sky-600 dark:text-sky-400"
@@ -770,7 +806,11 @@ export function FeedCard({
 
           {hasEmbeddedRepostCard ? (
             <View className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
-              <View className="flex-row items-start">
+              <Pressable
+                onPress={handleEmbeddedProfilePress}
+                className="flex-row items-start"
+                style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
+              >
                 <UserAvatar
                   uri={embeddedAvatarUri}
                   name={embeddedDisplayName}
@@ -791,11 +831,12 @@ export function FeedCard({
                     @{embeddedUsernameHandle}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
 
               {repostBody ? (
                 <ExpandablePostText
                   text={repostBody}
+                  extraData={repostedPost?.extraData}
                   collapsedChars={260}
                   textClassName="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100"
                   toggleClassName="text-[12px] font-semibold text-sky-600 dark:text-sky-400"
@@ -814,53 +855,55 @@ export function FeedCard({
         </View>
       </View>
 
-      {hasInteractionSummary ? (
-        <View className="mt-3 flex-row items-center justify-between">
-          {displayedTotalReactionCount > 0 ? (
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation?.();
-                onReactionSummaryPress?.(post);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="View reactions"
-              style={actionButtonStyle}
-            >
-              <View className="flex-row items-center">
-                {topReactionBadges.map((reaction, index) => (
-                  <View
-                    key={reaction.value}
-                    className="h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
-                    style={{
-                      marginLeft: index === 0 ? 0 : -6,
-                      zIndex: topReactionBadges.length - index,
-                    }}
-                  >
-                    <ReactionIcon name={reaction.iconName} size={13} />
-                  </View>
-                ))}
-
-                <Text className="ml-1.5 text-[12px] text-slate-500 dark:text-slate-400">
-                  {formatCount(displayedTotalReactionCount)}
-                </Text>
-              </View>
-            </Pressable>
-          ) : (
-            <View className="flex-row items-center" />
-          )}
-
-          <View className="flex-row items-center gap-3">
-            {interactionSummaryItems.map((item) => (
-              <Text
-                key={item}
-                className="text-[12px] text-slate-500 dark:text-slate-400"
+      {
+        hasInteractionSummary ? (
+          <View className="mt-3 flex-row items-center justify-between">
+            {displayedTotalReactionCount > 0 ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onReactionSummaryPress?.(post);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="View reactions"
+                style={actionButtonStyle}
               >
-                {item}
-              </Text>
-            ))}
+                <View className="flex-row items-center">
+                  {topReactionBadges.map((reaction, index) => (
+                    <View
+                      key={reaction.value}
+                      className="h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                      style={{
+                        marginLeft: index === 0 ? 0 : -6,
+                        zIndex: topReactionBadges.length - index,
+                      }}
+                    >
+                      <ReactionIcon name={reaction.iconName} size={13} />
+                    </View>
+                  ))}
+
+                  <Text className="ml-1.5 text-[12px] text-slate-500 dark:text-slate-400">
+                    {formatCount(displayedTotalReactionCount)}
+                  </Text>
+                </View>
+              </Pressable>
+            ) : (
+              <View className="flex-row items-center" />
+            )}
+
+            <View className="flex-row items-center gap-3">
+              {interactionSummaryItems.map((item) => (
+                <Text
+                  key={item}
+                  className="text-[12px] text-slate-500 dark:text-slate-400"
+                >
+                  {item}
+                </Text>
+              ))}
+            </View>
           </View>
-        </View>
-      ) : null}
+        ) : null
+      }
 
       <View
         className={
@@ -878,13 +921,13 @@ export function FeedCard({
                   Platform.OS === "web"
                     ? ({ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 } as any)
                     : {
-                        position: "absolute",
-                        top: -4000,
-                        bottom: -4000,
-                        left: -4000,
-                        right: -4000,
-                        zIndex: 40,
-                      }
+                      position: "absolute",
+                      top: -4000,
+                      bottom: -4000,
+                      left: -4000,
+                      right: -4000,
+                      zIndex: 40,
+                    }
                 }
                 onPress={(e) => {
                   e.stopPropagation?.();
@@ -907,71 +950,71 @@ export function FeedCard({
                     : undefined
                 }
               >
-              <Animated.View
-                style={[
-                  reactionPickerStyles.container,
-                  {
-                    opacity: reactionPickerAnimation,
-                    transform: [{ translateY: reactionPickerTranslateY }],
-                  },
-                ]}
-              >
-                {FOCUS_POST_REACTION_OPTIONS.map((reactionOption, index) => {
-                  const itemScale = emojiItemAnimations[index].interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [0, 1.2, 1],
-                  });
-                  const itemTranslateY = emojiItemAnimations[index].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [16, 0],
-                  });
+                <Animated.View
+                  style={[
+                    reactionPickerStyles.container,
+                    {
+                      opacity: reactionPickerAnimation,
+                      transform: [{ translateY: reactionPickerTranslateY }],
+                    },
+                  ]}
+                >
+                  {FOCUS_POST_REACTION_OPTIONS.map((reactionOption, index) => {
+                    const itemScale = emojiItemAnimations[index].interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0, 1.2, 1],
+                    });
+                    const itemTranslateY = emojiItemAnimations[index].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [16, 0],
+                    });
 
-                  return (
-                    <Animated.View
-                      key={reactionOption.value}
-                      style={{
-                        opacity: emojiItemAnimations[index],
-                        transform: [
-                          { scale: Animated.multiply(itemScale, emojiHoverAnimations[index]) },
-                          { translateY: itemTranslateY },
-                        ],
-                      }}
-                    >
-                      <Pressable
-                        className="items-center justify-center rounded-full"
-                        style={[
-                          reactionPickerStyles.emojiButton,
-                          currentReactionValue === reactionOption.value
-                            ? reactionPickerStyles.activeEmojiButton
-                            : null,
-                        ]}
-                        onPress={(event) => {
-                          const nextReactionValue =
-                            currentReactionValue === reactionOption.value
-                              ? null
-                              : reactionOption.value;
-                          void applyReaction(nextReactionValue, event);
+                    return (
+                      <Animated.View
+                        key={reactionOption.value}
+                        style={{
+                          opacity: emojiItemAnimations[index],
+                          transform: [
+                            { scale: Animated.multiply(itemScale, emojiHoverAnimations[index]) },
+                            { translateY: itemTranslateY },
+                          ],
                         }}
-                        onHoverIn={
-                          Platform.OS === "web"
-                            ? () => handleEmojiHoverIn(index)
-                            : undefined
-                        }
-                        onHoverOut={
-                          Platform.OS === "web"
-                            ? () => handleEmojiHoverOut(index)
-                            : undefined
-                        }
-                        accessibilityRole="button"
-                        accessibilityLabel={`React with ${reactionOption.label}`}
                       >
-                        <ReactionIcon name={reactionOption.iconName} size={24} />
-                      </Pressable>
-                    </Animated.View>
-                  );
-                })}
-              </Animated.View>
-            </Pressable>
+                        <Pressable
+                          className="items-center justify-center rounded-full"
+                          style={[
+                            reactionPickerStyles.emojiButton,
+                            currentReactionValue === reactionOption.value
+                              ? reactionPickerStyles.activeEmojiButton
+                              : null,
+                          ]}
+                          onPress={(event) => {
+                            const nextReactionValue =
+                              currentReactionValue === reactionOption.value
+                                ? null
+                                : reactionOption.value;
+                            void applyReaction(nextReactionValue, event);
+                          }}
+                          onHoverIn={
+                            Platform.OS === "web"
+                              ? () => handleEmojiHoverIn(index)
+                              : undefined
+                          }
+                          onHoverOut={
+                            Platform.OS === "web"
+                              ? () => handleEmojiHoverOut(index)
+                              : undefined
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`React with ${reactionOption.label}`}
+                        >
+                          <ReactionIcon name={reactionOption.iconName} size={24} />
+                        </Pressable>
+                      </Animated.View>
+                    );
+                  })}
+                </Animated.View>
+              </Pressable>
             </>
           ) : null}
 
@@ -984,9 +1027,9 @@ export function FeedCard({
             onHoverOut={
               Platform.OS === "web"
                 ? () => {
-                    cancelReactionPickerOpen();
-                    scheduleReactionPickerClose();
-                  }
+                  cancelReactionPickerOpen();
+                  scheduleReactionPickerClose();
+                }
                 : undefined
             }
             accessibilityRole="button"
@@ -1066,7 +1109,7 @@ export function FeedCard({
           </Text>
         </Pressable>
       </View>
-    </Pressable>
+    </Pressable >
   );
 }
 
@@ -1088,16 +1131,16 @@ const reactionPickerStyles = StyleSheet.create({
     // Subtle shadow for depth
     ...(Platform.OS === "web"
       ? {
-          boxShadow: "0 6px 26px rgba(0,0,0,0.38)",
-          backdropFilter: "blur(12px)",
-        }
+        boxShadow: "0 6px 26px rgba(0,0,0,0.38)",
+        backdropFilter: "blur(12px)",
+      }
       : {
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.35,
-          shadowRadius: 12,
-          elevation: 8,
-        }),
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+        elevation: 8,
+      }),
   },
   emojiButton: {
     width: 36,

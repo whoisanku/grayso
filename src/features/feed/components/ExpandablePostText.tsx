@@ -5,9 +5,11 @@ import {
   View,
   type GestureResponderEvent,
 } from "react-native";
+import { RichText } from "@/components/ui/RichText";
 
 type ExpandablePostTextProps = {
   text: string;
+  extraData?: Record<string, any> | null;
   collapsedChars?: number;
   textClassName?: string;
   toggleClassName?: string;
@@ -35,6 +37,7 @@ function getCollapsedText(text: string, collapsedChars: number): string {
 
 export function ExpandablePostText({
   text,
+  extraData,
   collapsedChars = 380,
   textClassName,
   toggleClassName,
@@ -65,10 +68,16 @@ export function ExpandablePostText({
 
   return (
     <View>
-      <Text
-        className={textClassName ?? "text-[15px] leading-6 text-slate-900 dark:text-slate-100"}
+      <View
+        className={textClassName ?? "mt-1"}
       >
-        {isExpanded || !isCollapsible ? normalizedText : collapsedText}
+        <RichText
+          text={isExpanded || !isCollapsible ? normalizedText : collapsedText}
+          extraData={extraData}
+          textClassName={textClassName ?? "text-[15px] leading-6 text-slate-900 dark:text-slate-100"}
+          linkClassName="text-sky-600 dark:text-sky-400 font-medium"
+          mentionClassName="text-sky-600 dark:text-sky-400 font-semibold"
+        />
         {isCollapsible ? " " : ""}
         {isCollapsible ? (
           <Text
@@ -83,7 +92,7 @@ export function ExpandablePostText({
             {isExpanded ? "See less" : "See more"}
           </Text>
         ) : null}
-      </Text>
+      </View>
 
       {/* Keep separate line-break behavior predictable when text is empty. */}
       {normalizedText.length === 0 ? (

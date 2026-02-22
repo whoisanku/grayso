@@ -28,12 +28,12 @@ export function ProfileScreen() {
 
   // Get params from route (for other users) or fallback to current user
   const { username, publicKey: routePublicKey } = route.params || {};
-  
-  // Prioritize route params, then fallback to current user
-  const publicKey = routePublicKey || currentUser?.PublicKeyBase58Check;
-  
-  // Check if viewing own profile
-  const isOwnProfile = publicKey === currentUser?.PublicKeyBase58Check;
+
+  const profileParams = useMemo(() => {
+    if (routePublicKey) return { publicKey: routePublicKey };
+    if (username) return { username };
+    return currentUser?.PublicKeyBase58Check ? { publicKey: currentUser.PublicKeyBase58Check } : {};
+  }, [routePublicKey, username, currentUser?.PublicKeyBase58Check]);
 
   const {
     data: account,
@@ -41,7 +41,13 @@ export function ProfileScreen() {
     isFetching,
     error,
     refetch,
-  } = useAccountProfile(publicKey);
+  } = useAccountProfile(profileParams);
+
+  // Check if viewing own profile (only if we have a public key)
+  const isOwnProfile = (routePublicKey || account?.publicKey) === currentUser?.PublicKeyBase58Check || (!route.params && !!currentUser);
+
+  // The actual public key we use for follow lists, etc.
+  const activePublicKey = account?.publicKey || routePublicKey || (isOwnProfile ? currentUser?.PublicKeyBase58Check : undefined);
 
   const followerCount = useMemo(
     () => account?.followerCounts?.totalFollowers ?? 0,
@@ -77,7 +83,7 @@ export function ProfileScreen() {
     }
   }, [account?.username, username, navigation]);
 
-  if (!publicKey) {
+  if (!profileParams.publicKey && !profileParams.username) {
     return (
       <ScreenWrapper backgroundColor={isDark ? "#0a0f1a" : "#ffffff"} edges={['top', 'left', 'right']}>
         <View className="flex-1 items-center justify-center px-6">
@@ -96,7 +102,7 @@ export function ProfileScreen() {
       edges={['top', 'left', 'right']}
     >
       <ScrollView
-        contentContainerStyle={{ 
+        contentContainerStyle={{
           paddingBottom: isOwnProfile ? 32 : (32 + 70 + Math.max(insets.bottom, 15))
         }}
         refreshControl={
@@ -144,8 +150,8 @@ export function ProfileScreen() {
         ) : (
           <>
             {/* Profile Header (includes bio) */}
-            <ProfileHeader 
-              account={account} 
+            <ProfileHeader
+              account={account}
               onAvatarPress={handleFollowersPress}
               showBackButton={!isOwnProfile}
               onBackPress={() => navigation.goBack()}
@@ -153,8 +159,8 @@ export function ProfileScreen() {
 
             {/* Stats */}
             <View className="px-4 mt-3">
-              <ProfileStats 
-                followers={followerCount} 
+              <ProfileStats
+                followers={followerCount}
                 following={followingCount}
                 posts={0}
                 onFollowersPress={handleFollowersPress}
@@ -172,7 +178,7 @@ export function ProfileScreen() {
       </ScrollView>
       <FollowListModal
         visible={isModalVisible}
-        publicKey={publicKey}
+        publicKey={activePublicKey || ""}
         initialTab={listTab}
         onClose={handleCloseModal}
       />
