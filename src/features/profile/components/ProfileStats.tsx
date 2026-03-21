@@ -20,27 +20,24 @@ const pluralize = (count: number, singular: string, plural: string) => {
 type StatProps = {
   followers?: number | null;
   following?: number | null;
-  posts?: number | null;
   onFollowersPress?: () => void;
   onFollowingPress?: () => void;
 };
 
-export function ProfileStats({ 
-  followers = 0, 
+export function ProfileStats({
+  followers = 0,
   following = 0,
-  posts = 0,
   onFollowersPress,
-  onFollowingPress 
+  onFollowingPress,
 }: StatProps) {
   const followerCount = followers ?? 0;
   const followingCount = following ?? 0;
 
   return (
-    <View 
-      className="flex-row items-center gap-3 flex-wrap"
+    <View
+      className="flex-row flex-wrap items-center gap-3"
       pointerEvents="box-none"
     >
-      {/* Followers */}
       {onFollowersPress ? (
         <TouchableOpacity
           testID="profileStatsFollowers"
@@ -51,7 +48,7 @@ export function ProfileStats({
           <Text className="text-base font-semibold text-slate-900 dark:text-white">
             {formatCount(followerCount)}
           </Text>
-          <Text className="text-base text-slate-500 dark:text-slate-400 ml-1">
+          <Text className="ml-1 text-base text-slate-500 dark:text-slate-400">
             {pluralize(followerCount, "follower", "followers")}
           </Text>
         </TouchableOpacity>
@@ -60,16 +57,14 @@ export function ProfileStats({
           <Text className="text-base font-semibold text-slate-900 dark:text-white">
             {formatCount(followerCount)}
           </Text>
-          <Text className="text-base text-slate-500 dark:text-slate-400 ml-1">
+          <Text className="ml-1 text-base text-slate-500 dark:text-slate-400">
             {pluralize(followerCount, "follower", "followers")}
           </Text>
         </View>
       )}
 
-      {/* Separator */}
-      <Text className="text-base text-slate-400 dark:text-slate-600">·</Text>
+      <View className="h-1 w-1 rounded-full bg-slate-400 dark:bg-slate-600" />
 
-      {/* Following */}
       {onFollowingPress ? (
         <TouchableOpacity
           testID="profileStatsFollowing"
@@ -80,7 +75,7 @@ export function ProfileStats({
           <Text className="text-base font-semibold text-slate-900 dark:text-white">
             {formatCount(followingCount)}
           </Text>
-          <Text className="text-base text-slate-500 dark:text-slate-400 ml-1">
+          <Text className="ml-1 text-base text-slate-500 dark:text-slate-400">
             following
           </Text>
         </TouchableOpacity>
@@ -89,7 +84,7 @@ export function ProfileStats({
           <Text className="text-base font-semibold text-slate-900 dark:text-white">
             {formatCount(followingCount)}
           </Text>
-          <Text className="text-base text-slate-500 dark:text-slate-400 ml-1">
+          <Text className="ml-1 text-base text-slate-500 dark:text-slate-400">
             following
           </Text>
         </View>

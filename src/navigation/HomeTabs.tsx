@@ -394,7 +394,6 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           <ProfileStats
             followers={followerCount}
             following={followingCount}
-            posts={0}
           />
         </View>
 

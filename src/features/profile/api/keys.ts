@@ -3,4 +3,6 @@ export const profileKeys = {
   account: (publicKey: string) => [...profileKeys.base, "account", publicKey] as const,
   followers: (publicKey: string) => [...profileKeys.base, "followers", publicKey] as const,
   following: (publicKey: string) => [...profileKeys.base, "following", publicKey] as const,
+  posts: (publicKey: string, username: string, readerPublicKey: string) =>
+    [...profileKeys.base, "posts", publicKey, username, readerPublicKey] as const,
 };

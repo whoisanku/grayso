@@ -1,44 +1,43 @@
 import React, { memo } from "react";
 import { View } from "react-native";
+
 import { Shimmer } from "@/components/ui/Shimmer";
 
-/** Profile page shimmer skeleton — avatar, name, username, stats, bio */
+/** Profile page shimmer skeleton - banner, avatar, name, username, stats, bio */
 export const ProfileShimmer = memo(function ProfileShimmer() {
   return (
-    <View className="items-center px-6 py-8" style={{ gap: 16 }}>
-      {/* Avatar */}
-      <Shimmer width={88} height={88} borderRadius={44} />
+    <View className="w-full">
+      <Shimmer width="100%" height={150} borderRadius={0} />
 
-      {/* Name */}
-      <Shimmer width={160} height={18} borderRadius={8} />
-
-      {/* Username */}
-      <Shimmer width={110} height={13} borderRadius={6} />
-
-      {/* Stats row */}
-      <View className="flex-row" style={{ gap: 24, marginTop: 4 }}>
-        <View className="items-center" style={{ gap: 6 }}>
-          <Shimmer width={36} height={16} borderRadius={6} />
-          <Shimmer width={56} height={11} borderRadius={5} />
+      <View className="px-4">
+        <View className="-mt-12 mb-3">
+          <Shimmer width={90} height={90} borderRadius={45} />
         </View>
-        <View className="items-center" style={{ gap: 6 }}>
-          <Shimmer width={36} height={16} borderRadius={6} />
-          <Shimmer width={56} height={11} borderRadius={5} />
+
+        <View style={{ gap: 10 }}>
+          <Shimmer width={176} height={24} borderRadius={10} />
+          <Shimmer width={120} height={16} borderRadius={8} />
         </View>
-        <View className="items-center" style={{ gap: 6 }}>
-          <Shimmer width={36} height={16} borderRadius={6} />
-          <Shimmer width={56} height={11} borderRadius={5} />
+
+        <View className="mt-4 flex-row items-center" style={{ gap: 18 }}>
+          <View className="flex-row items-center" style={{ gap: 6 }}>
+            <Shimmer width={34} height={16} borderRadius={6} />
+            <Shimmer width={72} height={13} borderRadius={6} />
+          </View>
+          <View className="flex-row items-center" style={{ gap: 6 }}>
+            <Shimmer width={34} height={16} borderRadius={6} />
+            <Shimmer width={72} height={13} borderRadius={6} />
+          </View>
+        </View>
+
+        <View className="mt-4 w-full" style={{ gap: 8 }}>
+          <Shimmer width="92%" height={14} borderRadius={7} />
+          <Shimmer width="78%" height={14} borderRadius={7} />
+          <Shimmer width="64%" height={14} borderRadius={7} />
         </View>
       </View>
 
-      {/* Bio lines */}
-      <View className="w-full" style={{ gap: 8, marginTop: 8 }}>
-        <Shimmer width="80%" height={12} borderRadius={6} />
-        <Shimmer width="55%" height={12} borderRadius={6} />
-      </View>
-
-      {/* Edit button */}
-      <Shimmer width={140} height={38} borderRadius={19} style={{ marginTop: 8 }} />
+      <View className="mt-4 border-b border-slate-200/80 dark:border-slate-800/80" />
     </View>
   );
 });

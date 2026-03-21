@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { View, Text, Platform, TouchableOpacity } from "react-native";
+import { View, Text, Platform, Pressable, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
@@ -17,6 +17,8 @@ import { decodeHtmlEntities } from "@/lib/richText";
 
 const DEFAULT_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 const BANNER_BLURHASH = "LGF5]+Yk^6#M@-5c,1J5@[or[Q6.";
+const PROFILE_BIO_COLLAPSED_LINES = 4;
+const PROFILE_BIO_TOGGLE_MIN_CHARACTERS = 180;
 
 const getExtraString = (
   extraData: Record<string, unknown> | null | undefined,
@@ -97,9 +99,18 @@ export function ProfileHeader({
     getExtraString(extraData, "MarkdownDescription") ||
     account?.profile?.description ||
     "";
+  const decodedBio = useMemo(() => decodeHtmlEntities(bio).trim(), [bio]);
+  const shouldCollapseBio =
+    decodedBio.length >= PROFILE_BIO_TOGGLE_MIN_CHARACTERS ||
+    decodedBio.split(/\r?\n/).length > PROFILE_BIO_COLLAPSED_LINES;
+  const [isBioExpanded, setIsBioExpanded] = useState(false);
 
   // Check if user is verified (placeholder - implement actual verification logic)
   const isVerified = false; // TODO: Implement verification check
+
+  useEffect(() => {
+    setIsBioExpanded(false);
+  }, [decodedBio]);
 
   const handleBannerPress = () => {
     if (bannerUrl) {
@@ -287,12 +298,39 @@ export function ProfileHeader({
         </View>
 
         {/* Bio Section */}
-        {bio ? (
+        {decodedBio ? (
           <View className="mb-0">
             <RichText
-              text={decodeHtmlEntities(bio)}
+              text={decodedBio}
               textClassName="text-base leading-relaxed text-slate-700 dark:text-slate-300"
+              numberOfLines={
+                shouldCollapseBio && !isBioExpanded
+                  ? PROFILE_BIO_COLLAPSED_LINES
+                  : undefined
+              }
             />
+            {shouldCollapseBio ? (
+              <Pressable
+                onPress={() => setIsBioExpanded((current) => !current)}
+                className="mt-2 self-start"
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.82 : 1,
+                  ...(Platform.OS === "web"
+                    ? ({
+                        cursor: "pointer",
+                      } as const)
+                    : null),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isBioExpanded ? "Show less bio text" : "Show more bio text"
+                }
+              >
+                <Text className="text-sm font-semibold text-sky-600 dark:text-sky-400">
+                  {isBioExpanded ? "See less" : "See more"}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
       </View>

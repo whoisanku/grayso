@@ -26,6 +26,7 @@ import { NotificationsShimmer } from "@/features/notifications/components/Notifi
 import { resolveCurrentUserPublicKey } from "@/utils/deso";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { PullToRefresh } from "@/components/ui/PullToRefresh";
+import { getWebScrollbarStyle } from "@/lib/webScrollbar";
 
 const NOTIFICATIONS_PAGE_SIZE = 40;
 
@@ -38,6 +39,10 @@ export function NotificationsScreen() {
   const setDrawerOpen = useSetDrawerOpen();
   const isDesktopWeb = Platform.OS === "web" && width >= 1024;
   const isFocused = useIsFocused();
+  const scrollBarStyle = useMemo(
+    () => getWebScrollbarStyle(isDark),
+    [isDark],
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const flashListRef = useRef<any>(null);
@@ -196,6 +201,7 @@ export function NotificationsScreen() {
           <FlashList
             ref={flashListRef}
             data={items}
+            style={scrollBarStyle}
             renderItem={({ item }) => (
               <NotificationFeedItem item={item} />
             )}
@@ -234,7 +240,7 @@ export function NotificationsScreen() {
                 : undefined
             }
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={Platform.OS === "web"}
           />
         </PullToRefresh>
       </View>

@@ -47,6 +47,7 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { Toast } from "@/components/ui/Toast";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { getWebScrollbarStyle } from "@/lib/webScrollbar";
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 const MOBILE_FEED_BOTTOM_CLEARANCE = 96;
@@ -80,6 +81,10 @@ export function FeedScreen() {
   const [visiblePostHashes, setVisiblePostHashes] =
     useState<Set<string>>(EMPTY_VISIBLE_HASHES);
   const activeFeedLabel = activeFeedMode === "forYou" ? "For You" : "Following";
+  const scrollBarStyle = useMemo(
+    () => getWebScrollbarStyle(isDark),
+    [isDark],
+  );
 
   const followingFeed = useFollowFeedTimeline({
     followerPublicKey: userPublicKey,
@@ -525,6 +530,7 @@ export function FeedScreen() {
               <FlatList
                 ref={flashListRef}
                 data={posts}
+                style={scrollBarStyle}
                 keyExtractor={(item) => item.postHash}
                 renderItem={renderFeedItem}
                 onViewableItemsChanged={onViewableItemsChanged}
@@ -539,7 +545,7 @@ export function FeedScreen() {
                 ListFooterComponent={feedFooter}
                 contentContainerStyle={feedContentContainerStyle}
                 keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator={Platform.OS === "web"}
                 removeClippedSubviews={false}
                 initialNumToRender={6}
                 maxToRenderPerBatch={8}
@@ -551,6 +557,7 @@ export function FeedScreen() {
                 data={posts}
                 // @ts-expect-error FlashList runtime supports this; installed types are stale.
                 estimatedItemSize={420}
+                style={scrollBarStyle}
                 keyExtractor={(item) => item.postHash}
                 renderItem={renderFeedItem}
                 onViewableItemsChanged={onViewableItemsChanged}

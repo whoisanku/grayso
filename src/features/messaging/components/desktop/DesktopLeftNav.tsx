@@ -206,11 +206,15 @@ export function DesktopLeftNav({
   });
 
   // Determine which nav item is active based on route
+  const isMainTabsRoute = currentRouteName === "Main";
   const isFeedActive = currentRouteName === "Feed" || activeTab === "Feed";
   const isProfileActive =
     currentRouteName === "Profile" || activeTab === "Profile";
   const isNotificationsActive =
     currentRouteName === "Notifications" || activeTab === "Notifications";
+  const shouldRefreshFeed = isMainTabsRoute && activeTab === "Feed";
+  const shouldRefreshNotifications =
+    isMainTabsRoute && activeTab === "Notifications";
   const isSettingsActive = currentRouteName === "Settings";
   const isChatsActive =
     !isFeedActive &&
@@ -239,7 +243,7 @@ export function DesktopLeftNav({
       fillBased: true,
       iconSize: 22,
       onPress: async () => {
-        if (isFeedActive && !refreshingKey) {
+        if (shouldRefreshFeed && !refreshingKey) {
           // Trigger refresh if already active
           setRefreshingKey("Feed");
           try {
@@ -274,7 +278,7 @@ export function DesktopLeftNav({
       badgeCount: resolvedUnreadNotificationsCount,
       iconSize: 28,
       onPress: async () => {
-        if (isNotificationsActive && !refreshingKey) {
+        if (shouldRefreshNotifications && !refreshingKey) {
           // Trigger refresh if already active
           setRefreshingKey("Notifications");
           try {
