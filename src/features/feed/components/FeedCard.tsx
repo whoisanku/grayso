@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  type GestureResponderEvent,
   View,
 } from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
@@ -46,11 +47,18 @@ type FeedAuthor = {
   extraData?: Record<string, unknown> | null;
 };
 
+type FeedProfileTarget = {
+  publicKey?: string | null;
+  username?: string | null;
+};
+
 type ReactionCountMap = Record<FocusPostReactionValue, number>;
 
 const REACTION_VALUES = FOCUS_POST_REACTION_OPTIONS.map(
   (option) => option.value,
 ) as FocusPostReactionValue[];
+const REACTION_PICKER_HOVER_OPEN_DELAY_MS = 380;
+const REACTION_PICKER_HOVER_CLOSE_DELAY_MS = 140;
 const FEED_COLLAPSED_BODY_MAX_LINES = 5;
 const FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES = 4;
 const FEED_BODY_TOGGLE_MIN_CHARACTERS = 220;
@@ -240,7 +248,10 @@ export function FeedCard({
   isVisible,
   onPress,
   onReplyPress,
+  onRepostPress,
+  onProfilePress,
   onReactionSummaryPress,
+  initialIsFollowingAuthor = null,
   variant = "feed",
   threadChildLineVisible = false,
   threadLineColor,
@@ -249,12 +260,18 @@ export function FeedCard({
   isVisible: boolean;
   onPress?: (post: FocusFeedPost) => void;
   onReplyPress?: (post: FocusFeedPost) => void;
+  onRepostPress?: (
+    post: FocusFeedPost,
+    anchor: { x: number; y: number },
+  ) => void;
+  onProfilePress?: (profile: FeedProfileTarget) => void;
   onReactionSummaryPress?: (post: FocusFeedPost) => void;
+  initialIsFollowingAuthor?: boolean | null;
   variant?: "feed" | "thread" | "threadReply";
   threadChildLineVisible?: boolean;
   threadLineColor?: string;
 }) {
-  const { isDark } = useAccentColor();
+  const { isDark, accentColor, accentStrong } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
   const queryClient = useQueryClient();
   const {
@@ -298,9 +315,14 @@ export function FeedCard({
     FocusPostReactionValue | null | undefined
   >(undefined);
   const lastReactionPostHashRef = React.useRef(post.postHash);
+  const reactionPickerOpenTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const reactionPickerCloseTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const reactionTriggerRef = React.useRef<any>(null);
+  const reactionPickerRef = React.useRef<any>(null);
 
   const viewerReactionAssociations = React.useMemo(
     () => extractViewerReactionAssociations(post),
@@ -344,6 +366,14 @@ export function FeedCard({
     }
 
     setIsReactionPickerVisible(false);
+    if (reactionPickerOpenTimeoutRef.current) {
+      clearTimeout(reactionPickerOpenTimeoutRef.current);
+      reactionPickerOpenTimeoutRef.current = null;
+    }
+    if (reactionPickerCloseTimeoutRef.current) {
+      clearTimeout(reactionPickerCloseTimeoutRef.current);
+      reactionPickerCloseTimeoutRef.current = null;
+    }
     reactionPickerAnimation.setValue(0);
     for (const anim of emojiItemAnimations) {
       anim.setValue(0);
@@ -372,12 +402,24 @@ export function FeedCard({
 
   React.useEffect(
     () => () => {
+      if (reactionPickerOpenTimeoutRef.current) {
+        clearTimeout(reactionPickerOpenTimeoutRef.current);
+      }
       if (reactionPickerCloseTimeoutRef.current) {
         clearTimeout(reactionPickerCloseTimeoutRef.current);
       }
     },
     [],
   );
+
+  const clearReactionPickerOpenTimeout = React.useCallback(() => {
+    if (!reactionPickerOpenTimeoutRef.current) {
+      return;
+    }
+
+    clearTimeout(reactionPickerOpenTimeoutRef.current);
+    reactionPickerOpenTimeoutRef.current = null;
+  }, []);
 
   const clearReactionPickerCloseTimeout = React.useCallback(() => {
     if (!reactionPickerCloseTimeoutRef.current) {
@@ -391,7 +433,13 @@ export function FeedCard({
   const openReactionPicker = React.useCallback(
     (event?: { stopPropagation?: () => void }) => {
       event?.stopPropagation?.();
+      clearReactionPickerOpenTimeout();
       clearReactionPickerCloseTimeout();
+
+      if (isReactionPickerVisible) {
+        return;
+      }
+
       setIsReactionPickerVisible(true);
 
       // Container fade in
@@ -417,10 +465,29 @@ export function FeedCard({
       });
       Animated.parallel(staggeredAnimations).start();
     },
-    [clearReactionPickerCloseTimeout, reactionPickerAnimation, emojiItemAnimations],
+    [
+      clearReactionPickerOpenTimeout,
+      clearReactionPickerCloseTimeout,
+      emojiItemAnimations,
+      isReactionPickerVisible,
+      reactionPickerAnimation,
+    ],
   );
 
+  const scheduleReactionPickerOpen = React.useCallback(() => {
+    clearReactionPickerOpenTimeout();
+    clearReactionPickerCloseTimeout();
+    reactionPickerOpenTimeoutRef.current = setTimeout(() => {
+      openReactionPicker();
+    }, REACTION_PICKER_HOVER_OPEN_DELAY_MS);
+  }, [
+    clearReactionPickerCloseTimeout,
+    clearReactionPickerOpenTimeout,
+    openReactionPicker,
+  ]);
+
   const closeReactionPicker = React.useCallback(() => {
+    clearReactionPickerOpenTimeout();
     clearReactionPickerCloseTimeout();
 
     // Reverse stagger out
@@ -449,16 +516,90 @@ export function FeedCard({
         setIsReactionPickerVisible(false);
       }
     });
-  }, [clearReactionPickerCloseTimeout, reactionPickerAnimation, emojiItemAnimations]);
+  }, [
+    clearReactionPickerCloseTimeout,
+    clearReactionPickerOpenTimeout,
+    reactionPickerAnimation,
+    emojiItemAnimations,
+  ]);
 
-  // Short delay so users can still move into the picker, but it tucks away quickly.
   const scheduleReactionPickerClose = React.useCallback(() => {
+    clearReactionPickerOpenTimeout();
     clearReactionPickerCloseTimeout();
     reactionPickerCloseTimeoutRef.current = setTimeout(() => {
       closeReactionPicker();
-    }, 240);
-  }, [clearReactionPickerCloseTimeout, closeReactionPicker]);
+    }, REACTION_PICKER_HOVER_CLOSE_DELAY_MS);
+  }, [
+    clearReactionPickerCloseTimeout,
+    clearReactionPickerOpenTimeout,
+    closeReactionPicker,
+  ]);
+  React.useEffect(() => {
+    if (Platform.OS !== "web" || !isReactionPickerVisible) {
+      return;
+    }
 
+    const isPointWithinRect = (
+      x: number,
+      y: number,
+      rect:
+        | {
+            left: number;
+            right: number;
+            top: number;
+            bottom: number;
+          }
+        | undefined,
+    ) =>
+      Boolean(
+        rect &&
+          x >= rect.left &&
+          x <= rect.right &&
+          y >= rect.top &&
+          y <= rect.bottom,
+      );
+
+    const isPointerInsideReactionZone = (x: number, y: number) => {
+      const triggerRect = reactionTriggerRef.current?.getBoundingClientRect?.();
+      const pickerRect = reactionPickerRef.current?.getBoundingClientRect?.();
+
+      return (
+        isPointWithinRect(x, y, triggerRect) ||
+        isPointWithinRect(x, y, pickerRect)
+      );
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isPointerInsideReactionZone(event.clientX, event.clientY)) {
+        clearReactionPickerCloseTimeout();
+        return;
+      }
+
+      scheduleReactionPickerClose();
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (isPointerInsideReactionZone(event.clientX, event.clientY)) {
+        clearReactionPickerCloseTimeout();
+        return;
+      }
+
+      closeReactionPicker();
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousedown", handleMouseDown);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [
+    clearReactionPickerCloseTimeout,
+    closeReactionPicker,
+    isReactionPickerVisible,
+    scheduleReactionPickerClose,
+  ]);
   const handleEmojiHoverIn = React.useCallback(
     (index: number) => {
       Animated.spring(emojiHoverAnimations[index], {
@@ -595,6 +736,35 @@ export function FeedCard({
     Boolean(normalizedReaderPublicKey) &&
     Boolean(authorPublicKey) &&
     normalizedReaderPublicKey !== authorPublicKey;
+  const primaryAuthorProfileTarget = React.useMemo<FeedProfileTarget>(
+    () => ({
+      publicKey: isPureRepost
+        ? repostedPost?.poster?.publicKey?.trim() ?? null
+        : post.poster?.publicKey?.trim() ?? null,
+      username: usernameHandle,
+    }),
+    [
+      isPureRepost,
+      post.poster?.publicKey,
+      repostedPost?.poster?.publicKey,
+      usernameHandle,
+    ],
+  );
+  const embeddedAuthorProfileTarget = React.useMemo<FeedProfileTarget>(
+    () => ({
+      publicKey: repostedPost?.poster?.publicKey?.trim() ?? null,
+      username: embeddedUsernameHandle,
+    }),
+    [embeddedUsernameHandle, repostedPost?.poster?.publicKey],
+  );
+  const cachedIsFollowingAuthor = queryClient.getQueryData<boolean>(
+    feedKeys.followStatus(normalizedReaderPublicKey, authorPublicKey),
+  );
+  const resolvedInitialIsFollowingAuthor =
+    initialIsFollowingAuthor ??
+    (typeof cachedIsFollowingAuthor === "boolean"
+      ? cachedIsFollowingAuthor
+      : null);
 
   const mutedIconColor = isDark ? "#94a3b8" : "#64748b";
   const mutedCountColor = isDark ? "#94a3b8" : "#64748b";
@@ -609,8 +779,6 @@ export function FeedCard({
   const threadAnchorActionClassName =
     "flex-row items-center gap-2.5 rounded-full px-3 py-2";
   const threadAnchorActionCountClassName = "text-[15px] font-medium leading-5";
-  const threadAnchorFollowBackground = "#1d9bf0";
-  const threadAnchorFollowHoverBackground = "#1687d9";
   const isFeedVariant = variant === "feed";
   const threadReplyHoverColor = isDark ? "#60a5fa" : "#2563eb";
   const threadReplyHoverBackground = isDark
@@ -654,8 +822,9 @@ export function FeedCard({
       repostBody.length > FEED_EMBEDDED_BODY_TOGGLE_MIN_CHARACTERS,
   );
   const reactionPickerPositionClassName = isFeedVariant
-    ? "absolute bottom-full right-0 mb-1"
-    : "absolute bottom-full left-0 mb-1";
+    ? "absolute bottom-full right-0"
+    : "absolute bottom-full left-0";
+  const reactionPickerHitAreaClassName = `${reactionPickerPositionClassName} -mb-1 pb-3`;
 
   const interactionSummaryItems = React.useMemo(() => {
     const items: string[] = [];
@@ -670,7 +839,6 @@ export function FeedCard({
 
     return items;
   }, [replyCount, repostCount]);
-
   const threadAnchorStats = React.useMemo(
     () =>
       [
@@ -686,7 +854,7 @@ export function FeedCard({
           label: displayedTotalReactionCount === 1 ? "like" : "likes",
           value: formatCount(displayedTotalReactionCount),
         },
-      ],
+      ] as const,
     [displayedTotalReactionCount, replyCount, repostCount],
   );
 
@@ -695,14 +863,26 @@ export function FeedCard({
   const shouldShowInteractionSummary =
     !isThreadCommentVariant && !isThreadAnchorVariant && hasInteractionSummary;
   const shouldShowThreadAnchorStats = isThreadAnchorVariant;
-  const { isFollowing: isFollowingAuthor } = useIsFollowingAccount({
+  const {
+    isFollowing: isFollowingAuthor,
+    isLoading: isFollowingAuthorLoading,
+  } = useIsFollowingAccount({
     readerPublicKey: normalizedReaderPublicKey,
     targetPublicKey: authorPublicKey,
     enabled: canShowThreadAnchorFollowButton,
   });
-  const effectiveIsFollowingAuthor = optimisticIsFollowing ?? isFollowingAuthor;
+  const effectiveIsFollowingAuthor =
+    optimisticIsFollowing ??
+    resolvedInitialIsFollowingAuthor ??
+    isFollowingAuthor;
+  const hasResolvedThreadAnchorFollowState =
+    !canShowThreadAnchorFollowButton ||
+    typeof optimisticIsFollowing === "boolean" ||
+    typeof resolvedInitialIsFollowingAuthor === "boolean" ||
+    !isFollowingAuthorLoading;
   const shouldRenderThreadAnchorFollowButton =
     canShowThreadAnchorFollowButton &&
+    hasResolvedThreadAnchorFollowState &&
     (!effectiveIsFollowingAuthor || isUpdatingFollow);
 
   const applyReaction = React.useCallback(
@@ -794,10 +974,11 @@ export function FeedCard({
 
   const handlePrimaryLikePress = React.useCallback(
     (event: { stopPropagation?: () => void }) => {
+      clearReactionPickerOpenTimeout();
       const nextReactionValue = currentReactionValue ? null : "LIKE";
       void applyReaction(nextReactionValue, event);
     },
-    [applyReaction, currentReactionValue],
+    [applyReaction, clearReactionPickerOpenTimeout, currentReactionValue],
   );
 
   const handleThreadAnchorFollowPress = React.useCallback(
@@ -884,6 +1065,36 @@ export function FeedCard({
     inputRange: [0, 1],
     outputRange: [12, 0],
   });
+  const handleRepostPress = React.useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation?.();
+      onRepostPress?.(post, {
+        x: event.nativeEvent.pageX ?? 0,
+        y: event.nativeEvent.pageY ?? 0,
+      });
+    },
+    [onRepostPress, post],
+  );
+  const handleProfilePress = React.useCallback(
+    (
+      profile: FeedProfileTarget,
+      event?: { stopPropagation?: () => void },
+    ) => {
+      event?.stopPropagation?.();
+
+      const publicKey = profile.publicKey?.trim() ?? "";
+      const username = profile.username?.trim() ?? "";
+      if (!publicKey && !username) {
+        return;
+      }
+
+      onProfilePress?.({
+        publicKey: publicKey || undefined,
+        username: username || undefined,
+      });
+    },
+    [onProfilePress],
+  );
 
   if (isThreadCommentVariant) {
     const threadTextOffset = avatarSize + 8;
@@ -908,7 +1119,13 @@ export function FeedCard({
           </View>
         ) : null}
 
-        <View className="flex-row items-start">
+        <Pressable
+          className="flex-row items-start"
+          onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+          style={actionButtonStyle}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${displayName} profile`}
+        >
           <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
 
           <View className="ml-2 flex-1">
@@ -930,7 +1147,7 @@ export function FeedCard({
               ) : null}
             </View>
           </View>
-        </View>
+        </Pressable>
 
         <View className="mt-0.5 flex-row">
           <View style={{ width: threadTextOffset }}>
@@ -963,7 +1180,13 @@ export function FeedCard({
 
             {hasEmbeddedRepostCard ? (
               <View className="mt-2.5 rounded-2xl border border-slate-200/80 p-3 dark:border-slate-700/80">
-                <View className="flex-row items-start">
+                <Pressable
+                  className="flex-row items-start"
+                  onPress={(event) => handleProfilePress(embeddedAuthorProfileTarget, event)}
+                  style={actionButtonStyle}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${embeddedDisplayName} profile`}
+                >
                   <UserAvatar
                     uri={embeddedAvatarUri}
                     name={embeddedDisplayName}
@@ -984,7 +1207,7 @@ export function FeedCard({
                       @{embeddedUsernameHandle}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
 
                 {repostBody ? (
                   <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
@@ -1029,9 +1252,7 @@ export function FeedCard({
 
               <Pressable
                 className="flex-row items-center gap-1.5 py-0.5"
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                }}
+                onPress={handleRepostPress}
                 accessibilityRole="button"
                 accessibilityLabel="Repost this post"
                 style={actionButtonStyle}
@@ -1053,18 +1274,9 @@ export function FeedCard({
               <View className="relative">
                 {isReactionPickerVisible ? (
                   <Pressable
-                    className={reactionPickerPositionClassName}
+                    ref={reactionPickerRef}
+                    className={reactionPickerHitAreaClassName}
                     onPress={(event) => event.stopPropagation?.()}
-                    onHoverIn={
-                      Platform.OS === "web"
-                        ? clearReactionPickerCloseTimeout
-                        : undefined
-                    }
-                    onHoverOut={
-                      Platform.OS === "web"
-                        ? scheduleReactionPickerClose
-                        : undefined
-                    }
                   >
                     <Animated.View
                       style={[
@@ -1137,13 +1349,20 @@ export function FeedCard({
                 ) : null}
 
                 <Pressable
+                  ref={reactionTriggerRef}
                   className="flex-row items-center gap-1.5 py-0.5"
                   onPress={handlePrimaryLikePress}
                   onLongPress={openReactionPicker}
                   delayLongPress={170}
-                  onHoverIn={Platform.OS === "web" ? openReactionPicker : undefined}
+                  onHoverIn={
+                    Platform.OS === "web"
+                      ? scheduleReactionPickerOpen
+                      : undefined
+                  }
                   onHoverOut={
-                    Platform.OS === "web" ? scheduleReactionPickerClose : undefined
+                    Platform.OS === "web"
+                      ? clearReactionPickerOpenTimeout
+                      : undefined
                   }
                   accessibilityRole="button"
                   accessibilityLabel={
@@ -1202,6 +1421,8 @@ export function FeedCard({
       className={
         isThreadCommentVariant
           ? "py-1.5"
+          : isThreadAnchorVariant
+          ? "px-4 pt-3"
           : isThreadVariant
           ? "border-b border-slate-200/80 px-4 py-3 dark:border-slate-800/80"
           : "border-b border-slate-200 px-4 py-3 dark:border-slate-800"
@@ -1229,22 +1450,30 @@ export function FeedCard({
       {isThreadAnchorVariant ? (
         <View>
           <View className="flex-row items-start gap-3">
-            <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
+            <Pressable
+              className="min-w-0 flex-1 flex-row items-start gap-3"
+              onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+              style={actionButtonStyle}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${displayName} profile`}
+            >
+              <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
 
-            <View className="min-w-0 flex-1">
-              <Text
-                numberOfLines={1}
-                className="text-[16px] font-semibold leading-5 text-slate-900 dark:text-white"
-              >
-                {displayName}
-              </Text>
-              <Text
-                numberOfLines={1}
-                className="mt-0.5 text-[15px] leading-5 text-slate-500 dark:text-slate-400"
-              >
-                @{usernameHandle}
-              </Text>
-            </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  numberOfLines={1}
+                  className="text-[16px] font-semibold leading-5 text-slate-900 dark:text-white"
+                >
+                  {displayName}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="mt-0.5 text-[15px] leading-5 text-slate-500 dark:text-slate-400"
+                >
+                  @{usernameHandle}
+                </Text>
+              </View>
+            </Pressable>
 
             {shouldRenderThreadAnchorFollowButton ? (
               <Pressable
@@ -1260,36 +1489,43 @@ export function FeedCard({
                     : undefined
                 }
                 disabled={isUpdatingFollow}
-                className="ml-3 h-9 min-w-[92px] shrink-0 items-center justify-center rounded-full bg-sky-500 px-4"
-                style={({ pressed }) => ({
-                  opacity: pressed || isUpdatingFollow ? 0.82 : 1,
-                  backgroundColor: isThreadAnchorFollowHovered
-                    ? threadAnchorFollowHoverBackground
-                    : threadAnchorFollowBackground,
-                  borderWidth: 1,
-                  borderColor: isDark
-                    ? "rgba(255, 255, 255, 0.06)"
-                    : "rgba(15, 23, 42, 0.06)",
+                className="ml-3 h-7 min-w-[76px] shrink-0 items-center justify-center rounded-full px-3"
+                style={{
+                  backgroundColor: effectiveIsFollowingAuthor
+                    ? isDark
+                      ? "rgba(30, 41, 59, 0.9)"
+                      : "rgba(226, 232, 240, 0.95)"
+                    : isThreadAnchorFollowHovered
+                      ? accentStrong
+                      : accentColor,
+                  borderWidth: effectiveIsFollowingAuthor ? 1 : 0,
+                  borderColor: effectiveIsFollowingAuthor
+                    ? getBorderColor(isDark, "input")
+                    : "transparent",
+                  opacity: isUpdatingFollow ? 0.75 : 1,
                   ...(Platform.OS === "web"
                     ? ({
                         cursor: "pointer",
                       } as const)
                     : null),
-                })}
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={`Follow ${displayName}`}
               >
                 {isUpdatingFollow ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#ffffff"
-                  />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text
                     className="text-[12px] font-semibold"
-                    style={{ color: "#ffffff" }}
+                    style={{
+                      color: effectiveIsFollowingAuthor
+                        ? isDark
+                          ? "#e2e8f0"
+                          : "#334155"
+                        : "#ffffff",
+                    }}
                   >
-                    Follow
+                    {effectiveIsFollowingAuthor ? "Following" : "Follow"}
                   </Text>
                 )}
               </Pressable>
@@ -1311,7 +1547,13 @@ export function FeedCard({
 
           {hasEmbeddedRepostCard ? (
             <View className="mt-3 rounded-2xl border border-slate-200/90 p-3 dark:border-slate-700/90">
-              <View className="flex-row items-start">
+              <Pressable
+                className="flex-row items-start"
+                onPress={(event) => handleProfilePress(embeddedAuthorProfileTarget, event)}
+                style={actionButtonStyle}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${embeddedDisplayName} profile`}
+              >
                 <UserAvatar
                   uri={embeddedAvatarUri}
                   name={embeddedDisplayName}
@@ -1332,7 +1574,7 @@ export function FeedCard({
                     @{embeddedUsernameHandle}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
 
               {repostBody ? (
                 isFeedVariant ? (
@@ -1397,11 +1639,24 @@ export function FeedCard({
         </View>
       ) : (
         <View className="flex-row items-start">
-          <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
+          <Pressable
+            onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+            style={actionButtonStyle}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${displayName} profile`}
+          >
+            <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
+          </Pressable>
 
         <View className={isThreadVariant ? "ml-2.5 flex-1" : "ml-3 flex-1"}>
           {isThreadVariant ? (
-            <View className="flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <Pressable
+              className="flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5 self-start"
+              onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+              style={actionButtonStyle}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${displayName} profile`}
+            >
               <Text
                 numberOfLines={1}
                 className={
@@ -1434,9 +1689,15 @@ export function FeedCard({
                     : formattedPrimaryTimestamp}
                 </Text>
               ) : null}
-            </View>
+            </Pressable>
           ) : isPureRepost ? (
-            <View className="flex-row items-center gap-1.5">
+            <Pressable
+              className="flex-row items-center gap-1.5 self-start"
+              onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+              style={actionButtonStyle}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${displayName} profile`}
+            >
               <Text
                 numberOfLines={1}
                 className="text-[15px] font-semibold text-slate-900 dark:text-white"
@@ -1452,10 +1713,16 @@ export function FeedCard({
                   ? ` · ${formattedPrimaryTimestamp}`
                   : ""}
               </Text>
-            </View>
+            </Pressable>
           ) : (
             <View className="flex-row items-start justify-between">
-              <View className="flex-1 pr-3">
+              <Pressable
+                className="flex-1 self-start pr-3"
+                onPress={(event) => handleProfilePress(primaryAuthorProfileTarget, event)}
+                style={actionButtonStyle}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${displayName} profile`}
+              >
                 <Text
                   numberOfLines={1}
                   className="text-[15px] font-semibold text-slate-900 dark:text-white"
@@ -1468,7 +1735,7 @@ export function FeedCard({
                 >
                   @{usernameHandle}
                 </Text>
-              </View>
+              </Pressable>
 
               <Text className="text-[12px] text-slate-500 dark:text-slate-400">
                 {formattedPrimaryTimestamp}
@@ -1540,7 +1807,13 @@ export function FeedCard({
                   : "mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700"
               }
             >
-              <View className="flex-row items-start">
+              <Pressable
+                className="flex-row items-start"
+                onPress={(event) => handleProfilePress(embeddedAuthorProfileTarget, event)}
+                style={actionButtonStyle}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${embeddedDisplayName} profile`}
+              >
                 <UserAvatar
                   uri={embeddedAvatarUri}
                   name={embeddedDisplayName}
@@ -1561,7 +1834,7 @@ export function FeedCard({
                     @{embeddedUsernameHandle}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
 
               {repostBody ? (
                 isFeedVariant ? (
@@ -1628,19 +1901,17 @@ export function FeedCard({
       )}
 
       {shouldShowThreadAnchorStats ? (
-        <View className="-mx-4 mt-3 border-y border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
-          <View className="flex-row flex-wrap items-center gap-x-5 gap-y-2">
-            {threadAnchorStats.map((item) => (
-              <View key={item.label} className="flex-row items-baseline gap-1.5">
-                <Text className="text-[16px] font-semibold text-slate-900 dark:text-white">
-                  {item.value}
-                </Text>
-                <Text className="text-[14px] text-slate-500 dark:text-slate-400">
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
+        <View className="mt-3 flex-row flex-wrap items-center gap-x-5 gap-y-2">
+          {threadAnchorStats.map((item) => (
+            <View key={item.label} className="flex-row items-baseline gap-1.5">
+              <Text className="text-[16px] font-semibold text-slate-900 dark:text-white">
+                {item.value}
+              </Text>
+              <Text className="text-[14px] text-slate-500 dark:text-slate-400">
+                {item.label}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
 
@@ -1721,7 +1992,7 @@ export function FeedCard({
           isThreadCommentVariant
             ? "mt-1.5 flex-row items-center gap-6"
             : isThreadAnchorVariant
-              ? "-mx-4 mt-0 flex-row items-center justify-start gap-3 border-b border-slate-200/80 px-4 py-1.5 dark:border-slate-800/80"
+              ? "-mx-4 mt-3 flex-row items-center justify-start gap-3 border-b border-slate-200/80 px-4 py-2 dark:border-slate-800/80"
             : isThreadVariant
               ? shouldShowInteractionSummary
                 ? "mt-2.5 flex-row items-center gap-5"
@@ -1839,9 +2110,7 @@ export function FeedCard({
                   ? "flex-row items-center gap-1.5 rounded-full py-1"
                   : "flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
           }
-          onPress={(event) => {
-            event.stopPropagation?.();
-          }}
+          onPress={handleRepostPress}
           onHoverIn={
             Platform.OS === "web"
               ? () => {
@@ -1937,18 +2206,9 @@ export function FeedCard({
         >
           {isReactionPickerVisible ? (
             <Pressable
-              className={reactionPickerPositionClassName}
+              ref={reactionPickerRef}
+              className={reactionPickerHitAreaClassName}
               onPress={(event) => event.stopPropagation?.()}
-              onHoverIn={
-                Platform.OS === "web"
-                  ? clearReactionPickerCloseTimeout
-                  : undefined
-              }
-              onHoverOut={
-                Platform.OS === "web"
-                  ? scheduleReactionPickerClose
-                  : undefined
-              }
             >
               <Animated.View
                 style={[
@@ -2015,6 +2275,7 @@ export function FeedCard({
           ) : null}
 
           <Pressable
+            ref={reactionTriggerRef}
             className={
               isThreadAnchorVariant
                 ? threadAnchorActionClassName
@@ -2036,7 +2297,7 @@ export function FeedCard({
                   if (isFeedVariant) {
                     setIsFeedLikeHovered(true);
                   }
-                  openReactionPicker();
+                  scheduleReactionPickerOpen();
                 }
                 : undefined
             }
@@ -2049,7 +2310,7 @@ export function FeedCard({
                   if (isFeedVariant) {
                     setIsFeedLikeHovered(false);
                   }
-                  scheduleReactionPickerClose();
+                  clearReactionPickerOpenTimeout();
                 }
                 : undefined
             }

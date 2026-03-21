@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { HomeScreen } from "../features/messaging/screens/HomeScreen";
 import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
 import { FeedScreen } from "../features/feed/screens/FeedScreen";
+import { NotificationsScreen } from "../features/notifications/screens/NotificationsScreen";
 import MessageIcon from "../assets/navIcons/message.svg";
 import MessageIconFilled from "../assets/navIcons/message-filled.svg";
 import HomeIcon from "../assets/navIcons/home.svg";
@@ -10,6 +11,10 @@ import HomeIconFilled from "../assets/navIcons/home-filled.svg";
 import UserIcon from "../assets/navIcons/user.svg";
 import UserIconFilled from "../assets/navIcons/user-filled.svg";
 import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
+import {
+  NotificationBellFilledIcon,
+  NotificationBellOutlineIcon,
+} from "@/components/ui/NotificationBellIcon";
 
 import {
   View,
@@ -18,6 +23,7 @@ import {
   DeviceEventEmitter,
   Text,
   useWindowDimensions,
+  Pressable,
 } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import { Image } from "expo-image";
@@ -30,7 +36,11 @@ import { useColorScheme } from "nativewind";
 import { DRAWER_STATE_EVENT } from "../constants/events";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { buildProfilePictureUrl } from "deso-protocol";
-import { FALLBACK_PROFILE_IMAGE, getProfileDisplayName } from "../utils/deso";
+import {
+  FALLBACK_PROFILE_IMAGE,
+  getProfileDisplayName,
+  resolveCurrentUserPublicKey,
+} from "../utils/deso";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -48,6 +58,7 @@ import { getBorderColor } from "../theme/borders";
 import { WalletSwitcher } from "../features/auth/components/WalletSwitcher";
 import { ProfileStats } from "@/features/profile/components/ProfileStats";
 import { useAccountProfile } from "@/features/profile/api/useAccountProfile";
+import { useNotificationCounts } from "@/features/notifications/api/useNotificationCounts";
 import {
   useIsDrawerOpen,
   useSetDrawerOpen,
@@ -58,7 +69,11 @@ const Tab = createBottomTabNavigator<HomeTabParamList>();
 const DummyComponent = () => <View />;
 const DEFAULT_AVATAR_BLURHASH = "L5H2EC=PM+yV0g-mq.wG9c010J}I";
 
-function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+function CustomTabBar({
+  state,
+  navigation,
+  unreadNotificationsCount = 0,
+}: BottomTabBarProps & { unreadNotificationsCount?: number }) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { accentColor } = useAccentColor();
@@ -114,59 +129,89 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             }
           : undefined;
 
+      let icon = null as React.ReactNode;
+      if (route.name === "Messages") {
+        icon = isFocused ? (
+          <MessageIconFilled
+            width={27}
+            height={27}
+            fill={isDark ? "#f8fafc" : "#0f172a"}
+          />
+        ) : (
+          <MessageIcon
+            width={27}
+            height={27}
+            stroke={isDark ? "#64748b" : "#94a3b8"}
+            strokeWidth={2}
+          />
+        );
+      } else if (route.name === "Feed") {
+        icon = isFocused ? (
+          <HomeIconFilled
+            width={22}
+            height={22}
+            fill={isDark ? "#f8fafc" : "#0f172a"}
+          />
+        ) : (
+          <HomeIcon
+            width={22}
+            height={22}
+            fill={isDark ? "#64748b" : "#94a3b8"}
+          />
+        );
+      } else if (route.name === "Notifications") {
+        icon = isFocused ? (
+          <NotificationBellFilledIcon
+            size={28}
+            color={isDark ? "#f8fafc" : "#0f172a"}
+          />
+        ) : (
+          <NotificationBellOutlineIcon
+            size={28}
+            color={isDark ? "#64748b" : "#94a3b8"}
+          />
+        );
+      } else {
+        icon = isFocused ? (
+          <UserIconFilled
+            width={27}
+            height={27}
+            fill={isDark ? "#f8fafc" : "#0f172a"}
+          />
+        ) : (
+          <UserIcon
+            width={27}
+            height={27}
+            stroke={isDark ? "#64748b" : "#94a3b8"}
+            strokeWidth={2}
+          />
+        );
+      }
+
       return (
-        <PressableScale
+        <Pressable
           key={route.key}
           onPress={onPress}
           onLongPress={onLongPress}
           delayLongPress={250}
-          targetScale={0.85}
-          style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 13, paddingBottom: 4 }}
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingTop: 13,
+            paddingBottom: 4,
+          }}
         >
-          {route.name === "Messages" ? (
-            isFocused ? (
-              <MessageIconFilled
-                width={27}
-                height={27}
-                fill={isDark ? "#f8fafc" : "#0f172a"}
+          <View className="relative items-center justify-center">
+            {icon}
+            {route.name === "Notifications" && unreadNotificationsCount > 0 ? (
+              <View
+                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-600"
+                style={{ zIndex: 40, elevation: 8 }}
               />
-            ) : (
-              <MessageIcon
-                width={27}
-                height={27}
-                stroke={isDark ? "#64748b" : "#94a3b8"}
-                strokeWidth={2}
-              />
-            )
-          ) : route.name === "Feed" ? (
-            isFocused ? (
-              <HomeIconFilled
-                width={22}
-                height={22}
-                fill={isDark ? "#f8fafc" : "#0f172a"}
-              />
-            ) : (
-              <HomeIcon
-                width={22}
-                height={22}
-                fill={isDark ? "#64748b" : "#94a3b8"}
-              />
-            )
-          ) : isFocused ? (
-            <UserIconFilled
-              width={27}
-              height={27}
-              fill={isDark ? "#f8fafc" : "#0f172a"}
-            />
-          ) : (
-            <UserIcon
-              width={27}
-              height={27}
-              stroke={isDark ? "#64748b" : "#94a3b8"}
-              strokeWidth={2}
-            />
-          )}
-        </PressableScale>
+            ) : null}
+          </View>
+        </Pressable>
       );
     });
 
@@ -267,8 +312,8 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const { centerColumnOffset } = useLayoutBreakpoints();
 
   // Fetch profile stats
-  const publicKey = currentUser?.PublicKeyBase58Check;
-  const { data: account } = useAccountProfile(publicKey);
+  const publicKey = resolveCurrentUserPublicKey(currentUser);
+  const { data: account } = useAccountProfile({ publicKey });
   const followerCount = useMemo(
     () => account?.followerCounts?.totalFollowers ?? 0,
     [account?.followerCounts?.totalFollowers],
@@ -280,6 +325,11 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
   const displayName = getProfileDisplayName(
     currentUser?.ProfileEntryResponse,
     publicKey || "",
+  );
+  const { counts: notificationCounts } = useNotificationCounts(publicKey);
+  const unreadNotificationsCount = Math.max(
+    0,
+    Number(notificationCounts.unreadNotificationCount) || 0,
   );
 
   // Listen for drawer toggle requests from HomeScreen
@@ -312,10 +362,11 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           <View className="flex-row items-center mb-3">
             <Image
               source={{
-                uri: currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic
-                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${currentUser.PublicKeyBase58Check}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
+                uri: publicKey &&
+                  currentUser?.ProfileEntryResponse?.ExtraData?.ProfilePic
+                  ? `https://node.deso.org/api/v0/get-single-profile-picture/${publicKey}?fallback=${encodeURIComponent(currentUser.ProfileEntryResponse.ExtraData.ProfilePic)}`
                   : buildProfilePictureUrl(
-                      currentUser?.PublicKeyBase58Check || "",
+                      publicKey,
                       {
                         fallbackImageUrl: FALLBACK_PROFILE_IMAGE,
                       },
@@ -388,6 +439,38 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
             </Text>
           </TouchableOpacity>
 
+          {/* Notifications */}
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Notifications" });
+            }}
+          >
+            <View className="relative">
+              <NotificationBellOutlineIcon
+                size={25}
+                color={isDark ? "#e2e8f0" : "#0f172a"}
+              />
+              {unreadNotificationsCount > 0 ? (
+                <View
+                  className="absolute -right-2.5 -top-2.5 h-5 min-w-[20px] rounded-full bg-rose-600 px-1.5"
+                  style={{ alignItems: "center", justifyContent: "center", zIndex: 20 }}
+                >
+                  <Text className="text-[11px] font-bold leading-[13px] text-white">
+                    {unreadNotificationsCount > 99
+                      ? "99+"
+                      : String(unreadNotificationsCount)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Notifications
+            </Text>
+          </TouchableOpacity>
+
           {/* Profile */}
           <TouchableOpacity
             className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
@@ -435,9 +518,11 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
       insets.bottom,
       isDark,
       rootNavigation,
+      publicKey,
       displayName,
       followerCount,
       followingCount,
+      unreadNotificationsCount,
       setDrawerOpen,
     ],
   );
@@ -448,7 +533,15 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
     <Tab.Navigator
       initialRouteName="Feed"
       backBehavior="initialRoute"
-      tabBar={tabBarOverride ?? ((props) => <CustomTabBar {...props} />)}
+      tabBar={
+        tabBarOverride ??
+        ((props) => (
+          <CustomTabBar
+            {...props}
+            unreadNotificationsCount={unreadNotificationsCount}
+          />
+        ))
+      }
       screenOptions={{
         headerShown: false,
         lazy: true,
@@ -471,6 +564,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
     >
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Messages" component={HomeScreen} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen
         name="Post"
         component={DummyComponent}
@@ -494,7 +588,10 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
         style={{ backgroundColor: isDark ? "#0a0f1a" : "#ffffff" }}
       >
         {/* Fixed Left Navigation */}
-        <DesktopLeftNav activeTab={activeTab} />
+        <DesktopLeftNav
+          activeTab={activeTab}
+          unreadNotificationsCount={unreadNotificationsCount}
+        />
 
         {/* Main Content Area - centered with borders like Bluesky */}
         <View className="flex-1 items-center">

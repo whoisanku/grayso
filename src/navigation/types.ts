@@ -4,6 +4,8 @@ import type {
   NavigatorScreenParams,
 } from "@react-navigation/native";
 
+import type { FocusFeedPost } from "@/lib/focus/graphql";
+
 export type ConversationRouteParams = {
   threadPublicKey: string;
   chatType?: ChatType;
@@ -23,6 +25,7 @@ export type ConversationRouteParams = {
 export type HomeTabParamList = {
   Messages: undefined;
   Feed: undefined;
+  Notifications: undefined;
   Post: undefined;
   Profile:
     | {
@@ -41,6 +44,8 @@ export type RootStackParamList = {
   NewChat: undefined;
   PostThread: {
     postHash: string;
+    initialPost?: FocusFeedPost | null;
+    initialIsFollowingAuthor?: boolean | null;
   };
 };
 

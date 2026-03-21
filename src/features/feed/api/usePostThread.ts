@@ -4,6 +4,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { feedKeys } from "@/features/feed/api/keys";
 import {
   fetchPostByPostHash,
+  fetchPostRepliesPageByPostHash,
   fetchPostThreadPageByPostHash,
   type FocusFeedPost,
 } from "@/lib/focus/graphql";
@@ -133,6 +134,7 @@ async function fetchThreadPage({
   pageSize,
   includeParents,
   sortMode,
+  initialPost,
 }: {
   postHash: string;
   readerPublicKey: string;
@@ -140,8 +142,47 @@ async function fetchThreadPage({
   pageSize: number;
   includeParents: boolean;
   sortMode: PostThreadSortMode;
+  initialPost?: FocusFeedPost | null;
 }): Promise<ThreadPage> {
   const normalizedPostHash = assertValidPostHash(postHash);
+  const normalizedInitialPostHash = normalizePostHash(initialPost?.postHash);
+  const seedPost =
+    initialPost && normalizedInitialPostHash === normalizedPostHash
+      ? initialPost
+      : null;
+
+  if (offset === 0 && seedPost) {
+    const repliesPage = await fetchPostRepliesPageByPostHash({
+      postHash: normalizedPostHash,
+      readerPublicKey,
+      first: pageSize,
+      offset,
+      orderBy: sortMode === "recent" ? [...MOST_RECENT_ORDER] : [...MOST_VALUABLE_ORDER],
+    });
+
+    const parent = mapFocusPostToThreadPost(seedPost);
+    const parents = includeParents
+      ? await fetchParentChain({
+          post: seedPost,
+          readerPublicKey,
+        })
+      : [];
+    const comments = repliesPage.replies
+      .map((reply) => mapFocusPostToThreadPost(reply))
+      .filter(
+        (reply): reply is ThreadPost =>
+          reply !== null && reply.postHash !== normalizedPostHash,
+      );
+
+    return {
+      parents,
+      parent,
+      comments,
+      nextOffset: repliesPage.nextOffset,
+      totalCommentCount: repliesPage.totalCount,
+    };
+  }
+
   const threadPage = await fetchPostThreadPageByPostHash({
     postHash: normalizedPostHash,
     readerPublicKey,
@@ -160,7 +201,10 @@ async function fetchThreadPage({
       : [];
   const comments = threadPage.replies
     .map((reply) => mapFocusPostToThreadPost(reply))
-    .filter((reply): reply is ThreadPost => Boolean(reply));
+    .filter(
+      (reply): reply is ThreadPost =>
+        reply !== null && reply.postHash !== normalizedPostHash,
+    );
 
   return {
     parents,
@@ -178,6 +222,7 @@ export function usePostThread({
   pageSize = DEFAULT_PAGE_SIZE,
   includeParents = true,
   sortMode = "valuable",
+  initialPost = null,
 }: {
   postHash?: string | null;
   readerPublicKey?: string | null;
@@ -185,9 +230,26 @@ export function usePostThread({
   pageSize?: number;
   includeParents?: boolean;
   sortMode?: PostThreadSortMode;
+  initialPost?: FocusFeedPost | null;
 }) {
   const normalizedPostHash = normalizePostHash(postHash ?? "");
   const normalizedReaderPublicKey = readerPublicKey?.trim() ?? "";
+  const normalizedInitialPost = useMemo(() => {
+    if (!initialPost) {
+      return null;
+    }
+
+    return normalizePostHash(initialPost.postHash) === normalizedPostHash
+      ? initialPost
+      : null;
+  }, [initialPost, normalizedPostHash]);
+  const initialThreadPost = useMemo(
+    () =>
+      normalizedInitialPost
+        ? mapFocusPostToThreadPost(normalizedInitialPost)
+        : null,
+    [normalizedInitialPost],
+  );
 
   const query = useInfiniteQuery({
     queryKey: [
@@ -206,6 +268,7 @@ export function usePostThread({
         pageSize,
         includeParents,
         sortMode,
+        initialPost: pageParam === 0 ? normalizedInitialPost : null,
       }),
     getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
   });
@@ -213,7 +276,7 @@ export function usePostThread({
   const parents = useMemo(() => {
     const firstPage = query.data?.pages[0];
     return firstPage?.parents ?? [];
-  }, [query.data?.pages]);
+  }, [normalizedPostHash, query.data?.pages]);
 
   const post = useMemo(() => {
     for (const page of query.data?.pages ?? []) {
@@ -222,8 +285,8 @@ export function usePostThread({
       }
     }
 
-    return null;
-  }, [query.data?.pages]);
+    return initialThreadPost;
+  }, [initialThreadPost, query.data?.pages]);
 
   const comments = useMemo(() => {
     const seenHashes = new Set<string>();
@@ -231,7 +294,11 @@ export function usePostThread({
 
     for (const page of query.data?.pages ?? []) {
       for (const comment of page.comments) {
-        if (!comment.postHash || seenHashes.has(comment.postHash)) {
+        if (
+          !comment.postHash ||
+          comment.postHash === normalizedPostHash ||
+          seenHashes.has(comment.postHash)
+        ) {
           continue;
         }
 
@@ -244,7 +311,12 @@ export function usePostThread({
   }, [query.data?.pages]);
 
   const firstPage = query.data?.pages[0] ?? null;
-  const totalCommentCount = post?.replyCount ?? firstPage?.totalCommentCount ?? 0;
+  const hasLoadedInitialPage = Boolean(firstPage);
+  const totalCommentCount =
+    post?.replyCount ??
+    firstPage?.totalCommentCount ??
+    initialThreadPost?.replyCount ??
+    0;
 
   return {
     parents,
@@ -252,8 +324,9 @@ export function usePostThread({
     comments,
     totalCommentCount,
     loadedCommentCount: comments.length,
+    hasLoadedInitialPage,
     hasNextPage: Boolean(query.hasNextPage),
-    isLoading: query.isLoading,
+    isLoading: query.isLoading && !initialThreadPost,
     isRefreshing: query.isRefetching,
     isFetching: query.isFetching,
     isFetchingNextPage: query.isFetchingNextPage,

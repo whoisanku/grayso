@@ -7,6 +7,11 @@ export const FALLBACK_PROFILE_IMAGE =
 export const FALLBACK_GROUP_IMAGE =
   "https://node.deso.org/assets/img/default_profile_pic.png";
 
+type CurrentUserPublicKeyShape = {
+  PublicKeyBase58Check?: string | null;
+  publicKey?: string | null;
+};
+
 export const formatPublicKey = (value: string) => {
   if (!value) {
     return "";
@@ -26,6 +31,22 @@ export const getProfileDisplayName = (
 
   return formatPublicKey(publicKey);
 };
+
+export function resolveCurrentUserPublicKey(
+  currentUser?: CurrentUserPublicKeyShape | null,
+): string {
+  const legacyPublicKey = currentUser?.PublicKeyBase58Check?.trim();
+  if (legacyPublicKey) {
+    return legacyPublicKey;
+  }
+
+  const identityPublicKey = currentUser?.publicKey?.trim();
+  if (identityPublicKey) {
+    return identityPublicKey;
+  }
+
+  return "";
+}
 
 // Deterministically generate a hex color from a string
 function generateHexColorFromString(input: string): string {

@@ -1,30 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
   Platform,
+  Pressable,
   Text,
-  TouchableOpacity,
   View,
-  KeyboardAvoidingView,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { UserAvatar } from "@/components/UserAvatar";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { FlashList } from "@shopify/flash-list";
-import { useColorScheme } from "nativewind";
 import { Feather } from "@expo/vector-icons";
+
+import { UserAvatar } from "@/components/UserAvatar";
+import { Shimmer } from "@/components/ui/Shimmer";
 import { type FocusAccount } from "@/lib/focus/graphql";
+import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
+import { RootStackParamList } from "@/navigation/types";
+import { useAccentColor } from "@/state/theme/useAccentColor";
+import { getBorderColor } from "@/theme/borders";
+import {
+  FALLBACK_PROFILE_IMAGE,
+  formatPublicKey,
+  getProfileImageUrl,
+} from "@/utils/deso";
 import { useFollowers } from "../api/useFollowers";
 import { useFollowing } from "../api/useFollowing";
-import { FALLBACK_PROFILE_IMAGE, formatPublicKey, getProfileImageUrl } from "@/utils/deso";
-import { toPlatformSafeImageUrl } from "@/lib/mediaUrl";
-import { DesktopLeftNav } from "@/features/messaging/components/desktop/DesktopLeftNav";
-import { DesktopRightNav } from "@/features/messaging/components/desktop/DesktopRightNav";
-import { CENTER_CONTENT_MAX_WIDTH, useLayoutBreakpoints } from "@/alf/breakpoints";
-import { useAccentColor } from "@/state/theme/useAccentColor";
-import { RootStackParamList } from "@/navigation/types";
 
 type FollowListModalProps = {
   visible: boolean;
@@ -33,33 +36,96 @@ type FollowListModalProps = {
   onClose: () => void;
 };
 
+type AccountRowProps = {
+  account: FocusAccount;
+  isLast: boolean;
+  isDark: boolean;
+  onPress?: (account: FocusAccount) => void;
+};
+
+type FollowRowsShimmerProps = {
+  isDark: boolean;
+};
+
+const SHIMMER_ROW_COUNT = 7;
+const ESTIMATED_ROW_SIZE = 74;
+
 const getExtraString = (
   extraData: Record<string, unknown> | null | undefined,
-  key: string
+  key: string,
 ) => {
   const value = extraData?.[key];
   return typeof value === "string" && value.trim().length ? value : undefined;
 };
 
-type AccountRowProps = {
-  account: FocusAccount;
-  onPress?: (account: FocusAccount) => void;
-};
+function FollowRowsShimmer({ isDark }: FollowRowsShimmerProps) {
+  const subtleBorderColor = getBorderColor(isDark, "subtle");
 
-const AccountRow = React.memo(function AccountRow({ account, onPress }: AccountRowProps) {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === "dark";
-  
+  return (
+    <View className="flex-1">
+      {Array.from({ length: SHIMMER_ROW_COUNT }).map((_, index) => {
+        const isLast = index === SHIMMER_ROW_COUNT - 1;
+
+        return (
+          <View
+            key={`follow-shimmer-${index}`}
+            className="flex-row items-center px-4 py-3"
+            style={{
+              borderBottomWidth: isLast ? 0 : 1,
+              borderBottomColor: subtleBorderColor,
+            }}
+          >
+            <Shimmer width={44} height={44} borderRadius={22} />
+
+            <View className="ml-3 min-w-0 flex-1">
+              <Shimmer
+                width={index % 2 === 0 ? "52%" : "66%"}
+                height={13}
+                borderRadius={999}
+              />
+              <View className="mt-2">
+                <Shimmer
+                  width={index % 3 === 0 ? "41%" : "34%"}
+                  height={11}
+                  borderRadius={999}
+                />
+              </View>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const AccountRow = React.memo(function AccountRow({
+  account,
+  isLast,
+  isDark,
+  onPress,
+}: AccountRowProps) {
   const avatarUrl = useMemo(() => {
     const rawUrl =
-      getExtraString(account.extraData as Record<string, unknown> | undefined, "LargeProfilePicURL") ||
-      getExtraString(account.extraData as Record<string, unknown> | undefined, "NFTProfilePictureUrl") ||
-      (account.publicKey ? getProfileImageUrl(account.publicKey) : FALLBACK_PROFILE_IMAGE);
+      getExtraString(
+        account.extraData as Record<string, unknown> | undefined,
+        "LargeProfilePicURL",
+      ) ||
+      getExtraString(
+        account.extraData as Record<string, unknown> | undefined,
+        "NFTProfilePictureUrl",
+      ) ||
+      (account.publicKey
+        ? getProfileImageUrl(account.publicKey)
+        : FALLBACK_PROFILE_IMAGE);
+
     return toPlatformSafeImageUrl(rawUrl) ?? rawUrl;
   }, [account.extraData, account.publicKey]);
 
   const displayName =
-    getExtraString(account.extraData as Record<string, unknown> | undefined, "DisplayName") ||
+    getExtraString(
+      account.extraData as Record<string, unknown> | undefined,
+      "DisplayName",
+    ) ||
     account.username ||
     (account.publicKey ? formatPublicKey(account.publicKey) : "");
 
@@ -68,10 +134,14 @@ const AccountRow = React.memo(function AccountRow({ account, onPress }: AccountR
   }, [account, onPress]);
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={handlePress}
-      activeOpacity={0.7}
       className="flex-row items-center gap-3 px-4 py-3"
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.86 : 1,
+        borderBottomWidth: isLast ? 0 : 1,
+        borderBottomColor: getBorderColor(isDark, "subtle"),
+      })}
     >
       <UserAvatar
         uri={avatarUrl}
@@ -79,285 +149,368 @@ const AccountRow = React.memo(function AccountRow({ account, onPress }: AccountR
         size={44}
         className="bg-slate-200 dark:bg-slate-700"
       />
-      <View className="flex-1">
-        <Text className="text-base font-semibold text-slate-900 dark:text-white" numberOfLines={1}>
+
+      <View className="min-w-0 flex-1">
+        <Text
+          className="text-base font-semibold text-slate-900 dark:text-white"
+          numberOfLines={1}
+        >
           {displayName}
         </Text>
         {account.username ? (
-          <Text className="text-sm text-slate-500 dark:text-slate-400" numberOfLines={1}>
+          <Text
+            className="text-sm text-slate-500 dark:text-slate-400"
+            numberOfLines={1}
+          >
             @{account.username}
           </Text>
         ) : null}
-        {account.followerCounts?.totalFollowers !== undefined ? (
-          <Text className="text-xs text-slate-400 dark:text-slate-500" numberOfLines={1}>
-            {account.followerCounts.totalFollowers} followers
-          </Text>
-        ) : null}
       </View>
-      {account.isVerified ? <Feather name="check-circle" size={18} color="#2563eb" /> : null}
-    </TouchableOpacity>
+
+      {account.isVerified ? (
+        <Feather name="check-circle" size={18} color="#2563eb" />
+      ) : null}
+    </Pressable>
   );
 });
 
 AccountRow.displayName = "AccountRow";
 
-export function FollowListModal({ visible, publicKey, initialTab = "followers", onClose }: FollowListModalProps) {
+export function FollowListModal({
+  visible,
+  publicKey,
+  initialTab = "followers",
+  onClose,
+}: FollowListModalProps) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { isDark, accentColor } = useAccentColor();
-  const { isDesktop } = useLayoutBreakpoints();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [tab, setTab] = useState<"followers" | "following">(initialTab);
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [manualTab, setManualTab] = useState<"followers" | "following" | null>(
+    null,
+  );
+  const tab = manualTab ?? initialTab;
 
-  // Check if we're on web desktop to show sidebars
-  const isWebDesktop = Platform.OS === 'web' && isDesktop;
+  const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
+  const desktopModalHeight = Math.max(460, Math.min(620, windowHeight * 0.72));
 
-  const handleAccountPress = useCallback((account: FocusAccount) => {
-    // Close modal
+  const handleClose = useCallback(() => {
+    setManualTab(null);
     onClose();
-    // Navigate to user profile
-    navigation.navigate('Main', {
-      screen: 'Profile',
-      params: {
-        username: account.username || undefined,
-        publicKey: account.publicKey,
-      }
-    });
-  }, [navigation, onClose]);
+  }, [onClose]);
 
-  useEffect(() => {
-    if (visible) {
-      setTab(initialTab);
-    }
-  }, [initialTab, visible]);
-
-  const followersQuery = useFollowers({ publicKey, enabled: tab === "followers" && visible });
-  const followingQuery = useFollowing({ publicKey, enabled: tab === "following" && visible });
+  const followersQuery = useFollowers({
+    publicKey,
+    enabled: tab === "followers" && visible,
+  });
+  const followingQuery = useFollowing({
+    publicKey,
+    enabled: tab === "following" && visible,
+  });
 
   const activeQuery = tab === "followers" ? followersQuery : followingQuery;
-  const data = tab === "followers" ? followersQuery.accounts : followingQuery.accounts;
+  const accounts =
+    tab === "followers" ? followersQuery.accounts : followingQuery.accounts;
 
-  const handleEndReached = useCallback(() => {
-    if (activeQuery.hasNextPage && !activeQuery.isFetchingNextPage) {
-      void activeQuery.fetchNextPage();
-    }
-  }, [activeQuery]);
+  const {
+    hasNextPage,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    isFetchingNextPage,
+    fetchNextPage,
+    refetch,
+  } = activeQuery;
 
-  const renderAccountItem = useCallback(
-    ({ item }: { item: FocusAccount }) => (
-      <AccountRow account={item} onPress={handleAccountPress} />
-    ),
-    [handleAccountPress]
+  const isInitialLoading = accounts.length === 0 && (isLoading || isFetching);
+
+  const handleAccountPress = useCallback(
+    (account: FocusAccount) => {
+      handleClose();
+      navigation.navigate("Main", {
+        screen: "Profile",
+        params: {
+          username: account.username || undefined,
+          publicKey: account.publicKey,
+        },
+      });
+    },
+    [handleClose, navigation],
   );
 
-  const renderFooter = () => {
-    if (activeQuery.isFetchingNextPage) {
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  const renderAccountItem = useCallback(
+    ({ item, index }: { item: FocusAccount; index: number }) => (
+      <AccountRow
+        account={item}
+        isDark={isDark}
+        isLast={index === accounts.length - 1}
+        onPress={handleAccountPress}
+      />
+    ),
+    [accounts.length, handleAccountPress, isDark],
+  );
+
+  const renderFooter = useCallback(() => {
+    if (isFetchingNextPage) {
       return (
-        <View className="items-center justify-center py-3">
+        <View
+          className="items-center py-3"
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: getBorderColor(isDark, "subtle"),
+          }}
+        >
           <ActivityIndicator size="small" color={accentColor} />
         </View>
       );
     }
-    if (activeQuery.hasNextPage) {
+
+    if (hasNextPage) {
       return (
-        <TouchableOpacity
-          onPress={() => activeQuery.fetchNextPage()}
-          disabled={activeQuery.isFetchingNextPage}
-          activeOpacity={0.8}
-          className="py-3"
+        <Pressable
+          onPress={() => void fetchNextPage()}
+          className="items-center py-3"
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.72 : 1,
+            borderTopWidth: 1,
+            borderTopColor: getBorderColor(isDark, "subtle"),
+          })}
         >
-          <Text className="text-center text-sm font-semibold" style={{ color: accentColor }}>
+          <Text className="text-[13px] font-semibold" style={{ color: accentColor }}>
             Load more
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       );
     }
+
     return null;
-  };
+  }, [accentColor, fetchNextPage, hasNextPage, isDark, isFetchingNextPage]);
 
-  const body = () => {
-    if (activeQuery.isLoading) {
-      return (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="small" color={accentColor} />
-          <Text className="mt-2 text-sm" style={{ color: isDark ? '#94a3b8' : '#64748b' }}>
-            Loading…
-          </Text>
+  const modalTitle = tab === "followers" ? "Followers" : "Following";
+
+  const modalContent = (
+    <View className="flex-1">
+      <View
+        className="flex-row items-center px-4 py-3"
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: getBorderColor(isDark, "subtle"),
+        }}
+      >
+        <View className="min-w-0 flex-1 flex-row items-center gap-2 pr-3">
+          <Pressable
+            onPress={() => setManualTab("followers")}
+            className="rounded-full border px-3 py-1.5"
+            style={{
+              borderColor:
+                tab === "followers"
+                  ? accentColor
+                  : getBorderColor(isDark, "input"),
+              backgroundColor:
+                tab === "followers"
+                  ? accentColor
+                  : isDark
+                    ? "rgba(15, 23, 42, 0.6)"
+                    : "rgba(248, 250, 252, 1)",
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Show followers"
+          >
+            <Text
+              className="text-[13px] font-medium"
+              style={{
+                color:
+                  tab === "followers"
+                    ? "#ffffff"
+                    : isDark
+                      ? "#cbd5e1"
+                      : "#334155",
+              }}
+            >
+              Followers
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setManualTab("following")}
+            className="rounded-full border px-3 py-1.5"
+            style={{
+              borderColor:
+                tab === "following"
+                  ? accentColor
+                  : getBorderColor(isDark, "input"),
+              backgroundColor:
+                tab === "following"
+                  ? accentColor
+                  : isDark
+                    ? "rgba(15, 23, 42, 0.6)"
+                    : "rgba(248, 250, 252, 1)",
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Show following"
+          >
+            <Text
+              className="text-[13px] font-medium"
+              style={{
+                color:
+                  tab === "following"
+                    ? "#ffffff"
+                    : isDark
+                      ? "#cbd5e1"
+                      : "#334155",
+              }}
+            >
+              Following
+            </Text>
+          </Pressable>
         </View>
-      );
-    }
 
-    if (activeQuery.isError) {
-      return (
+        <Pressable
+          onPress={handleClose}
+          className="h-9 w-9 items-center justify-center rounded-full"
+          style={{
+            backgroundColor: isDark
+              ? "rgba(30, 41, 59, 0.8)"
+              : "rgba(241, 245, 249, 1)",
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${modalTitle}`}
+        >
+          <Feather name="x" size={18} color={isDark ? "#cbd5e1" : "#475569"} />
+        </Pressable>
+      </View>
+
+      {isInitialLoading ? (
+        <FollowRowsShimmer isDark={isDark} />
+      ) : isError ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="mb-1 text-base font-semibold" style={{ color: isDark ? '#ffffff' : '#0f172a' }}>
-            Unable to load
+          <Text
+            className="text-center text-[15px] font-semibold"
+            style={{ color: isDark ? "#f8fafc" : "#0f172a" }}
+          >
+            Couldn't load {tab}
           </Text>
           <Text
-            className="mb-3 text-center text-sm"
-            style={{ color: isDark ? '#64748b' : '#94a3b8' }}
+            className="mt-1.5 text-center text-[13px]"
+            style={{ color: isDark ? "#94a3b8" : "#64748b" }}
           >
-            {(activeQuery.error as Error)?.message || "Something went wrong."}
+            {(error as Error)?.message || "Please try again."}
           </Text>
-          <TouchableOpacity
-            onPress={() => activeQuery.refetch()}
-            activeOpacity={0.8}
-            className="rounded-full px-4 py-2"
+          <Pressable
+            onPress={() => void refetch()}
+            className="mt-4 rounded-full px-4 py-2"
             style={{ backgroundColor: accentColor }}
+            accessibilityRole="button"
+            accessibilityLabel={`Retry loading ${tab}`}
           >
-            <Text className="font-semibold text-white">Retry</Text>
-          </TouchableOpacity>
+            <Text className="text-[13px] font-semibold text-white">Retry</Text>
+          </Pressable>
         </View>
-      );
-    }
-
-    if (!data.length) {
-      return (
+      ) : accounts.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="mb-1 text-base font-semibold" style={{ color: isDark ? '#ffffff' : '#0f172a' }}>
+          <Text
+            className="text-center text-[15px] font-semibold"
+            style={{ color: isDark ? "#f8fafc" : "#0f172a" }}
+          >
             {tab === "followers" ? "No followers yet" : "Not following anyone"}
           </Text>
-          <Text className="text-center text-sm" style={{ color: isDark ? '#64748b' : '#94a3b8' }}>
+          <Text
+            className="mt-1.5 text-center text-[13px]"
+            style={{ color: isDark ? "#94a3b8" : "#64748b" }}
+          >
             {tab === "followers"
               ? "Followers will appear here once people start following this account."
               : "Accounts you follow will show up here."}
           </Text>
         </View>
-      );
-    }
-
-      return (
-      <FlashList
-        data={data}
-        keyExtractor={(item) => item.publicKey}
-        renderItem={renderAccountItem}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-        ListFooterComponent={renderFooter}
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="pb-4"
-      />
-    );
-  };
-
-  // Main content that's shared between mobile and desktop
-  const renderContent = () => (
-    <>
-      {/* Header */}
-      <View
-        className="flex-row items-center justify-between border-b px-5 py-4"
-        style={{
-          borderBottomColor: isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(226, 232, 240, 0.8)',
-        }}
-      >
-        {/* Tab Switcher */}
-        <View className="flex-row items-center gap-2">
-          <TouchableOpacity
-            onPress={() => setTab("followers")}
-            activeOpacity={0.8}
-            className="rounded-full px-3 py-2"
-            style={{
-              backgroundColor: tab === "followers"
-                ? accentColor
-                : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: tab === "followers" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155') }}
-            >
-              Followers
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setTab("following")}
-            activeOpacity={0.8}
-            className="rounded-full px-3 py-2"
-            style={{
-              backgroundColor: tab === "following"
-                ? accentColor
-                : (isDark ? 'rgba(51, 65, 85, 0.5)' : 'rgba(241, 245, 249, 1)'),
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: tab === "following" ? '#ffffff' : (isDark ? '#e2e8f0' : '#334155') }}
-            >
-              Following
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Close Button */}
-        <TouchableOpacity
-          onPress={onClose}
-          activeOpacity={0.7}
-          className="h-9 w-9 items-center justify-center rounded-full"
-          style={{
-            backgroundColor: isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(241, 245, 249, 1)',
-          }}
-        >
-          <Feather name="x" size={20} color={isDark ? "#94a3b8" : "#64748b"} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Body */}
-      <View className="flex-1">
-        {body()}
-      </View>
-    </>
+      ) : (
+        <FlashList
+          data={accounts}
+          renderItem={renderAccountItem}
+          keyExtractor={(item, index) => item.publicKey?.trim() || `${tab}-${index}`}
+          estimatedItemSize={ESTIMATED_ROW_SIZE}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={renderFooter}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 20 }}
+          showsVerticalScrollIndicator={Platform.OS === "web"}
+        />
+      )}
+    </View>
   );
-
-  if (!visible) return null;
 
   return (
     <Modal
       visible={visible}
-      animationType={isWebDesktop ? "fade" : "slide"}
-      presentationStyle={isWebDesktop ? "overFullScreen" : "pageSheet"}
-      transparent={isWebDesktop}
-      onRequestClose={onClose}
+      transparent={isDesktopWeb}
+      animationType="fade"
+      presentationStyle={
+        isDesktopWeb
+          ? "overFullScreen"
+          : Platform.OS === "ios"
+            ? "fullScreen"
+            : "overFullScreen"
+      }
+      statusBarTranslucent={Platform.OS === "android"}
+      onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
+      <SafeAreaView
+        edges={isDesktopWeb ? [] : ["top", "bottom"]}
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{
+          backgroundColor: isDesktopWeb
+            ? "transparent"
+            : isDark
+              ? "#0b1629"
+              : "#ffffff",
+        }}
       >
-        {isWebDesktop ? (
-          // Desktop: Show with sidebars visible
+        {isDesktopWeb ? (
           <View
-            className="flex-1"
-            style={{ backgroundColor: isDark ? 'rgba(10, 15, 26, 0.85)' : 'rgba(255, 255, 255, 0.85)' }}
+            className="flex-1 items-center justify-center px-6 py-8"
+            pointerEvents="box-none"
           >
-            {/* Left sidebar */}
-            <DesktopLeftNav />
+            <Pressable
+              className="absolute inset-0"
+              onPress={handleClose}
+              style={{
+                backgroundColor: isDark
+                  ? "rgba(2, 6, 23, 0.72)"
+                  : "rgba(15, 23, 42, 0.35)",
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${modalTitle}`}
+            />
 
-            {/* Center content area */}
-            <View className="flex-1 items-center">
-              <View
-                className="flex-1 w-full"
-                style={{
-                  maxWidth: CENTER_CONTENT_MAX_WIDTH,
-                  backgroundColor: isDark ? '#0a0f1a' : '#ffffff',
-                  borderLeftWidth: 1,
-                  borderRightWidth: 1,
-                  borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.25)',
-                }}
-              >
-                {renderContent()}
-              </View>
+            <View
+              className="w-full overflow-hidden rounded-3xl border"
+              style={{
+                maxWidth: 640,
+                height: desktopModalHeight,
+                backgroundColor: isDark ? "#0b1629" : "#ffffff",
+                borderColor: getBorderColor(isDark, "contrast_low"),
+              }}
+            >
+              {modalContent}
             </View>
-
-            {/* Right sidebar */}
-            <DesktopRightNav />
           </View>
         ) : (
-          // Mobile: Standard page sheet
-          <SafeAreaView
+          <View
             className="flex-1"
-            style={{ backgroundColor: isDark ? '#0a0f1a' : '#ffffff' }}
+            style={{ backgroundColor: isDark ? "#0b1629" : "#ffffff" }}
           >
-            {renderContent()}
-          </SafeAreaView>
+            {modalContent}
+          </View>
         )}
-      </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

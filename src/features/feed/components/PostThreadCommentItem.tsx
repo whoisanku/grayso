@@ -96,6 +96,7 @@ export function PostThreadCommentItem({
     pageSize: REPLIES_PAGE_SIZE,
     includeParents: false,
     sortMode,
+    initialPost: threadPost.post,
   });
 
   const connectorColor = getBorderColor(isDark, "subtle");
@@ -145,6 +146,31 @@ export function PostThreadCommentItem({
 
       navigation.push("PostThread", {
         postHash: post.postHash,
+        initialPost: post,
+      });
+    },
+    [navigation],
+  );
+  const handleOpenProfile = React.useCallback(
+    ({
+      publicKey,
+      username,
+    }: {
+      publicKey?: string | null;
+      username?: string | null;
+    }) => {
+      const normalizedPublicKey = publicKey?.trim() ?? "";
+      const normalizedUsername = username?.trim() ?? "";
+      if (!normalizedPublicKey && !normalizedUsername) {
+        return;
+      }
+
+      navigation.navigate("Main", {
+        screen: "Profile",
+        params: {
+          publicKey: normalizedPublicKey || undefined,
+          username: normalizedUsername || undefined,
+        },
       });
     },
     [navigation],
@@ -186,6 +212,7 @@ export function PostThreadCommentItem({
         threadLineColor={connectorColor}
         isVisible={isVisible}
         onPress={handleOpenThread}
+        onProfilePress={handleOpenProfile}
         onReplyPress={onReplyPress}
         onReactionSummaryPress={onReactionSummaryPress}
       />

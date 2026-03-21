@@ -68,12 +68,12 @@ const THREAD_COMMENT_SORT_OPTIONS: Array<{
   value: PostThreadSortMode;
 }> = [
   {
-    label: "Most valuable",
-    value: "valuable",
-  },
-  {
     label: "Most recent",
     value: "recent",
+  },
+  {
+    label: "Most valuable",
+    value: "valuable",
   },
 ];
 
@@ -86,7 +86,7 @@ export function PostThreadScreen({
   const { isDesktop, centerColumnOffset } = useLayoutBreakpoints();
   const isDesktopWeb = Platform.OS === "web";
   const [commentSortMode, setCommentSortMode] =
-    React.useState<PostThreadSortMode>("valuable");
+    React.useState<PostThreadSortMode>("recent");
   const [isSortMenuOpen, setIsSortMenuOpen] = React.useState(false);
   const [commentTargetPost, setCommentTargetPost] =
     React.useState<FocusFeedPost | null>(null);
@@ -94,6 +94,8 @@ export function PostThreadScreen({
     React.useState<FocusFeedPost | null>(null);
 
   const postHash = route.params.postHash;
+  const initialPost = route.params.initialPost ?? null;
+  const initialIsFollowingAuthor = route.params.initialIsFollowingAuthor ?? null;
   const normalizedCurrentPostHash = normalizePostHash(postHash);
   const readerPublicKey = currentUser?.PublicKeyBase58Check?.trim() ?? null;
 
@@ -103,9 +105,11 @@ export function PostThreadScreen({
     comments,
     totalCommentCount,
     loadedCommentCount,
+    hasLoadedInitialPage,
     hasNextPage,
     isLoading,
     isRefreshing,
+    isFetching,
     isFetchingNextPage,
     error,
     reload,
@@ -115,6 +119,7 @@ export function PostThreadScreen({
     readerPublicKey,
     enabled: Boolean(postHash),
     sortMode: commentSortMode,
+    initialPost,
   });
 
   React.useEffect(() => {
@@ -140,7 +145,7 @@ export function PostThreadScreen({
   const activeSortLabel = React.useMemo(
     () =>
       THREAD_COMMENT_SORT_OPTIONS.find((option) => option.value === commentSortMode)
-        ?.label ?? "Most valuable",
+        ?.label ?? "Most recent",
     [commentSortMode],
   );
   const handleReplyToAnchor = React.useCallback(() => {
@@ -161,9 +166,34 @@ export function PostThreadScreen({
 
       navigation.push("PostThread", {
         postHash: nextPostHash,
+        initialPost: target,
       });
     },
     [navigation, normalizedCurrentPostHash],
+  );
+  const handleOpenProfile = React.useCallback(
+    ({
+      publicKey,
+      username,
+    }: {
+      publicKey?: string | null;
+      username?: string | null;
+    }) => {
+      const normalizedPublicKey = publicKey?.trim() ?? "";
+      const normalizedUsername = username?.trim() ?? "";
+      if (!normalizedPublicKey && !normalizedUsername) {
+        return;
+      }
+
+      navigation.navigate("Main", {
+        screen: "Profile",
+        params: {
+          publicKey: normalizedPublicKey || undefined,
+          username: normalizedUsername || undefined,
+        },
+      });
+    },
+    [navigation],
   );
 
   const threadColumnStyle = React.useMemo(
@@ -208,6 +238,7 @@ export function PostThreadScreen({
                   variant="threadReply"
                   isVisible
                   onPress={handleOpenPostThread}
+                  onProfilePress={handleOpenProfile}
                   onReplyPress={handleOpenCommentComposer}
                   onReactionSummaryPress={handleOpenReactionSummary}
                 />
@@ -221,11 +252,19 @@ export function PostThreadScreen({
           variant="thread"
           isVisible
           onPress={handleOpenPostThread}
+          onProfilePress={handleOpenProfile}
           onReplyPress={handleOpenCommentComposer}
           onReactionSummaryPress={handleOpenReactionSummary}
+          initialIsFollowingAuthor={initialIsFollowingAuthor}
         />
 
-        <View className="relative border-b border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
+        <View
+          className="relative border-b border-slate-200/80 px-4 py-3 dark:border-slate-800/80"
+          style={{
+            zIndex: isSortMenuOpen ? 40 : 1,
+            overflow: "visible",
+          }}
+        >
           <View className="flex-row items-center justify-between gap-3">
             <Text className="text-[17px] font-semibold text-slate-900 dark:text-white">
               Comments ({Math.max(0, totalCommentCount).toLocaleString()})
@@ -261,19 +300,18 @@ export function PostThreadScreen({
                   color={isDark ? "#cbd5e1" : "#475569"}
                 />
               </Pressable>
-
               {isSortMenuOpen ? (
                 <View
                   className="absolute right-0 top-full mt-2 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-700/80"
                   style={{
-                    minWidth: 156,
+                    minWidth: 176,
                     backgroundColor: isDark ? "#111827" : "#ffffff",
                     shadowColor: "#020617",
                     shadowOpacity: isDark ? 0.36 : 0.12,
                     shadowRadius: 18,
                     shadowOffset: { width: 0, height: 10 },
                     elevation: 14,
-                    zIndex: 50,
+                    zIndex: 60,
                   }}
                 >
                   {THREAD_COMMENT_SORT_OPTIONS.map((option, index) => {
@@ -286,7 +324,7 @@ export function PostThreadScreen({
                           setCommentSortMode(option.value);
                           setIsSortMenuOpen(false);
                         }}
-                        className="flex-row items-center justify-between gap-3 px-3 py-2.5"
+                        className="flex-row items-center justify-between gap-3 px-4 py-3"
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.88 : 1,
                           backgroundColor: isActive
@@ -306,7 +344,8 @@ export function PostThreadScreen({
                         accessibilityLabel={`Sort comments by ${option.label}`}
                       >
                         <Text
-                          className="text-[13px] font-medium"
+                          numberOfLines={1}
+                          className="flex-1 text-[14px] font-medium"
                           style={{
                             color: isActive
                               ? accentColor
@@ -318,7 +357,7 @@ export function PostThreadScreen({
                           {option.label}
                         </Text>
                         {isActive ? (
-                          <Feather name="check" size={14} color={accentColor} />
+                          <Feather name="check" size={15} color={accentColor} />
                         ) : null}
                       </Pressable>
                     );
@@ -334,6 +373,7 @@ export function PostThreadScreen({
     activeSortLabel,
     accentColor,
     handleOpenCommentComposer,
+    handleOpenProfile,
     handleOpenPostThread,
     handleOpenReactionSummary,
     isDark,
@@ -349,6 +389,18 @@ export function PostThreadScreen({
       return null;
     }
 
+    if (!hasLoadedInitialPage && isFetching) {
+      return (
+        <View className="px-4 pb-4 pt-3" style={threadColumnStyle}>
+          <PostThreadRepliesShimmer count={2} />
+        </View>
+      );
+    }
+
+    if (!hasLoadedInitialPage || error) {
+      return null;
+    }
+
     return (
       <View className="items-center px-6 py-16" style={threadColumnStyle}>
         <Text className="text-[17px] font-semibold text-slate-900 dark:text-white">
@@ -359,7 +411,7 @@ export function PostThreadScreen({
         </Text>
       </View>
     );
-  }, [post]);
+  }, [error, hasLoadedInitialPage, isFetching, post, threadColumnStyle]);
 
   const footer = React.useMemo(() => {
     if (isFetchingNextPage) {
