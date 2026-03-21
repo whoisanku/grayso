@@ -3,6 +3,7 @@ import { View, Text, Pressable, Linking, Platform, ActivityIndicator } from "rea
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
+import { ChatIcon } from "@/components/icons/ChatIcon";
 import { useGetTwitterTweet } from "../api/useGetTwitterTweet";
 import { useGetTwitterOEmbed } from "../api/useGetTwitterOEmbed";
 
@@ -273,7 +274,11 @@ export function TwitterEmbed({ url, isDark, extraData }: TwitterEmbedProps) {
                     </View>
 
                     <View className="flex-row items-center gap-1.5">
-                        <Feather name="message-circle" size={18} color={isDark ? "#94a3b8" : "#64748b"} />
+                        <ChatIcon
+                            size={18}
+                            color={isDark ? "#94a3b8" : "#64748b"}
+                            strokeWidth={1.7}
+                        />
                         <Text className="text-[14px] font-medium text-slate-600 dark:text-slate-400">Reply</Text>
                     </View>
 

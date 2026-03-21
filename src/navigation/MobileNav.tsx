@@ -14,13 +14,13 @@ import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 
 import { type RootStackParamList, type HomeTabParamList } from "./types";
-import MessageIcon from "../assets/navIcons/message.svg";
-import MessageIconFilled from "../assets/navIcons/message-filled.svg";
 import HomeIcon from "../assets/navIcons/home.svg";
 import HomeIconFilled from "../assets/navIcons/home-filled.svg";
-import UserIcon from "../assets/navIcons/user.svg";
-import UserIconFilled from "../assets/navIcons/user-filled.svg";
+import { ChatIcon, ChatIconFilled } from "@/components/icons/ChatIcon";
 import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
+import { ProfileIcon, ProfileIconFilled } from "@/components/icons/ProfileIcon";
+import { SearchIcon } from "@/components/icons/SearchIcon";
+import { WalletIcon, WalletIconFilled } from "@/components/icons/WalletIcon";
 import { useAccentColor } from "../state/theme/useAccentColor";
 import { getBorderColor } from "../theme/borders";
 import { SwitchWalletDialog } from "@/features/auth/components/SwitchWalletDialog";
@@ -37,8 +37,18 @@ export function MobileNav({ activeTab }: MobileNavProps) {
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
   const { accentColor } = useAccentColor();
-  const { accounts } = useWalletSwitcher();
+  const { accounts, currentUser } = useWalletSwitcher();
   const [showWalletSwitcher, setShowWalletSwitcher] = useState(false);
+  const currentUsername =
+    currentUser?.ProfileEntryResponse?.Username?.trim() ?? "";
+  const currentPublicKey = currentUser?.PublicKeyBase58Check?.trim() ?? "";
+  const currentProfileParams =
+    currentUsername || currentPublicKey
+      ? {
+          username: currentUsername || undefined,
+          publicKey: currentPublicKey || undefined,
+        }
+      : undefined;
 
   const handleProfileLongPress = useCallback(() => {
     if (accounts.length > 1) {
@@ -70,46 +80,82 @@ export function MobileNav({ activeTab }: MobileNavProps) {
           ),
       },
       {
+        key: "Search" as const,
+        onPress: () => navigation.navigate("Main", { screen: "Search" }),
+        renderIcon: (focused: boolean) => (
+          <SearchIcon
+            size={24}
+            color={
+              focused
+                ? isDark
+                  ? "#f8fafc"
+                  : "#0f172a"
+                : isDark
+                  ? "#64748b"
+                  : "#94a3b8"
+            }
+            strokeWidth={focused ? 1.85 : 1.65}
+          />
+        ),
+      },
+      {
+        key: "Wallet" as const,
+        onPress: () => navigation.navigate("Main", { screen: "Wallet" }),
+        renderIcon: (focused: boolean) =>
+          focused ? (
+            <WalletIconFilled
+              size={24}
+              color={isDark ? "#f8fafc" : "#0f172a"}
+            />
+          ) : (
+            <WalletIcon
+              size={24}
+              color={isDark ? "#64748b" : "#94a3b8"}
+              strokeWidth={1.65}
+            />
+          ),
+      },
+      {
         key: "Messages" as const,
         onPress: () => navigation.navigate("Main", { screen: "Messages" }),
         renderIcon: (focused: boolean) =>
           focused ? (
-            <MessageIconFilled
-              width={27}
-              height={27}
-              fill={isDark ? "#f8fafc" : "#0f172a"}
+            <ChatIconFilled
+              size={27}
+              color={isDark ? "#f8fafc" : "#0f172a"}
             />
           ) : (
-            <MessageIcon
-              width={27}
-              height={27}
-              stroke={isDark ? "#64748b" : "#94a3b8"}
-              strokeWidth={2}
+            <ChatIcon
+              size={27}
+              color={isDark ? "#64748b" : "#94a3b8"}
+              strokeWidth={1.8}
             />
           ),
       },
       {
         key: "Profile" as const,
-        onPress: () => navigation.navigate("Main", { screen: "Profile" }),
+        onPress: () =>
+          navigation.navigate("Main", {
+            screen: "Profile",
+            params: currentProfileParams,
+          }),
         onLongPress: handleProfileLongPress,
         renderIcon: (focused: boolean) =>
           focused ? (
-            <UserIconFilled
-              width={27}
-              height={27}
-              fill={isDark ? "#f8fafc" : "#0f172a"}
+            <ProfileIconFilled
+              size={27}
+              color={isDark ? "#f8fafc" : "#0f172a"}
             />
           ) : (
-            <UserIcon
-              width={27}
-              height={27}
-              stroke={isDark ? "#64748b" : "#94a3b8"}
-              strokeWidth={2}
+            <ProfileIcon
+              size={27}
+              color={isDark ? "#64748b" : "#94a3b8"}
+              strokeWidth={1.8}
             />
           ),
       },
     ],
-    [isDark, navigation, handleProfileLongPress],
+    [currentProfileParams, handleProfileLongPress, isDark, navigation],
   );
 
   return (

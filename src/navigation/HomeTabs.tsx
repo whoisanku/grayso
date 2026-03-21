@@ -4,13 +4,15 @@ import { HomeScreen } from "../features/messaging/screens/HomeScreen";
 import { ProfileScreen } from "../features/profile/screens/ProfileScreen";
 import { FeedScreen } from "../features/feed/screens/FeedScreen";
 import { NotificationsScreen } from "../features/notifications/screens/NotificationsScreen";
-import MessageIcon from "../assets/navIcons/message.svg";
-import MessageIconFilled from "../assets/navIcons/message-filled.svg";
+import { SearchScreen } from "../features/search/screens/SearchScreen";
+import { WalletScreen } from "../features/wallet/screens/WalletScreen";
 import HomeIcon from "../assets/navIcons/home.svg";
 import HomeIconFilled from "../assets/navIcons/home-filled.svg";
-import UserIcon from "../assets/navIcons/user.svg";
-import UserIconFilled from "../assets/navIcons/user-filled.svg";
+import { ChatIcon, ChatIconFilled } from "@/components/icons/ChatIcon";
 import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
+import { ProfileIcon, ProfileIconFilled } from "@/components/icons/ProfileIcon";
+import { SearchIcon } from "@/components/icons/SearchIcon";
+import { WalletIcon, WalletIconFilled } from "@/components/icons/WalletIcon";
 import {
   NotificationBellFilledIcon,
   NotificationBellOutlineIcon,
@@ -73,7 +75,14 @@ function CustomTabBar({
   state,
   navigation,
   unreadNotificationsCount = 0,
-}: BottomTabBarProps & { unreadNotificationsCount?: number }) {
+  currentProfileParams,
+}: BottomTabBarProps & {
+  unreadNotificationsCount?: number;
+  currentProfileParams?: {
+    username?: string;
+    publicKey?: string;
+  };
+}) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const { accentColor } = useAccentColor();
@@ -113,6 +122,11 @@ function CustomTabBar({
         });
 
         if (!event.defaultPrevented) {
+          if (route.name === "Profile") {
+            navigation.navigate("Profile", currentProfileParams);
+            return;
+          }
+
           navigation.navigate(route.name);
         }
       };
@@ -132,17 +146,15 @@ function CustomTabBar({
       let icon = null as React.ReactNode;
       if (route.name === "Messages") {
         icon = isFocused ? (
-          <MessageIconFilled
-            width={27}
-            height={27}
-            fill={isDark ? "#f8fafc" : "#0f172a"}
+          <ChatIconFilled
+            size={27}
+            color={isDark ? "#f8fafc" : "#0f172a"}
           />
         ) : (
-          <MessageIcon
-            width={27}
-            height={27}
-            stroke={isDark ? "#64748b" : "#94a3b8"}
-            strokeWidth={2}
+          <ChatIcon
+            size={27}
+            color={isDark ? "#64748b" : "#94a3b8"}
+            strokeWidth={1.8}
           />
         );
       } else if (route.name === "Feed") {
@@ -171,19 +183,46 @@ function CustomTabBar({
             color={isDark ? "#64748b" : "#94a3b8"}
           />
         );
-      } else {
+      } else if (route.name === "Search") {
+        icon = (
+          <SearchIcon
+            size={24}
+            color={
+              isFocused
+                ? isDark
+                  ? "#f8fafc"
+                  : "#0f172a"
+                : isDark
+                  ? "#64748b"
+                  : "#94a3b8"
+            }
+            strokeWidth={isFocused ? 1.85 : 1.65}
+          />
+        );
+      } else if (route.name === "Wallet") {
         icon = isFocused ? (
-          <UserIconFilled
-            width={27}
-            height={27}
-            fill={isDark ? "#f8fafc" : "#0f172a"}
+          <WalletIconFilled
+            size={25}
+            color={isDark ? "#f8fafc" : "#0f172a"}
           />
         ) : (
-          <UserIcon
-            width={27}
-            height={27}
-            stroke={isDark ? "#64748b" : "#94a3b8"}
-            strokeWidth={2}
+          <WalletIcon
+            size={25}
+            color={isDark ? "#94a3b8" : "#64748b"}
+            strokeWidth={1.65}
+          />
+        );
+      } else {
+        icon = isFocused ? (
+          <ProfileIconFilled
+            size={27}
+            color={isDark ? "#f8fafc" : "#0f172a"}
+          />
+        ) : (
+          <ProfileIcon
+            size={27}
+            color={isDark ? "#64748b" : "#94a3b8"}
+            strokeWidth={1.8}
           />
         );
       }
@@ -326,6 +365,18 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
     currentUser?.ProfileEntryResponse,
     publicKey || "",
   );
+  const currentUsername =
+    currentUser?.ProfileEntryResponse?.Username?.trim() ?? "";
+  const currentProfileParams = useMemo(
+    () =>
+      currentUsername || publicKey
+        ? {
+            username: currentUsername || undefined,
+            publicKey: publicKey || undefined,
+          }
+        : undefined,
+    [currentUsername, publicKey],
+  );
   const { counts: notificationCounts } = useNotificationCounts(publicKey);
   const unreadNotificationsCount = Math.max(
     0,
@@ -418,6 +469,24 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Search" });
+            }}
+          >
+            <SearchIcon
+              size={22}
+              color={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={1.7}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Search
+            </Text>
+          </TouchableOpacity>
+
           {/* Chat */}
           <TouchableOpacity
             className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
@@ -427,11 +496,10 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
               rootNavigation.navigate("Main", { screen: "Messages" });
             }}
           >
-            <MessageIcon
-              width={22}
-              height={22}
-              stroke={isDark ? "#e2e8f0" : "#0f172a"}
-              strokeWidth={2}
+            <ChatIcon
+              size={22}
+              color={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={1.8}
             />
             <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
               Chat
@@ -470,20 +538,40 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
+            activeOpacity={0.7}
+            onPress={() => {
+              setDrawerOpen(false);
+              rootNavigation.navigate("Main", { screen: "Wallet" });
+            }}
+          >
+            <WalletIcon
+              size={22}
+              color={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={1.7}
+            />
+            <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
+              Wallet
+            </Text>
+          </TouchableOpacity>
+
           {/* Profile */}
           <TouchableOpacity
             className="flex-row items-center px-4 py-3.5 transition-colors duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 active:opacity-80"
             activeOpacity={0.7}
             onPress={() => {
               setDrawerOpen(false);
-              rootNavigation.navigate("Main", { screen: "Profile" });
+              rootNavigation.navigate("Main", {
+                screen: "Profile",
+                params: currentProfileParams,
+              });
             }}
           >
-            <UserIcon
-              width={22}
-              height={22}
-              stroke={isDark ? "#e2e8f0" : "#0f172a"}
-              strokeWidth={2}
+            <ProfileIcon
+              size={22}
+              color={isDark ? "#e2e8f0" : "#0f172a"}
+              strokeWidth={1.8}
             />
             <Text className="ml-4 text-[15px] font-medium text-slate-900 dark:text-white">
               Profile
@@ -522,6 +610,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
       followerCount,
       followingCount,
       unreadNotificationsCount,
+      currentProfileParams,
       setDrawerOpen,
     ],
   );
@@ -538,6 +627,7 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
           <CustomTabBar
             {...props}
             unreadNotificationsCount={unreadNotificationsCount}
+            currentProfileParams={currentProfileParams}
           />
         ))
       }
@@ -562,6 +652,8 @@ export function HomeTabs({ navigation }: HomeTabsProps) {
       }}
     >
       <Tab.Screen name="Feed" component={FeedScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Wallet" component={WalletScreen} />
       <Tab.Screen name="Messages" component={HomeScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen

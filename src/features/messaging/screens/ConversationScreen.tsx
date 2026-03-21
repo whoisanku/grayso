@@ -20,6 +20,7 @@ import {
   Alert,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
+import { ChatIcon } from "@/components/icons/ChatIcon";
 import { UserAvatar } from "@/components/UserAvatar";
 
 import Reanimated from "react-native-reanimated";
@@ -975,10 +976,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                       </View>
                     ) : (
                       <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                        <Feather
-                          name="message-circle"
+                        <ChatIcon
                           size={38}
                           color={isDark ? "#64748b" : "#9ca3af"}
+                          strokeWidth={1.7}
                         />
                         <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
                           No messages yet
@@ -1032,10 +1033,10 @@ export function ConversationScreen({ navigation, route }: Props) {
                       </View>
                     ) : (
                       <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-slate-800 dark:bg-slate-900">
-                        <Feather
-                          name="message-circle"
+                        <ChatIcon
                           size={38}
                           color={isDark ? "#64748b" : "#9ca3af"}
+                          strokeWidth={1.7}
                         />
                         <Text className="mt-4 text-lg font-semibold text-gray-900 dark:text-slate-200">
                           No messages yet

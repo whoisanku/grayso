@@ -21,13 +21,13 @@ import { useAccentColor } from "@/state/theme/useAccentColor";
 import { WalletSwitcher } from "@/features/auth/components/WalletSwitcher";
 import HomeIcon from "@/assets/navIcons/home.svg";
 import HomeIconFilled from "@/assets/navIcons/home-filled.svg";
-import MessageIcon from "@/assets/navIcons/message.svg";
-import MessageIconFilled from "@/assets/navIcons/message-filled.svg";
-import UserIcon from "@/assets/navIcons/user.svg";
-import UserIconFilled from "@/assets/navIcons/user-filled.svg";
 import SettingsIcon from "@/assets/navIcons/settings.svg";
 import SettingsIconFilled from "@/assets/navIcons/settings-filled.svg";
+import { ChatIcon, ChatIconFilled } from "@/components/icons/ChatIcon";
 import { FeatherPostIcon } from "@/components/icons/FeatherPostIcon";
+import { ProfileIcon, ProfileIconFilled } from "@/components/icons/ProfileIcon";
+import { SearchIcon } from "@/components/icons/SearchIcon";
+import { WalletIcon, WalletIconFilled } from "@/components/icons/WalletIcon";
 import {
   NotificationBellFilledIcon,
   NotificationBellOutlineIcon,
@@ -191,6 +191,15 @@ export function DesktopLeftNav({
   const { leftNavMinimal, centerColumnOffset } = useLayoutBreakpoints();
   const { accentColor } = useAccentColor();
   const publicKey = resolveCurrentUserPublicKey(currentUser);
+  const currentUsername =
+    currentUser?.ProfileEntryResponse?.Username?.trim() ?? "";
+  const currentProfileParams =
+    currentUsername || publicKey
+      ? {
+          username: currentUsername || undefined,
+          publicKey: publicKey || undefined,
+        }
+      : undefined;
   const { counts } = useNotificationCounts(publicKey);
   const queryClient = useQueryClient();
   const [refreshingKey, setRefreshingKey] = React.useState<string | null>(null);
@@ -208,8 +217,11 @@ export function DesktopLeftNav({
   // Determine which nav item is active based on route
   const isMainTabsRoute = currentRouteName === "Main";
   const isFeedActive = currentRouteName === "Feed" || activeTab === "Feed";
+  const isSearchActive = currentRouteName === "Search" || activeTab === "Search";
   const isProfileActive =
     currentRouteName === "Profile" || activeTab === "Profile";
+  const isWalletActive =
+    currentRouteName === "Wallet" || activeTab === "Wallet";
   const isNotificationsActive =
     currentRouteName === "Notifications" || activeTab === "Notifications";
   const shouldRefreshFeed = isMainTabsRoute && activeTab === "Feed";
@@ -218,7 +230,9 @@ export function DesktopLeftNav({
   const isSettingsActive = currentRouteName === "Settings";
   const isChatsActive =
     !isFeedActive &&
+    !isSearchActive &&
     !isProfileActive &&
+    !isWalletActive &&
     !isNotificationsActive &&
     !isSettingsActive &&
     (activeTab === "Messages" || currentRouteName === "Main");
@@ -259,11 +273,23 @@ export function DesktopLeftNav({
       },
     },
     {
+      key: "Search",
+      label: "Search",
+      Icon: SearchIcon as unknown as NavIconComponent,
+      ActiveIcon: SearchIcon as unknown as NavIconComponent,
+      isActive: isSearchActive,
+      iconSize: 24,
+      onPress: () => {
+        rootNavigation.navigate("Main", { screen: "Search" });
+      },
+    },
+    {
       key: "Messages",
       label: "Chats",
-      Icon: MessageIcon,
-      ActiveIcon: MessageIconFilled,
+      Icon: ChatIcon as unknown as NavIconComponent,
+      ActiveIcon: ChatIconFilled as unknown as NavIconComponent,
       isActive: isChatsActive,
+      iconSize: 24,
       onPress: () => {
         // Navigate to Main with Messages screen
         rootNavigation.navigate("Main", { screen: "Messages" });
@@ -300,14 +326,28 @@ export function DesktopLeftNav({
       },
     },
     {
+      key: "Wallet",
+      label: "Wallet",
+      Icon: WalletIcon as unknown as NavIconComponent,
+      ActiveIcon: WalletIconFilled as unknown as NavIconComponent,
+      isActive: isWalletActive,
+      iconSize: 24,
+      onPress: () => {
+        rootNavigation.navigate("Main", { screen: "Wallet" });
+      },
+    },
+    {
       key: "Profile",
       label: "Profile",
-      Icon: UserIcon,
-      ActiveIcon: UserIconFilled,
+      Icon: ProfileIcon as unknown as NavIconComponent,
+      ActiveIcon: ProfileIconFilled as unknown as NavIconComponent,
       isActive: isProfileActive,
+      iconSize: 24,
       onPress: () => {
-        // Navigate to Main with Profile screen - this will update URL to /profile
-        rootNavigation.navigate("Main", { screen: "Profile" });
+        rootNavigation.navigate("Main", {
+          screen: "Profile",
+          params: currentProfileParams,
+        });
       },
     },
     {

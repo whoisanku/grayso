@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
+import { ChatIcon } from "@/components/icons/ChatIcon";
 import { useAccentColor } from "@/state/theme/useAccentColor";
 import { getBorderColor } from "@/theme/borders";
 import * as Haptics from "expo-haptics";
@@ -118,7 +119,11 @@ export function ProfileActions({
           borderColor: getBorderColor(isDark, "subtle"),
         }}
       >
-        <Feather name="message-circle" size={18} color={isDark ? "#94a3b8" : "#475569"} />
+        <ChatIcon
+          size={18}
+          color={isDark ? "#94a3b8" : "#475569"}
+          strokeWidth={1.7}
+        />
       </TouchableOpacity>
 
       {/* More */}

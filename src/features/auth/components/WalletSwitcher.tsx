@@ -75,6 +75,16 @@ export function WalletSwitcher({
     () => accounts.find((acc) => acc.isCurrent),
     [accounts]
   );
+  const currentProfileParams = useMemo(
+    () =>
+      currentAccount
+        ? {
+            username: currentAccount.username || undefined,
+            publicKey: currentAccount.publicKey || undefined,
+          }
+        : undefined,
+    [currentAccount],
+  );
 
   const openMenu = useCallback(() => {
     if (externalOpen !== undefined) {
@@ -142,8 +152,11 @@ export function WalletSwitcher({
 
   const handleGoToProfile = useCallback(() => {
     closeMenu();
-    navigation.navigate("Main", { screen: "Profile" });
-  }, [closeMenu, navigation]);
+    navigation.navigate("Main", {
+      screen: "Profile",
+      params: currentProfileParams,
+    });
+  }, [closeMenu, currentProfileParams, navigation]);
 
   const handleSignOut = useCallback(async () => {
     if (pendingAction || isSigningOut) return;

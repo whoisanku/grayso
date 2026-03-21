@@ -24,12 +24,10 @@ import {
 } from '../../../alf/breakpoints';
 import { useAccentColor } from '../../../state/theme/useAccentColor';
 import { WalletSwitcher } from '@/features/auth/components/WalletSwitcher';
-import MessageIcon from '../../../assets/navIcons/message.svg';
-import MessageIconFilled from '../../../assets/navIcons/message-filled.svg';
-import UserIcon from '../../../assets/navIcons/user.svg';
-import UserIconFilled from '../../../assets/navIcons/user-filled.svg';
 import SettingsIcon from '../../../assets/navIcons/settings.svg';
 import SettingsIconFilled from '../../../assets/navIcons/settings-filled.svg';
+import { ChatIcon, ChatIconFilled } from '@/components/icons/ChatIcon';
+import { ProfileIcon, ProfileIconFilled } from '@/components/icons/ProfileIcon';
 
 const NAV_ICON_WIDTH = 24;
 type NavIconComponent = React.ComponentType<{
@@ -137,8 +135,8 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
     {
       key: 'Messages',
       label: 'Chats',
-      Icon: MessageIcon,
-      ActiveIcon: MessageIconFilled,
+      Icon: ChatIcon as unknown as NavIconComponent,
+      ActiveIcon: ChatIconFilled as unknown as NavIconComponent,
       isActive: isChatsActive,
       onPress: () => {
         // Navigate to Main with Messages screen
@@ -148,8 +146,8 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
     {
       key: 'Profile',
       label: 'Profile',
-      Icon: UserIcon,
-      ActiveIcon: UserIconFilled,
+      Icon: ProfileIcon as unknown as NavIconComponent,
+      ActiveIcon: ProfileIconFilled as unknown as NavIconComponent,
       isActive: isProfileActive,
       onPress: () => {
         // Navigate to Main with Profile screen - this will update URL to /profile

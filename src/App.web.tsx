@@ -53,6 +53,14 @@ const linking: LinkingOptions<RootStackParamList> = {
       );
     }
 
+    const normalizedPathname = candidateUrl.pathname.replace(/\/+$/, "");
+    if (normalizedPathname.toLowerCase().startsWith("/u/")) {
+      return getNavigationStateFromPath(
+        normalizedPathname.slice(2),
+        options,
+      );
+    }
+
     return getNavigationStateFromPath(path, options);
   },
   config: {
@@ -61,9 +69,11 @@ const linking: LinkingOptions<RootStackParamList> = {
         initialRouteName: "Feed",
         screens: {
           Feed: "feed",
+          Search: "search",
           Messages: "messages",
+          Wallet: "wallet",
           Notifications: "notifications",
-          Profile: "u/:username?",
+          Profile: ":username",
         },
       },
       Settings: "settings",

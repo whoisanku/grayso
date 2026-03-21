@@ -9,6 +9,34 @@ const ACCOUNT_EXTENDED_BY_PUBLIC_KEY = `
     accountByPublicKey(publicKey: $publicKey) {
       ...CoreAccountFields
       description
+      accountWealth {
+        publicKey
+        usdBalanceUsdCents
+        focusTokenBalanceUsdCents
+        desoBalanceUsdCents
+        desoBalanceNanos
+        focusTokenBalanceBaseUnits
+        focusTokenLockedBalanceUsdCents
+        focusTokenLockedBalanceBaseUnits
+        focusTokenTotalBalanceBaseUnits
+        usdBalanceBaseUnits
+        totalBalanceUsdCents
+        __typename
+      }
+      accountWealthChainUser {
+        publicKey
+        usdBalanceUsdCents
+        focusTokenBalanceUsdCents
+        desoBalanceUsdCents
+        desoBalanceNanos
+        focusTokenBalanceBaseUnits
+        focusTokenLockedBalanceUsdCents
+        focusTokenLockedBalanceBaseUnits
+        focusTokenTotalBalanceBaseUnits
+        usdBalanceBaseUnits
+        totalBalanceUsdCents
+        __typename
+      }
       profile {
         publicKey
         description
@@ -103,6 +131,34 @@ const ACCOUNT_EXTENDED_BY_USERNAME = `
     accountByUsername(username: $username) {
       ...CoreAccountFields
       description
+      accountWealth {
+        publicKey
+        usdBalanceUsdCents
+        focusTokenBalanceUsdCents
+        desoBalanceUsdCents
+        desoBalanceNanos
+        focusTokenBalanceBaseUnits
+        focusTokenLockedBalanceUsdCents
+        focusTokenLockedBalanceBaseUnits
+        focusTokenTotalBalanceBaseUnits
+        usdBalanceBaseUnits
+        totalBalanceUsdCents
+        __typename
+      }
+      accountWealthChainUser {
+        publicKey
+        usdBalanceUsdCents
+        focusTokenBalanceUsdCents
+        desoBalanceUsdCents
+        desoBalanceNanos
+        focusTokenBalanceBaseUnits
+        focusTokenLockedBalanceUsdCents
+        focusTokenLockedBalanceBaseUnits
+        focusTokenTotalBalanceBaseUnits
+        usdBalanceBaseUnits
+        totalBalanceUsdCents
+        __typename
+      }
       profile {
         publicKey
         description
@@ -866,6 +922,20 @@ const POST_THREAD_PAGE_BY_POST_HASH_QUERY = `
   }
 `;
 
+const USER_SEARCH_QUERY = `
+  query UserSearch($includeAccounts: Boolean!, $accountsFilter: AccountFilter, $first: Int, $orderBy: [AccountsOrderBy!]) {
+    accounts(filter: $accountsFilter, first: $first, orderBy: $orderBy) @include(if: $includeAccounts) {
+      nodes {
+        publicKey
+        username
+        extraData
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+
 const POST_REPLIES_PAGE_BY_POST_HASH_QUERY = `
   query PostRepliesPageByPostHash(
     $postHash: String!
@@ -1210,6 +1280,28 @@ const numberLike = z.union([z.number(), z.string()]).transform((value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 });
 
+const stringLike = z.union([z.number(), z.string()]).transform((value) => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return String(value);
+});
+
+const focusAccountWealthSchema = z.object({
+  publicKey: z.string().nullish(),
+  usdBalanceUsdCents: numberLike.nullish(),
+  focusTokenBalanceUsdCents: numberLike.nullish(),
+  desoBalanceUsdCents: numberLike.nullish(),
+  desoBalanceNanos: stringLike.nullish(),
+  focusTokenBalanceBaseUnits: stringLike.nullish(),
+  focusTokenLockedBalanceUsdCents: numberLike.nullish(),
+  focusTokenLockedBalanceBaseUnits: stringLike.nullish(),
+  focusTokenTotalBalanceBaseUnits: stringLike.nullish(),
+  usdBalanceBaseUnits: stringLike.nullish(),
+  totalBalanceUsdCents: numberLike.nullish(),
+});
+
 const focusAccountSchema = z.object({
   id: z.string(),
   publicKey: z.string(),
@@ -1222,6 +1314,8 @@ const focusAccountSchema = z.object({
   totalBalanceUsdCents: numberLike.nullish(),
   daoCoinMintingDisabled: z.boolean().nullish(),
   daoCoinsInCirculationNanosHex: z.string().nullish(),
+  accountWealth: focusAccountWealthSchema.nullish(),
+  accountWealthChainUser: focusAccountWealthSchema.nullish(),
   subscriptionTiers: z
     .object({
       totalCount: numberLike,
@@ -1300,6 +1394,25 @@ const accountExtendedResponseSchema = z.object({
 const accountExtendedByUsernameResponseSchema = z.object({
   data: z.object({
     accountByUsername: focusAccountSchema.nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
+const focusUserSearchAccountSchema = z
+  .object({
+    publicKey: z.string(),
+    username: z.string().nullish(),
+    extraData: z.record(z.string(), z.unknown()).nullish(),
+  })
+  .passthrough();
+
+const userSearchResponseSchema = z.object({
+  data: z.object({
+    accounts: z
+      .object({
+        nodes: z.array(focusUserSearchAccountSchema).default([]),
+      })
+      .nullish(),
   }),
   errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
@@ -1595,6 +1708,7 @@ const postByHashReactionListResponseSchema = z.object({
 });
 
 export type FocusAccount = z.infer<typeof focusAccountSchema>;
+export type FocusUserSearchAccount = z.infer<typeof focusUserSearchAccountSchema>;
 export type FocusFollowEdge = z.infer<typeof followNodeSchema>;
 export type FocusFollowFeedHashNode = z.infer<typeof followFeedHashNodeSchema>;
 export type FocusForYouFeedHashNode = z.infer<typeof forYouFeedHashNodeSchema>;
@@ -1750,6 +1864,74 @@ export async function fetchAccountExtendedByUsername({
   }
 
   return parsed.data.data.accountByUsername ?? null;
+}
+
+export async function searchFocusAccountsByUsername({
+  query,
+  limit = 6,
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+  DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  query: string;
+  limit?: number;
+  graphqlEndpoint?: string;
+}): Promise<FocusUserSearchAccount[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const body = {
+    operationName: "UserSearch",
+    query: USER_SEARCH_QUERY,
+    variables: {
+      includeAccounts: true,
+      accountsFilter: {
+        username: {
+          likeInsensitive: `${normalizedQuery}%`,
+        },
+        isBlacklisted: {
+          equalTo: false,
+        },
+      },
+      orderBy: "DESO_LOCKED_NANOS_DESC",
+      first: limit,
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+
+  const parsed = userSearchResponseSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+      "Unable to parse user search response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "User search query returned errors",
+    );
+  }
+
+  return parsed.data.data.accounts?.nodes ?? [];
 }
 
 
