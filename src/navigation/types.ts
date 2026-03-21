@@ -39,6 +39,9 @@ export type RootStackParamList = {
   Conversation: ConversationRouteParams;
   Settings: undefined;
   NewChat: undefined;
+  PostThread: {
+    postHash: string;
+  };
 };
 
 export type ConversationScreenRouteProp = RouteProp<

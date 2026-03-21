@@ -1,10 +1,21 @@
 import React from "react";
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { DeSoIdentityContext } from "react-deso-protocol";
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { Repeat2, ThumbsUp } from "lucide-react-native";
 
+import {
+  useIsFollowingAccount,
+  useToggleFollowingAccount,
+} from "@/features/feed/api/useFollowAccount";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { getProfileImageUrl } from "@/utils/deso";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -12,9 +23,14 @@ import { FeedVideo } from "@/features/feed/components/FeedVideo";
 import { FeedImageGrid } from "@/features/feed/components/FeedImageGrid";
 import { getValidHttpUrl, toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { UserAvatar } from "@/components/UserAvatar";
+import { CommentIcon } from "@/components/icons/CommentIcon";
+import { HeartIcon } from "@/components/icons/HeartIcon";
+import { RepostIcon } from "@/components/icons/RepostIcon";
 import { parseRichTextContent } from "@/lib/richText";
 import { Toast } from "@/components/ui/Toast";
 import { feedKeys } from "@/features/feed/api/keys";
+import { applyOptimisticReactionUpdate } from "@/features/feed/api/optimisticUpdates";
+import { getBorderColor } from "@/theme/borders";
 import {
   FOCUS_POST_REACTION_OPTIONS,
   extractViewerReactionAssociations,
@@ -35,6 +51,10 @@ type ReactionCountMap = Record<FocusPostReactionValue, number>;
 const REACTION_VALUES = FOCUS_POST_REACTION_OPTIONS.map(
   (option) => option.value,
 ) as FocusPostReactionValue[];
+const FEED_COLLAPSED_BODY_MAX_LINES = 5;
+const FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES = 4;
+const FEED_BODY_TOGGLE_MIN_CHARACTERS = 220;
+const FEED_EMBEDDED_BODY_TOGGLE_MIN_CHARACTERS = 180;
 
 function normalizeDisplayName(rawValue: unknown, username: string): string {
   if (typeof rawValue !== "string") {
@@ -100,6 +120,27 @@ function formatRelativeTimestamp(value: string | null | undefined): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatDetailedTimestamp(value: string | null | undefined): string {
+  if (!value) return "";
+
+  const timestamp = parseFocusTimestamp(value);
+  if (!timestamp) {
+    return "";
+  }
+
+  const timeText = timestamp.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const dateText = timestamp.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return `${timeText} · ${dateText}`;
 }
 
 function formatCount(value: number | null | undefined): string {
@@ -200,12 +241,18 @@ export function FeedCard({
   onPress,
   onReplyPress,
   onReactionSummaryPress,
+  variant = "feed",
+  threadChildLineVisible = false,
+  threadLineColor,
 }: {
   post: FocusFeedPost;
   isVisible: boolean;
   onPress?: (post: FocusFeedPost) => void;
   onReplyPress?: (post: FocusFeedPost) => void;
   onReactionSummaryPress?: (post: FocusFeedPost) => void;
+  variant?: "feed" | "thread" | "threadReply";
+  threadChildLineVisible?: boolean;
+  threadLineColor?: string;
 }) {
   const { isDark } = useAccentColor();
   const { currentUser } = React.useContext(DeSoIdentityContext);
@@ -214,6 +261,10 @@ export function FeedCard({
     mutateAsync: setPostReactionAssociationAsync,
     isPending: isUpdatingReaction,
   } = useSetPostReactionAssociation();
+  const {
+    mutateAsync: toggleFollowingAsync,
+    isPending: isUpdatingFollow,
+  } = useToggleFollowingAccount();
 
   const [isReactionPickerVisible, setIsReactionPickerVisible] =
     React.useState(false);
@@ -226,6 +277,27 @@ export function FeedCard({
   const [emojiHoverAnimations] = React.useState(() =>
     FOCUS_POST_REACTION_OPTIONS.map(() => new Animated.Value(1)),
   );
+  const [optimisticIsFollowing, setOptimisticIsFollowing] = React.useState<
+    boolean | null
+  >(null);
+  const [isThreadAnchorFollowHovered, setIsThreadAnchorFollowHovered] =
+    React.useState(false);
+  const [isThreadAnchorReplyHovered, setIsThreadAnchorReplyHovered] =
+    React.useState(false);
+  const [isThreadAnchorRepostHovered, setIsThreadAnchorRepostHovered] =
+    React.useState(false);
+  const [isThreadAnchorLikeHovered, setIsThreadAnchorLikeHovered] =
+    React.useState(false);
+  const [isFeedReplyHovered, setIsFeedReplyHovered] = React.useState(false);
+  const [isFeedRepostHovered, setIsFeedRepostHovered] = React.useState(false);
+  const [isFeedLikeHovered, setIsFeedLikeHovered] = React.useState(false);
+  const [isFeedBodyExpanded, setIsFeedBodyExpanded] = React.useState(false);
+  const [isFeedEmbeddedBodyExpanded, setIsFeedEmbeddedBodyExpanded] =
+    React.useState(false);
+  const pendingReactionSyncValueRef = React.useRef<
+    FocusPostReactionValue | null | undefined
+  >(undefined);
+  const lastReactionPostHashRef = React.useRef(post.postHash);
   const reactionPickerCloseTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
@@ -255,8 +327,22 @@ export function FeedCard({
   >(initialReactionValue);
 
   React.useEffect(() => {
-    setKnownReactionAssociations(viewerReactionAssociations);
-    setCurrentReactionValue(initialReactionValue);
+    const isNewPost = lastReactionPostHashRef.current !== post.postHash;
+
+    if (isNewPost) {
+      lastReactionPostHashRef.current = post.postHash;
+      pendingReactionSyncValueRef.current = undefined;
+      setKnownReactionAssociations(viewerReactionAssociations);
+      setCurrentReactionValue(initialReactionValue);
+    } else {
+      const pendingReactionSyncValue = pendingReactionSyncValueRef.current;
+
+      if (pendingReactionSyncValue === undefined) {
+        setKnownReactionAssociations(viewerReactionAssociations);
+        setCurrentReactionValue(initialReactionValue);
+      }
+    }
+
     setIsReactionPickerVisible(false);
     reactionPickerAnimation.setValue(0);
     for (const anim of emojiItemAnimations) {
@@ -270,6 +356,19 @@ export function FeedCard({
     viewerReactionAssociations,
     viewerReactionAssociationsKey,
   ]);
+
+  React.useEffect(() => {
+    setOptimisticIsFollowing(null);
+    setIsThreadAnchorFollowHovered(false);
+    setIsThreadAnchorReplyHovered(false);
+    setIsThreadAnchorRepostHovered(false);
+    setIsThreadAnchorLikeHovered(false);
+    setIsFeedReplyHovered(false);
+    setIsFeedRepostHovered(false);
+    setIsFeedLikeHovered(false);
+    setIsFeedBodyExpanded(false);
+    setIsFeedEmbeddedBodyExpanded(false);
+  }, [post.poster?.publicKey, post.postHash]);
 
   React.useEffect(
     () => () => {
@@ -352,12 +451,12 @@ export function FeedCard({
     });
   }, [clearReactionPickerCloseTimeout, reactionPickerAnimation, emojiItemAnimations]);
 
-  // Facebook-like: 1.5 second delay before closing
+  // Short delay so users can still move into the picker, but it tucks away quickly.
   const scheduleReactionPickerClose = React.useCallback(() => {
     clearReactionPickerCloseTimeout();
     reactionPickerCloseTimeoutRef.current = setTimeout(() => {
       closeReactionPicker();
-    }, 800);
+    }, 240);
   }, [clearReactionPickerCloseTimeout, closeReactionPicker]);
 
   const handleEmojiHoverIn = React.useCallback(
@@ -483,12 +582,80 @@ export function FeedCard({
 
   const selectedReactionOption = getReactionOption(currentReactionValue);
   const likeActionLabel = selectedReactionOption?.label ?? "Like";
+  const isThreadCommentVariant = variant === "threadReply";
+  const isThreadAnchorVariant = variant === "thread";
+  const replyActionLabel = variant === "feed" ? "Comment" : "Reply";
+  const isThreadVariant = isThreadAnchorVariant || isThreadCommentVariant;
+  const avatarSize = isThreadCommentVariant ? 24 : isThreadAnchorVariant ? 42 : 44;
+  const detailedPrimaryTimestamp = formatDetailedTimestamp(primaryTimestamp);
+  const normalizedReaderPublicKey = currentUser?.PublicKeyBase58Check?.trim() ?? "";
+  const authorPublicKey = post.poster?.publicKey?.trim() ?? "";
+  const canShowThreadAnchorFollowButton =
+    isThreadAnchorVariant &&
+    Boolean(normalizedReaderPublicKey) &&
+    Boolean(authorPublicKey) &&
+    normalizedReaderPublicKey !== authorPublicKey;
 
   const mutedIconColor = isDark ? "#94a3b8" : "#64748b";
   const mutedCountColor = isDark ? "#94a3b8" : "#64748b";
-  const likeActionColor = selectedReactionOption
+  const threadCommentActionIconSize = 16;
+  const feedActionIconSize = 17;
+  const feedActionLabelClassName = "text-[13px] font-medium leading-[18px]";
+  const threadCommentActionCountClassName =
+    "text-[14px] font-medium leading-[18px]";
+  const threadAnchorReplyIconSize = 20;
+  const threadAnchorRepostIconSize = 20;
+  const threadAnchorLikeIconSize = 20;
+  const threadAnchorActionClassName =
+    "flex-row items-center gap-2.5 rounded-full px-3 py-2";
+  const threadAnchorActionCountClassName = "text-[15px] font-medium leading-5";
+  const threadAnchorFollowBackground = "#1d9bf0";
+  const threadAnchorFollowHoverBackground = "#1687d9";
+  const isFeedVariant = variant === "feed";
+  const threadReplyHoverColor = isDark ? "#60a5fa" : "#2563eb";
+  const threadReplyHoverBackground = isDark
+    ? "rgba(96, 165, 250, 0.2)"
+    : "rgba(37, 99, 235, 0.14)";
+  const threadRepostHoverColor = isDark ? "#4ade80" : "#16a34a";
+  const threadRepostHoverBackground = isDark
+    ? "rgba(74, 222, 128, 0.2)"
+    : "rgba(22, 163, 74, 0.14)";
+  const threadLikeHoverColor = selectedReactionOption?.color
     ? selectedReactionOption.color
-    : mutedIconColor;
+    : isDark
+      ? "#fb7185"
+      : "#e11d48";
+  const threadLikeHoverBackground = isDark
+    ? "rgba(251, 113, 133, 0.2)"
+    : "rgba(225, 29, 72, 0.14)";
+  const replyHoverActive =
+    (isThreadAnchorVariant && isThreadAnchorReplyHovered) ||
+    (isFeedVariant && isFeedReplyHovered);
+  const repostHoverActive =
+    (isThreadAnchorVariant && isThreadAnchorRepostHovered) ||
+    (isFeedVariant && isFeedRepostHovered);
+  const likeHoverActive =
+    (isThreadAnchorVariant && isThreadAnchorLikeHovered) ||
+    (isFeedVariant && isFeedLikeHovered);
+  const likeActionColor = selectedReactionOption?.color
+    ? selectedReactionOption.color
+    : likeHoverActive
+      ? threadLikeHoverColor
+      : mutedIconColor;
+  const displayedLikeLabel = isFeedVariant ? "Like" : likeActionLabel;
+  const shouldShowFeedBodyToggle = Boolean(
+    isFeedVariant &&
+      primaryBody &&
+      primaryBody.length > FEED_BODY_TOGGLE_MIN_CHARACTERS,
+  );
+  const shouldShowFeedEmbeddedBodyToggle = Boolean(
+    isFeedVariant &&
+      repostBody &&
+      repostBody.length > FEED_EMBEDDED_BODY_TOGGLE_MIN_CHARACTERS,
+  );
+  const reactionPickerPositionClassName = isFeedVariant
+    ? "absolute bottom-full right-0 mb-1"
+    : "absolute bottom-full left-0 mb-1";
 
   const interactionSummaryItems = React.useMemo(() => {
     const items: string[] = [];
@@ -504,8 +671,39 @@ export function FeedCard({
     return items;
   }, [replyCount, repostCount]);
 
+  const threadAnchorStats = React.useMemo(
+    () =>
+      [
+        {
+          label: replyCount === 1 ? "reply" : "replies",
+          value: formatCount(replyCount),
+        },
+        {
+          label: repostCount === 1 ? "repost" : "reposts",
+          value: formatCount(repostCount),
+        },
+        {
+          label: displayedTotalReactionCount === 1 ? "like" : "likes",
+          value: formatCount(displayedTotalReactionCount),
+        },
+      ],
+    [displayedTotalReactionCount, replyCount, repostCount],
+  );
+
   const hasInteractionSummary =
     displayedTotalReactionCount > 0 || interactionSummaryItems.length > 0;
+  const shouldShowInteractionSummary =
+    !isThreadCommentVariant && !isThreadAnchorVariant && hasInteractionSummary;
+  const shouldShowThreadAnchorStats = isThreadAnchorVariant;
+  const { isFollowing: isFollowingAuthor } = useIsFollowingAccount({
+    readerPublicKey: normalizedReaderPublicKey,
+    targetPublicKey: authorPublicKey,
+    enabled: canShowThreadAnchorFollowButton,
+  });
+  const effectiveIsFollowingAuthor = optimisticIsFollowing ?? isFollowingAuthor;
+  const shouldRenderThreadAnchorFollowButton =
+    canShowThreadAnchorFollowButton &&
+    (!effectiveIsFollowingAuthor || isUpdatingFollow);
 
   const applyReaction = React.useCallback(
     async (
@@ -531,8 +729,13 @@ export function FeedCard({
 
       const previousReactionValue = currentReactionValue;
       const previousAssociations = knownReactionAssociations;
-
+      pendingReactionSyncValueRef.current = nextReactionValue;
       setCurrentReactionValue(nextReactionValue);
+      applyOptimisticReactionUpdate(
+        queryClient,
+        post.postHash,
+        nextReactionValue,
+      );
 
       try {
         const result = await setPostReactionAssociationAsync({
@@ -542,24 +745,38 @@ export function FeedCard({
           existingAssociations: knownReactionAssociations,
         });
 
-        setCurrentReactionValue(result.currentReaction);
-        setKnownReactionAssociations(result.associations);
+        const resolvedReactionValue =
+          nextReactionValue != null && result.currentReaction == null
+            ? nextReactionValue
+            : result.currentReaction;
+        const resolvedAssociations =
+          resolvedReactionValue != null && result.associations.length === 0
+            ? [
+                {
+                  associationId: `optimistic:${post.postHash}:${resolvedReactionValue}`,
+                  associationValue: resolvedReactionValue,
+                },
+              ]
+            : result.associations;
+
+        pendingReactionSyncValueRef.current = resolvedReactionValue;
+        setCurrentReactionValue(resolvedReactionValue);
+        setKnownReactionAssociations(resolvedAssociations);
         void queryClient.invalidateQueries({
           queryKey: feedKeys.postReactions(post.postHash),
         });
       } catch (error) {
+        pendingReactionSyncValueRef.current = undefined;
         setCurrentReactionValue(previousReactionValue);
         setKnownReactionAssociations(previousAssociations);
-
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : "Please try again.";
-
-        Toast.show({
-          type: "error",
-          text1: "Unable to update reaction",
-          text2: message,
+        applyOptimisticReactionUpdate(
+          queryClient,
+          post.postHash,
+          previousReactionValue,
+        );
+        console.warn("Reaction update failed in background", error);
+        void queryClient.invalidateQueries({
+          queryKey: feedKeys.base,
         });
       }
     },
@@ -583,6 +800,56 @@ export function FeedCard({
     [applyReaction, currentReactionValue],
   );
 
+  const handleThreadAnchorFollowPress = React.useCallback(
+    async (event?: { stopPropagation?: () => void }) => {
+      event?.stopPropagation?.();
+
+      if (
+        !shouldRenderThreadAnchorFollowButton ||
+        !normalizedReaderPublicKey ||
+        !authorPublicKey ||
+        isUpdatingFollow
+      ) {
+        return;
+      }
+
+      setOptimisticIsFollowing(true);
+
+      try {
+        await toggleFollowingAsync({
+          readerPublicKey: normalizedReaderPublicKey,
+          targetPublicKey: authorPublicKey,
+          shouldFollow: true,
+        });
+
+        queryClient.setQueryData(
+          feedKeys.followStatus(normalizedReaderPublicKey, authorPublicKey),
+          true,
+        );
+      } catch (error) {
+        setOptimisticIsFollowing(false);
+        Toast.show({
+          type: "error",
+          text1: "Unable to follow",
+          text2:
+            error instanceof Error && error.message
+              ? error.message
+              : "Please try again.",
+        });
+      } finally {
+        setOptimisticIsFollowing(null);
+      }
+    },
+    [
+      authorPublicKey,
+      isUpdatingFollow,
+      normalizedReaderPublicKey,
+      queryClient,
+      shouldRenderThreadAnchorFollowButton,
+      toggleFollowingAsync,
+    ],
+  );
+
   const actionButtonStyle = React.useCallback(
     ({ pressed }: { pressed: boolean }) => {
       const style: { opacity: number; cursor?: "pointer" } = {
@@ -598,35 +865,577 @@ export function FeedCard({
     [],
   );
 
+  const getThreadAnchorActionStyle = React.useCallback(
+    (hoverBackgroundColor: string, isHovered: boolean) =>
+      ({ pressed }: { pressed: boolean }) => ({
+        opacity: pressed ? 0.9 : 1,
+        backgroundColor: isHovered ? hoverBackgroundColor : "transparent",
+        borderRadius: 999,
+        ...(Platform.OS === "web"
+          ? ({
+              cursor: "pointer",
+            } as const)
+          : null),
+      }),
+    [],
+  );
+
   const reactionPickerTranslateY = reactionPickerAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [12, 0],
   });
 
+  if (isThreadCommentVariant) {
+    const threadTextOffset = avatarSize + 8;
+    const threadRailOffset = Math.floor(avatarSize / 2);
+    const threadConnectorColor = threadLineColor ?? getBorderColor(isDark, "subtle");
+
+    return (
+      <Pressable
+        onPress={() => onPress?.(post)}
+        className="py-1.5"
+        style={({ pressed }) => ({ opacity: pressed ? 0.96 : 1 })}
+      >
+        {isPureRepost ? (
+          <View
+            className="mb-1 flex-row items-center gap-1"
+            style={{ paddingLeft: threadTextOffset }}
+          >
+            <RepostIcon size={12} color={isDark ? "#94a3b8" : "#64748b"} />
+            <Text className="text-[11px] text-slate-500 dark:text-slate-400">
+              Reposted by {reposterLabel}
+            </Text>
+          </View>
+        ) : null}
+
+        <View className="flex-row items-start">
+          <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
+
+          <View className="ml-2 flex-1">
+            <View className="flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <Text
+                numberOfLines={1}
+                className="max-w-[54%] text-[14px] font-semibold text-slate-900 dark:text-white"
+              >
+                {displayName}
+              </Text>
+              <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                @{usernameHandle}
+              </Text>
+              {formattedPrimaryTimestamp && !isThreadAnchorVariant ? (
+                <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                  {" - "}
+                  {formattedPrimaryTimestamp}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        <View className="mt-0.5 flex-row">
+          <View style={{ width: threadTextOffset }}>
+            {threadChildLineVisible ? (
+              <View
+                style={{
+                  marginLeft: threadRailOffset,
+                  width: 1,
+                  flex: 1,
+                  backgroundColor: threadConnectorColor,
+                }}
+              />
+            ) : null}
+          </View>
+
+          <View className="flex-1">
+            {primaryBody ? (
+              <Text className="text-[15px] leading-[22px] text-slate-900 dark:text-slate-100">
+                {primaryBody}
+              </Text>
+            ) : null}
+
+            {renderMedia({
+              imageUrls: primaryImageUrls,
+              videoUrl: primaryVideoUrl,
+              isDark,
+              isVisible: isVisible || Platform.OS !== "web",
+              compact: true,
+            })}
+
+            {hasEmbeddedRepostCard ? (
+              <View className="mt-2.5 rounded-2xl border border-slate-200/80 p-3 dark:border-slate-700/80">
+                <View className="flex-row items-start">
+                  <UserAvatar
+                    uri={embeddedAvatarUri}
+                    name={embeddedDisplayName}
+                    size={30}
+                  />
+
+                  <View className="ml-2.5 flex-1">
+                    <Text
+                      numberOfLines={1}
+                      className="text-[13px] font-semibold text-slate-900 dark:text-white"
+                    >
+                      {embeddedDisplayName}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      className="mt-0.5 text-[12px] text-slate-500 dark:text-slate-400"
+                    >
+                      @{embeddedUsernameHandle}
+                    </Text>
+                  </View>
+                </View>
+
+                {repostBody ? (
+                  <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
+                    {repostBody}
+                  </Text>
+                ) : null}
+
+                {renderMedia({
+                  imageUrls: parsedRepostContent.imageUrls,
+                  videoUrl: repostedPost?.videoUrls?.[0],
+                  isDark,
+                  isVisible: isVisible || Platform.OS !== "web",
+                  compact: true,
+                })}
+              </View>
+            ) : null}
+
+            <View className="mt-2 flex-row items-center gap-8">
+              <Pressable
+                className="flex-row items-center gap-1.5 py-0.5"
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  onReplyPress?.(post);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Reply to this post"
+                style={actionButtonStyle}
+              >
+                <CommentIcon
+                  size={threadCommentActionIconSize}
+                  color={mutedIconColor}
+                />
+                {replyCount > 0 ? (
+                  <Text
+                    className={threadCommentActionCountClassName}
+                    style={{ color: mutedCountColor }}
+                  >
+                    {formatCount(replyCount)}
+                  </Text>
+                ) : null}
+              </Pressable>
+
+              <Pressable
+                className="flex-row items-center gap-1.5 py-0.5"
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Repost this post"
+                style={actionButtonStyle}
+              >
+                <RepostIcon
+                  size={threadCommentActionIconSize}
+                  color={mutedIconColor}
+                />
+                {repostCount > 0 ? (
+                  <Text
+                    className={threadCommentActionCountClassName}
+                    style={{ color: mutedCountColor }}
+                  >
+                    {formatCount(repostCount)}
+                  </Text>
+                ) : null}
+              </Pressable>
+
+              <View className="relative">
+                {isReactionPickerVisible ? (
+                  <Pressable
+                    className={reactionPickerPositionClassName}
+                    onPress={(event) => event.stopPropagation?.()}
+                    onHoverIn={
+                      Platform.OS === "web"
+                        ? clearReactionPickerCloseTimeout
+                        : undefined
+                    }
+                    onHoverOut={
+                      Platform.OS === "web"
+                        ? scheduleReactionPickerClose
+                        : undefined
+                    }
+                  >
+                    <Animated.View
+                      style={[
+                        reactionPickerStyles.container,
+                        {
+                          opacity: reactionPickerAnimation,
+                          transform: [{ translateY: reactionPickerTranslateY }],
+                        },
+                      ]}
+                    >
+                      {FOCUS_POST_REACTION_OPTIONS.map((reactionOption, index) => {
+                        const itemScale = emojiItemAnimations[index].interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0, 1.2, 1],
+                        });
+                        const itemTranslateY =
+                          emojiItemAnimations[index].interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [16, 0],
+                          });
+
+                        return (
+                          <Animated.View
+                            key={reactionOption.value}
+                            style={{
+                              opacity: emojiItemAnimations[index],
+                              transform: [
+                                {
+                                  scale: Animated.multiply(
+                                    itemScale,
+                                    emojiHoverAnimations[index],
+                                  ),
+                                },
+                                { translateY: itemTranslateY },
+                              ],
+                            }}
+                          >
+                            <Pressable
+                              className="items-center justify-center rounded-full"
+                              style={reactionPickerStyles.emojiButton}
+                              onPress={(event) => {
+                                const nextReactionValue =
+                                  currentReactionValue === reactionOption.value
+                                    ? null
+                                    : reactionOption.value;
+                                void applyReaction(nextReactionValue, event);
+                              }}
+                              onHoverIn={
+                                Platform.OS === "web"
+                                  ? () => handleEmojiHoverIn(index)
+                                  : undefined
+                              }
+                              onHoverOut={
+                                Platform.OS === "web"
+                                  ? () => handleEmojiHoverOut(index)
+                                  : undefined
+                              }
+                              accessibilityRole="button"
+                              accessibilityLabel={`React with ${reactionOption.label}`}
+                            >
+                              <Text style={reactionPickerStyles.emojiText}>
+                                {reactionOption.emoji}
+                              </Text>
+                            </Pressable>
+                          </Animated.View>
+                        );
+                      })}
+                    </Animated.View>
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  className="flex-row items-center gap-1.5 py-0.5"
+                  onPress={handlePrimaryLikePress}
+                  onLongPress={openReactionPicker}
+                  delayLongPress={170}
+                  onHoverIn={Platform.OS === "web" ? openReactionPicker : undefined}
+                  onHoverOut={
+                    Platform.OS === "web" ? scheduleReactionPickerClose : undefined
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    currentReactionValue
+                      ? `Remove ${likeActionLabel} reaction`
+                      : "Like this post"
+                  }
+                  style={actionButtonStyle}
+                >
+                  {selectedReactionOption ? (
+                    <View
+                      style={{
+                        width: threadCommentActionIconSize,
+                        height: threadCommentActionIconSize,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: threadCommentActionIconSize,
+                          lineHeight: threadCommentActionIconSize,
+                        }}
+                      >
+                        {selectedReactionOption.emoji}
+                      </Text>
+                    </View>
+                  ) : (
+                    <HeartIcon
+                      size={threadCommentActionIconSize}
+                      color={mutedIconColor}
+                      filled={false}
+                    />
+                  )}
+
+                  {displayedTotalReactionCount > 0 ? (
+                    <Text
+                      className={threadCommentActionCountClassName}
+                      style={{ color: selectedReactionOption?.color ?? mutedCountColor }}
+                    >
+                      {formatCount(displayedTotalReactionCount)}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       onPress={() => onPress?.(post)}
-      className="border-b border-slate-200 px-4 py-3 dark:border-slate-800"
+      className={
+        isThreadCommentVariant
+          ? "py-1.5"
+          : isThreadVariant
+          ? "border-b border-slate-200/80 px-4 py-3 dark:border-slate-800/80"
+          : "border-b border-slate-200 px-4 py-3 dark:border-slate-800"
+      }
       style={({ pressed }) => ({ opacity: pressed ? 0.95 : 1 })}
     >
       {isPureRepost ? (
         <View className="mb-1.5 flex-row items-center gap-1">
-          <Feather
-            name="repeat"
-            size={13}
+          <RepostIcon
+            size={isThreadVariant ? 12 : 13}
             color={isDark ? "#94a3b8" : "#64748b"}
           />
-          <Text className="text-[12px] text-slate-500 dark:text-slate-400">
+          <Text
+            className={
+              isThreadVariant
+                ? "text-[11px] text-slate-500 dark:text-slate-400"
+                : "text-[12px] text-slate-500 dark:text-slate-400"
+            }
+          >
             Reposted by {reposterLabel}
           </Text>
         </View>
       ) : null}
 
-      <View className="flex-row items-start">
-        <UserAvatar uri={avatarUri} name={displayName} size={44} />
+      {isThreadAnchorVariant ? (
+        <View>
+          <View className="flex-row items-start gap-3">
+            <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
 
-        <View className="ml-3 flex-1">
-          {isPureRepost ? (
+            <View className="min-w-0 flex-1">
+              <Text
+                numberOfLines={1}
+                className="text-[16px] font-semibold leading-5 text-slate-900 dark:text-white"
+              >
+                {displayName}
+              </Text>
+              <Text
+                numberOfLines={1}
+                className="mt-0.5 text-[15px] leading-5 text-slate-500 dark:text-slate-400"
+              >
+                @{usernameHandle}
+              </Text>
+            </View>
+
+            {shouldRenderThreadAnchorFollowButton ? (
+              <Pressable
+                onPress={(event) => void handleThreadAnchorFollowPress(event)}
+                onHoverIn={
+                  Platform.OS === "web"
+                    ? () => setIsThreadAnchorFollowHovered(true)
+                    : undefined
+                }
+                onHoverOut={
+                  Platform.OS === "web"
+                    ? () => setIsThreadAnchorFollowHovered(false)
+                    : undefined
+                }
+                disabled={isUpdatingFollow}
+                className="ml-3 h-9 min-w-[92px] shrink-0 items-center justify-center rounded-full bg-sky-500 px-4"
+                style={({ pressed }) => ({
+                  opacity: pressed || isUpdatingFollow ? 0.82 : 1,
+                  backgroundColor: isThreadAnchorFollowHovered
+                    ? threadAnchorFollowHoverBackground
+                    : threadAnchorFollowBackground,
+                  borderWidth: 1,
+                  borderColor: isDark
+                    ? "rgba(255, 255, 255, 0.06)"
+                    : "rgba(15, 23, 42, 0.06)",
+                  ...(Platform.OS === "web"
+                    ? ({
+                        cursor: "pointer",
+                      } as const)
+                    : null),
+                })}
+                accessibilityRole="button"
+                accessibilityLabel={`Follow ${displayName}`}
+              >
+                {isUpdatingFollow ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    className="text-[12px] font-semibold"
+                    style={{ color: "#ffffff" }}
+                  >
+                    Follow
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+
+          {primaryBody ? (
+            <Text className="mt-3.5 text-[16px] leading-[24px] text-slate-900 dark:text-slate-100">
+              {primaryBody}
+            </Text>
+          ) : null}
+
+          {renderMedia({
+            imageUrls: primaryImageUrls,
+            videoUrl: primaryVideoUrl,
+            isDark,
+            isVisible: isVisible || Platform.OS !== "web",
+          })}
+
+          {hasEmbeddedRepostCard ? (
+            <View className="mt-3 rounded-2xl border border-slate-200/90 p-3 dark:border-slate-700/90">
+              <View className="flex-row items-start">
+                <UserAvatar
+                  uri={embeddedAvatarUri}
+                  name={embeddedDisplayName}
+                  size={30}
+                />
+
+                <View className="ml-2.5 flex-1">
+                  <Text
+                    numberOfLines={1}
+                    className="text-[13px] font-semibold text-slate-900 dark:text-white"
+                  >
+                    {embeddedDisplayName}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    className="mt-0.5 text-[12px] text-slate-500 dark:text-slate-400"
+                  >
+                    @{embeddedUsernameHandle}
+                  </Text>
+                </View>
+              </View>
+
+              {repostBody ? (
+                isFeedVariant ? (
+                  <View className="mt-2">
+                    <Text
+                      numberOfLines={
+                        shouldShowFeedEmbeddedBodyToggle && !isFeedEmbeddedBodyExpanded
+                          ? FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES
+                          : undefined
+                      }
+                      className="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
+                    >
+                      {repostBody}
+                    </Text>
+                    {shouldShowFeedEmbeddedBodyToggle ? (
+                      <Pressable
+                        onPress={(event) => {
+                          event.stopPropagation?.();
+                          setIsFeedEmbeddedBodyExpanded((current) => !current);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isFeedEmbeddedBodyExpanded
+                            ? "Show less repost text"
+                            : "Show more repost text"
+                        }
+                        style={actionButtonStyle}
+                      >
+                        <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
+                          {isFeedEmbeddedBodyExpanded ? "See less" : "See more"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
+                    {repostBody}
+                  </Text>
+                )
+              ) : null}
+
+              {renderMedia({
+                imageUrls: parsedRepostContent.imageUrls,
+                videoUrl: repostedPost?.videoUrls?.[0],
+                isDark,
+                isVisible: isVisible || Platform.OS !== "web",
+                compact: true,
+              })}
+            </View>
+          ) : null}
+
+          {detailedPrimaryTimestamp ? (
+            <View className="mt-4 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+              <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                {detailedPrimaryTimestamp}
+              </Text>
+              <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                Everyone can reply
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <View className="flex-row items-start">
+          <UserAvatar uri={avatarUri} name={displayName} size={avatarSize} />
+
+        <View className={isThreadVariant ? "ml-2.5 flex-1" : "ml-3 flex-1"}>
+          {isThreadVariant ? (
+            <View className="flex-row flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <Text
+                numberOfLines={1}
+                className={
+                  isThreadCommentVariant
+                    ? "max-w-[52%] text-[14px] font-semibold text-slate-900 dark:text-white"
+                    : "max-w-[50%] text-[15px] font-semibold text-slate-900 dark:text-white"
+                }
+              >
+                {displayName}
+              </Text>
+              <Text
+                className={
+                  isThreadCommentVariant
+                    ? "text-[14px] text-slate-500 dark:text-slate-400"
+                    : "text-[13px] text-slate-500 dark:text-slate-400"
+                }
+              >
+                @{usernameHandle}
+              </Text>
+              {formattedPrimaryTimestamp ? (
+                <Text
+                  className={
+                    isThreadCommentVariant
+                      ? "text-[14px] text-slate-500 dark:text-slate-400"
+                      : "text-[13px] text-slate-500 dark:text-slate-400"
+                  }
+                >
+                  {isThreadCommentVariant
+                    ? `· ${formattedPrimaryTimestamp}`
+                    : formattedPrimaryTimestamp}
+                </Text>
+              ) : null}
+            </View>
+          ) : isPureRepost ? (
             <View className="flex-row items-center gap-1.5">
               <Text
                 numberOfLines={1}
@@ -668,9 +1477,49 @@ export function FeedCard({
           )}
 
           {primaryBody ? (
-            <Text className="mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100">
-              {primaryBody}
-            </Text>
+            isFeedVariant ? (
+              <View className="mt-1">
+                <Text
+                  numberOfLines={
+                    shouldShowFeedBodyToggle && !isFeedBodyExpanded
+                      ? FEED_COLLAPSED_BODY_MAX_LINES
+                      : undefined
+                  }
+                  className="text-[15px] leading-6 text-slate-900 dark:text-slate-100"
+                >
+                  {primaryBody}
+                </Text>
+                {shouldShowFeedBodyToggle ? (
+                  <Pressable
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      setIsFeedBodyExpanded((current) => !current);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isFeedBodyExpanded ? "Show less post text" : "Show more post text"
+                    }
+                    style={actionButtonStyle}
+                  >
+                    <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
+                      {isFeedBodyExpanded ? "See less" : "See more"}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <Text
+                className={
+                  isThreadCommentVariant
+                    ? "mt-0.5 text-[15px] leading-6 text-slate-900 dark:text-slate-100"
+                    : isThreadVariant
+                    ? "mt-1.5 text-[15px] leading-7 text-slate-900 dark:text-slate-100"
+                    : "mt-1 text-[15px] leading-6 text-slate-900 dark:text-slate-100"
+                }
+              >
+                {primaryBody}
+              </Text>
+            )
           ) : null}
 
           {renderMedia({
@@ -678,15 +1527,24 @@ export function FeedCard({
             videoUrl: primaryVideoUrl,
             isDark,
             isVisible: isVisible || Platform.OS !== "web",
+            compact: isThreadCommentVariant,
           })}
 
           {hasEmbeddedRepostCard ? (
-            <View className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700">
+            <View
+              className={
+                isThreadCommentVariant
+                  ? "mt-2.5 rounded-2xl border border-slate-200/80 p-3 dark:border-slate-700/80"
+                  : isThreadVariant
+                  ? "mt-3 rounded-2xl border border-slate-200/90 p-3 dark:border-slate-700/90"
+                  : "mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700"
+              }
+            >
               <View className="flex-row items-start">
                 <UserAvatar
                   uri={embeddedAvatarUri}
                   name={embeddedDisplayName}
-                  size={32}
+                  size={isThreadVariant ? 30 : 32}
                 />
 
                 <View className="ml-2.5 flex-1">
@@ -706,9 +1564,43 @@ export function FeedCard({
               </View>
 
               {repostBody ? (
-                <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
-                  {repostBody}
-                </Text>
+                isFeedVariant ? (
+                  <View className="mt-2">
+                    <Text
+                      numberOfLines={
+                        shouldShowFeedEmbeddedBodyToggle && !isFeedEmbeddedBodyExpanded
+                          ? FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES
+                          : undefined
+                      }
+                      className="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
+                    >
+                      {repostBody}
+                    </Text>
+                    {shouldShowFeedEmbeddedBodyToggle ? (
+                      <Pressable
+                        onPress={(event) => {
+                          event.stopPropagation?.();
+                          setIsFeedEmbeddedBodyExpanded((current) => !current);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isFeedEmbeddedBodyExpanded
+                            ? "Show less repost text"
+                            : "Show more repost text"
+                        }
+                        style={actionButtonStyle}
+                      >
+                        <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
+                          {isFeedEmbeddedBodyExpanded ? "See less" : "See more"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
+                    {repostBody}
+                  </Text>
+                )
               ) : null}
 
               {renderMedia({
@@ -720,11 +1612,46 @@ export function FeedCard({
               })}
             </View>
           ) : null}
+
+          {isThreadAnchorVariant && detailedPrimaryTimestamp ? (
+            <View className="mt-3 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+              <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                {detailedPrimaryTimestamp}
+              </Text>
+              <Text className="text-[13px] text-slate-500 dark:text-slate-400">
+                Everyone can reply
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
+      )}
 
-      {hasInteractionSummary ? (
-        <View className="mt-3 flex-row items-center justify-between">
+      {shouldShowThreadAnchorStats ? (
+        <View className="-mx-4 mt-3 border-y border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
+          <View className="flex-row flex-wrap items-center gap-x-5 gap-y-2">
+            {threadAnchorStats.map((item) => (
+              <View key={item.label} className="flex-row items-baseline gap-1.5">
+                <Text className="text-[16px] font-semibold text-slate-900 dark:text-white">
+                  {item.value}
+                </Text>
+                <Text className="text-[14px] text-slate-500 dark:text-slate-400">
+                  {item.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {shouldShowInteractionSummary ? (
+        <View
+          className={
+            isThreadVariant
+              ? "mt-3 flex-row items-center justify-between gap-3"
+              : "mt-3 flex-row items-center justify-between"
+          }
+        >
           {displayedTotalReactionCount > 0 ? (
             <Pressable
               onPress={(event) => {
@@ -751,7 +1678,13 @@ export function FeedCard({
                   </View>
                 ))}
 
-                <Text className="ml-1.5 text-[12px] text-slate-500 dark:text-slate-400">
+                <Text
+                  className={
+                    isThreadVariant
+                      ? "ml-1.5 text-[11px] text-slate-500 dark:text-slate-400"
+                      : "ml-1.5 text-[12px] text-slate-500 dark:text-slate-400"
+                  }
+                >
                   {formatCount(displayedTotalReactionCount)}
                 </Text>
               </View>
@@ -760,11 +1693,21 @@ export function FeedCard({
             <View className="flex-row items-center" />
           )}
 
-          <View className="flex-row items-center gap-3">
+          <View
+            className={
+              isThreadVariant
+                ? "flex-row items-center gap-2.5"
+                : "flex-row items-center gap-3"
+            }
+          >
             {interactionSummaryItems.map((item) => (
               <Text
                 key={item}
-                className="text-[12px] text-slate-500 dark:text-slate-400"
+                className={
+                  isThreadVariant
+                    ? "text-[11px] text-slate-500 dark:text-slate-400"
+                    : "text-[12px] text-slate-500 dark:text-slate-400"
+                }
               >
                 {item}
               </Text>
@@ -775,15 +1718,226 @@ export function FeedCard({
 
       <View
         className={
-          hasInteractionSummary
-            ? "mt-1 flex-row items-center"
-            : "mt-3 flex-row items-center"
+          isThreadCommentVariant
+            ? "mt-1.5 flex-row items-center gap-6"
+            : isThreadAnchorVariant
+              ? "-mx-4 mt-0 flex-row items-center justify-start gap-3 border-b border-slate-200/80 px-4 py-1.5 dark:border-slate-800/80"
+            : isThreadVariant
+              ? shouldShowInteractionSummary
+                ? "mt-2.5 flex-row items-center gap-5"
+                : "mt-3 flex-row items-center gap-5"
+              : hasInteractionSummary
+                ? "mt-1 flex-row items-center"
+                : "mt-3 flex-row items-center"
         }
       >
-        <View className="relative flex-1">
+        <Pressable
+          className={
+            isThreadAnchorVariant
+              ? threadAnchorActionClassName
+              : isThreadCommentVariant
+                ? "flex-row items-center gap-1.5 py-0.5"
+                : isThreadVariant
+                  ? "flex-row items-center gap-1.5 rounded-full py-1"
+                  : "flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
+          }
+          onPress={(event) => {
+            event.stopPropagation?.();
+            onReplyPress?.(post);
+          }}
+          onHoverIn={
+            Platform.OS === "web"
+              ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorReplyHovered(true);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedReplyHovered(true);
+                  }
+                }
+              : undefined
+          }
+          onHoverOut={
+            Platform.OS === "web"
+              ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorReplyHovered(false);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedReplyHovered(false);
+                  }
+                }
+              : undefined
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Comment on this post"
+          style={
+            isThreadAnchorVariant || replyHoverActive
+              ? getThreadAnchorActionStyle(
+                  threadReplyHoverBackground,
+                  replyHoverActive,
+                )
+              : actionButtonStyle
+          }
+        >
+          <CommentIcon
+            size={
+              isThreadAnchorVariant
+                ? threadAnchorReplyIconSize
+                : isThreadCommentVariant
+                  ? 17
+                  : isThreadVariant
+                    ? 18
+                    : feedActionIconSize
+            }
+            color={
+              replyHoverActive
+                ? threadReplyHoverColor
+                : mutedCountColor
+            }
+          />
+          {isThreadVariant ? (
+            replyCount > 0 || isThreadAnchorVariant ? (
+              <Text
+                className={
+                  isThreadAnchorVariant
+                    ? threadAnchorActionCountClassName
+                    : "text-[12px] font-medium"
+                }
+                style={{
+                  color:
+                    replyHoverActive
+                      ? threadReplyHoverColor
+                      : mutedCountColor,
+                }}
+              >
+                {formatCount(replyCount)}
+              </Text>
+            ) : null
+          ) : (
+            <Text
+              className={feedActionLabelClassName}
+              style={{
+                color:
+                  replyHoverActive
+                    ? threadReplyHoverColor
+                    : mutedCountColor,
+              }}
+            >
+              {replyActionLabel}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          className={
+            isThreadAnchorVariant
+              ? threadAnchorActionClassName
+              : isThreadCommentVariant
+                ? "flex-row items-center gap-1.5 py-0.5"
+                : isThreadVariant
+                  ? "flex-row items-center gap-1.5 rounded-full py-1"
+                  : "flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
+          }
+          onPress={(event) => {
+            event.stopPropagation?.();
+          }}
+          onHoverIn={
+            Platform.OS === "web"
+              ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorRepostHovered(true);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedRepostHovered(true);
+                  }
+                }
+              : undefined
+          }
+          onHoverOut={
+            Platform.OS === "web"
+              ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorRepostHovered(false);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedRepostHovered(false);
+                  }
+                }
+              : undefined
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Repost this post"
+          style={
+            isThreadAnchorVariant || repostHoverActive
+              ? getThreadAnchorActionStyle(
+                  threadRepostHoverBackground,
+                  repostHoverActive,
+                )
+              : actionButtonStyle
+          }
+        >
+          <RepostIcon
+            size={
+              isThreadAnchorVariant
+                ? threadAnchorRepostIconSize
+                : isThreadCommentVariant
+                  ? 17
+                  : isThreadVariant
+                    ? 18
+                    : feedActionIconSize
+            }
+            color={
+              repostHoverActive
+                ? threadRepostHoverColor
+                : mutedCountColor
+            }
+          />
+          {isThreadVariant ? (
+            repostCount > 0 || isThreadAnchorVariant ? (
+              <Text
+                className={
+                  isThreadAnchorVariant
+                    ? threadAnchorActionCountClassName
+                    : "text-[12px] font-medium"
+                }
+                style={{
+                  color:
+                    repostHoverActive
+                      ? threadRepostHoverColor
+                      : mutedCountColor,
+                }}
+              >
+                {formatCount(repostCount)}
+              </Text>
+            ) : null
+          ) : (
+            <Text
+              className={feedActionLabelClassName}
+              style={{
+                color:
+                  repostHoverActive
+                    ? threadRepostHoverColor
+                    : mutedCountColor,
+              }}
+            >
+              Repost
+            </Text>
+          )}
+        </Pressable>
+
+        <View
+          className={
+            isThreadAnchorVariant
+              ? "relative"
+              : isThreadVariant
+                ? "relative"
+                : "relative flex-1"
+          }
+        >
           {isReactionPickerVisible ? (
             <Pressable
-              className="absolute bottom-full left-0 mb-1"
+              className={reactionPickerPositionClassName}
               onPress={(event) => event.stopPropagation?.()}
               onHoverIn={
                 Platform.OS === "web"
@@ -861,13 +2015,43 @@ export function FeedCard({
           ) : null}
 
           <Pressable
-            className="flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
+            className={
+              isThreadAnchorVariant
+                ? threadAnchorActionClassName
+                : isThreadCommentVariant
+                  ? "flex-row items-center gap-1.5 py-0.5"
+                  : isThreadVariant
+                    ? "flex-row items-center gap-1.5 rounded-full py-1"
+                    : "flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
+            }
             onPress={handlePrimaryLikePress}
             onLongPress={openReactionPicker}
             delayLongPress={170}
-            onHoverIn={Platform.OS === "web" ? openReactionPicker : undefined}
+            onHoverIn={
+              Platform.OS === "web"
+                ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorLikeHovered(true);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedLikeHovered(true);
+                  }
+                  openReactionPicker();
+                }
+                : undefined
+            }
             onHoverOut={
-              Platform.OS === "web" ? scheduleReactionPickerClose : undefined
+              Platform.OS === "web"
+                ? () => {
+                  if (isThreadAnchorVariant) {
+                    setIsThreadAnchorLikeHovered(false);
+                  }
+                  if (isFeedVariant) {
+                    setIsFeedLikeHovered(false);
+                  }
+                  scheduleReactionPickerClose();
+                }
+                : undefined
             }
             accessibilityRole="button"
             accessibilityLabel={
@@ -875,68 +2059,112 @@ export function FeedCard({
                 ? `Remove ${likeActionLabel} reaction`
                 : "Like this post"
             }
-            style={actionButtonStyle}
+            style={
+              isThreadAnchorVariant || likeHoverActive
+                ? getThreadAnchorActionStyle(
+                    threadLikeHoverBackground,
+                    likeHoverActive,
+                  )
+                : actionButtonStyle
+            }
           >
             {selectedReactionOption ? (
-              <Text className="text-[18px] leading-[20px]">
-                {selectedReactionOption.emoji}
-              </Text>
+              <View
+                style={{
+                  width: isThreadAnchorVariant
+                    ? threadAnchorLikeIconSize
+                    : isThreadCommentVariant
+                      ? threadCommentActionIconSize
+                      : isThreadVariant
+                        ? 17
+                        : feedActionIconSize,
+                  height: isThreadAnchorVariant
+                    ? threadAnchorLikeIconSize
+                    : isThreadCommentVariant
+                      ? threadCommentActionIconSize
+                      : isThreadVariant
+                        ? 17
+                        : feedActionIconSize,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: isThreadAnchorVariant
+                      ? threadAnchorLikeIconSize - 1
+                      : isThreadCommentVariant
+                        ? threadCommentActionIconSize
+                        : isThreadVariant
+                          ? 16
+                          : feedActionIconSize - 1,
+                    lineHeight: isThreadAnchorVariant
+                      ? threadAnchorLikeIconSize - 1
+                      : isThreadCommentVariant
+                        ? threadCommentActionIconSize
+                        : isThreadVariant
+                          ? 16
+                          : feedActionIconSize - 1,
+                  }}
+                >
+                  {selectedReactionOption.emoji}
+                </Text>
+              </View>
             ) : (
-              <ThumbsUp
-                size={16}
-                strokeWidth={1.9}
-                color={mutedIconColor}
-                fill="none"
+              <HeartIcon
+                size={
+                  isThreadAnchorVariant
+                    ? threadAnchorLikeIconSize
+                    : isThreadCommentVariant
+                      ? threadCommentActionIconSize
+                      : isThreadVariant
+                        ? 17
+                        : feedActionIconSize
+                }
+                color={
+                  likeHoverActive ? threadLikeHoverColor : likeActionColor
+                }
+                filled={false}
               />
             )}
 
-            <Text
-              className="text-[13px] font-medium"
-              style={{ color: likeActionColor }}
-            >
-              {likeActionLabel}
-            </Text>
+            {isThreadVariant ? (
+              displayedTotalReactionCount > 0 || isThreadAnchorVariant ? (
+                <Text
+                  className={
+                    isThreadAnchorVariant
+                      ? threadAnchorActionCountClassName
+                      : "text-[12px] font-medium"
+                  }
+                  style={{
+                    color:
+                      likeHoverActive && !selectedReactionOption
+                        ? threadLikeHoverColor
+                        : likeActionColor,
+                  }}
+                >
+                  {formatCount(displayedTotalReactionCount)}
+                </Text>
+              ) : null
+            ) : (
+              <Text
+                className={
+                  isThreadVariant
+                    ? "text-[12px] font-medium"
+                    : feedActionLabelClassName
+                }
+                style={{
+                  color:
+                    likeHoverActive && !selectedReactionOption
+                      ? threadLikeHoverColor
+                      : likeActionColor,
+                }}
+              >
+                {displayedLikeLabel}
+              </Text>
+            )}
           </Pressable>
         </View>
-
-        <Pressable
-          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
-          onPress={(event) => {
-            event.stopPropagation?.();
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Repost this post"
-          style={actionButtonStyle}
-        >
-          <Repeat2
-            size={16}
-            strokeWidth={1.9}
-            color={mutedIconColor}
-            fill="none"
-          />
-          <Text
-            className="text-[13px] font-medium"
-            style={{ color: mutedCountColor }}
-          >
-            Repost
-          </Text>
-        </Pressable>
-
-        <Pressable
-          className="flex-1 flex-row items-center justify-center gap-1.5 rounded-full py-1.5"
-          onPress={(event) => {
-            event.stopPropagation?.();
-            onReplyPress?.(post);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Comment on this post"
-          style={actionButtonStyle}
-        >
-          <Ionicons name="chatbubble-outline" size={16} color={mutedIconColor} />
-          <Text className="text-[13px] font-medium" style={{ color: mutedCountColor }}>
-            Comment
-          </Text>
-        </Pressable>
       </View>
     </Pressable>
   );

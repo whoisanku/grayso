@@ -1,0 +1,1 @@
+export const ACTION_ICON_STROKE_WIDTH = 1.9;

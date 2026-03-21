@@ -33,6 +33,22 @@ export type PostReactionAssociation = {
   associationValue: FocusPostReactionValue;
 };
 
+function buildOptimisticReactionAssociations(
+  postHash: string,
+  reactionValue: FocusPostReactionValue | null,
+): PostReactionAssociation[] {
+  if (!reactionValue) {
+    return [];
+  }
+
+  return [
+    {
+      associationId: `optimistic:${postHash}:${reactionValue}`,
+      associationValue: reactionValue,
+    },
+  ];
+}
+
 async function deleteReactionAssociations({
   readerPublicKey,
   associations,
@@ -264,14 +280,12 @@ export async function setPostReactionAssociation({
     }
   }
 
-  const nextAssociations = await fetchReaderReactionAssociations({
-    readerPublicKey: trimmedReaderKey,
-    postHash: normalizedPostHash,
-  });
-
   return {
-    currentReaction: nextAssociations[0]?.associationValue ?? null,
-    associations: nextAssociations,
+    currentReaction: reactionValue,
+    associations: buildOptimisticReactionAssociations(
+      normalizedPostHash,
+      reactionValue,
+    ),
   };
 }
 

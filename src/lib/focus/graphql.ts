@@ -424,6 +424,9 @@ const POST_BY_POST_HASH_QUERY = `
     postByPostHash(postHash: $postHash) {
       body
       postHash
+      parentPostHash
+      rootPostHash
+      commentDepth
       repostedPostHash
       repostedPost {
         body
@@ -524,6 +527,243 @@ const POST_BY_POST_HASH_QUERY = `
           associationType
           associationValue
         }
+      }
+      __typename
+    }
+  }
+`;
+
+const POST_THREAD_PAGE_BY_POST_HASH_QUERY = `
+  query PostThreadPageByPostHash(
+    $postHash: String!
+    $readerPublicKey: String!
+    $first: Int
+    $offset: Int
+    $orderBy: [PostsOrderBy!]
+  ) {
+    postByPostHash(postHash: $postHash) {
+      body
+      postHash
+      parentPostHash
+      rootPostHash
+      commentDepth
+      repostedPostHash
+      repostedPost {
+        body
+        postHash
+        imageUrls
+        videoUrls
+        timestamp
+        poster {
+          publicKey
+          username
+          extraData
+          isVerified
+          __typename
+        }
+        __typename
+      }
+      extraData
+      imageUrls
+      videoUrls
+      timestamp
+      isNft
+      isQuotedRepost
+      isHidden
+      poster {
+        publicKey
+        username
+        extraData
+        isVerified
+        __typename
+      }
+      postStats {
+        totalReactionCount
+        likeReactionCount
+        laughReactionCount
+        loveReactionCount
+        dislikeReactionCount
+        angryReactionCount
+        astonishedReactionCount
+        replyCount
+        quoteCount
+        repostCount
+        __typename
+      }
+      reactionAssociations: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+      ) {
+        totalCount
+      }
+      likeReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LIKE" } }
+      ) {
+        totalCount
+      }
+      dislikeReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "DISLIKE" } }
+      ) {
+        totalCount
+      }
+      loveReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LOVE" } }
+      ) {
+        totalCount
+      }
+      laughReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "LAUGH" } }
+      ) {
+        totalCount
+      }
+      sadReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "SAD" } }
+      ) {
+        totalCount
+      }
+      cryReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "CRY" } }
+      ) {
+        totalCount
+      }
+      angryReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { associationValue: { equalTo: "ANGRY" } }
+      ) {
+        totalCount
+      }
+      viewerReactions: postAssociationsByPostHash(
+        condition: { associationType: "REACTION" }
+        filter: { transactorPkid: { equalTo: $readerPublicKey } }
+        first: 10
+      ) {
+        nodes {
+          associationId
+          associationType
+          associationValue
+        }
+      }
+      replies(first: $first, offset: $offset, orderBy: $orderBy) {
+        totalCount
+        pageInfo {
+          hasNextPage
+          __typename
+        }
+        nodes {
+          body
+          postHash
+          parentPostHash
+          rootPostHash
+          commentDepth
+          repostedPostHash
+          repostedPost {
+            body
+            postHash
+            imageUrls
+            videoUrls
+            timestamp
+            poster {
+              publicKey
+              username
+              extraData
+              isVerified
+              __typename
+            }
+            __typename
+          }
+          extraData
+          imageUrls
+          videoUrls
+          timestamp
+          isNft
+          isQuotedRepost
+          isHidden
+          poster {
+            publicKey
+            username
+            extraData
+            isVerified
+            __typename
+          }
+          postStats {
+            totalReactionCount
+            likeReactionCount
+            laughReactionCount
+            loveReactionCount
+            dislikeReactionCount
+            angryReactionCount
+            astonishedReactionCount
+            replyCount
+            quoteCount
+            repostCount
+            __typename
+          }
+          reactionAssociations: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+          ) {
+            totalCount
+          }
+          likeReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "LIKE" } }
+          ) {
+            totalCount
+          }
+          dislikeReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "DISLIKE" } }
+          ) {
+            totalCount
+          }
+          loveReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "LOVE" } }
+          ) {
+            totalCount
+          }
+          laughReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "LAUGH" } }
+          ) {
+            totalCount
+          }
+          sadReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "SAD" } }
+          ) {
+            totalCount
+          }
+          cryReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "CRY" } }
+          ) {
+            totalCount
+          }
+          angryReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { associationValue: { equalTo: "ANGRY" } }
+          ) {
+            totalCount
+          }
+          viewerReactions: postAssociationsByPostHash(
+            condition: { associationType: "REACTION" }
+            filter: { transactorPkid: { equalTo: $readerPublicKey } }
+            first: 10
+          ) {
+            nodes {
+              associationId
+              associationType
+              associationValue
+            }
+          }
+          __typename
+        }
+        __typename
       }
       __typename
     }
@@ -844,6 +1084,9 @@ const viewerReactionsConnectionSchema = z.object({
 const feedPostSchema = z.object({
   body: z.string().nullish(),
   postHash: z.string(),
+  parentPostHash: z.string().nullish(),
+  rootPostHash: z.string().nullish(),
+  commentDepth: numberLike.nullish(),
   repostedPostHash: z.string().nullish(),
   repostedPost: feedRepostedPostSchema.nullish(),
   extraData: z.record(z.string(), z.unknown()).nullish(),
@@ -903,6 +1146,30 @@ const forYouFeedHashesResponseSchema = z.object({
 const postByHashResponseSchema = z.object({
   data: z.object({
     postByPostHash: feedPostSchema.nullish(),
+  }),
+  errors: z.array(z.object({ message: z.string().optional() })).optional(),
+});
+
+const postsPageInfoSchema = z
+  .object({
+    hasNextPage: z.boolean().nullish(),
+  })
+  .passthrough()
+  .nullish();
+
+const postsConnectionSchema = z.object({
+  totalCount: numberLike.nullish(),
+  pageInfo: postsPageInfoSchema,
+  nodes: z.array(feedPostSchema).default([]),
+});
+
+const postThreadPageResponseSchema = z.object({
+  data: z.object({
+    postByPostHash: feedPostSchema
+      .extend({
+        replies: postsConnectionSchema.nullish(),
+      })
+      .nullish(),
   }),
   errors: z.array(z.object({ message: z.string().optional() })).optional(),
 });
@@ -997,6 +1264,13 @@ export type FocusFeedPost = z.infer<typeof feedPostSchema>;
 export type FocusPostReactionAssociationNode = z.infer<
   typeof postReactionAssociationNodeSchema
 >;
+export type FocusPostThreadPageResult = {
+  post: FocusFeedPost | null;
+  replies: FocusFeedPost[];
+  totalCount: number;
+  nextOffset: number | null;
+  hasNextPage: boolean;
+};
 
 export type FocusPostReactionListResult = {
   totalCount: number;
@@ -1418,6 +1692,85 @@ export async function fetchPostByPostHash({
   }
 
   return parsed.data.data.postByPostHash ?? null;
+}
+
+export async function fetchPostThreadPageByPostHash({
+  postHash,
+  readerPublicKey = "",
+  first = 8,
+  offset = 0,
+  orderBy = ["TIMESTAMP_ASC"],
+  graphqlEndpoint = process.env.EXPO_PUBLIC_FOCUS_GRAPHQL_URL ??
+    DEFAULT_FOCUS_GRAPHQL_URL,
+}: {
+  postHash: string;
+  readerPublicKey?: string;
+  first?: number;
+  offset?: number;
+  orderBy?: string[];
+  graphqlEndpoint?: string;
+}): Promise<FocusPostThreadPageResult> {
+  const body = {
+    operationName: "PostThreadPageByPostHash",
+    query: POST_THREAD_PAGE_BY_POST_HASH_QUERY,
+    variables: {
+      postHash,
+      readerPublicKey,
+      first,
+      offset,
+      orderBy,
+    },
+  };
+
+  const response = await performGraphqlRequest(body, graphqlEndpoint);
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Expected JSON response from GraphQL endpoint but received '${contentType}'. Response snippet: ${text.slice(
+        0,
+        120,
+      )}`,
+    );
+  }
+
+  const json = await response.json();
+  const parsed = postThreadPageResponseSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(
+      parsed.error.issues.map((issue) => issue.message).join(", ") ||
+        "Unable to parse post thread response",
+    );
+  }
+
+  if (parsed.data.errors?.length) {
+    throw new Error(
+      parsed.data.errors
+        .map((err) => err.message)
+        .filter(Boolean)
+        .join("; ") || "Post thread query returned errors",
+    );
+  }
+
+  const post = parsed.data.data.postByPostHash ?? null;
+  const repliesConnection = post?.replies ?? null;
+  const replies = repliesConnection?.nodes ?? [];
+  const totalCount = Number(repliesConnection?.totalCount ?? replies.length);
+  const safeTotalCount = Number.isFinite(totalCount)
+    ? Math.max(0, Math.floor(totalCount))
+    : replies.length;
+  const hasNextPage = Boolean(repliesConnection?.pageInfo?.hasNextPage);
+  const nextOffset = hasNextPage ? offset + replies.length : null;
+
+  return {
+    post,
+    replies,
+    totalCount: safeTotalCount,
+    nextOffset,
+    hasNextPage,
+  };
 }
 
 export async function fetchPostByPostHashReactionList({

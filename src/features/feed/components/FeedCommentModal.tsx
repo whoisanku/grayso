@@ -16,6 +16,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { Feather } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -32,6 +33,8 @@ import {
   MAX_COMMENT_LENGTH,
   useSubmitComment,
 } from "@/features/feed/api/useSubmitComment";
+import { feedKeys } from "@/features/feed/api/keys";
+import { applyOptimisticReplyCountUpdate } from "@/features/feed/api/optimisticUpdates";
 import { uploadImage } from "@/lib/media";
 import { UserAvatar } from "@/components/UserAvatar";
 import { parseRichTextContent } from "@/lib/richText";
@@ -171,6 +174,7 @@ export function FeedCommentModal({
   onClose,
   onSubmitted,
 }: FeedCommentModalProps) {
+  const queryClient = useQueryClient();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { currentUser } = useContext(DeSoIdentityContext);
   const {
@@ -324,37 +328,31 @@ export function FeedCommentModal({
       return;
     }
 
-    try {
-      await mutateAsync({
-        updaterPublicKey: userPublicKey,
-        parentPostHash: post.postHash,
-        body: commentText,
-        imageUrls: replyImageUploadedUrl ? [replyImageUploadedUrl] : [],
-      });
+    const submitPayload = {
+      updaterPublicKey: userPublicKey,
+      parentPostHash: post.postHash,
+      body: commentText,
+      imageUrls: replyImageUploadedUrl ? [replyImageUploadedUrl] : [],
+    };
 
-      Toast.show({
-        type: "success",
-        text1: "Reply posted",
-        text2: `Your reply to @${username} is live.`,
-      });
+    applyOptimisticReplyCountUpdate(queryClient, post.postHash, 1);
+    resetComposerState();
+    onClose();
 
-      resetComposerState();
-      onClose();
-      if (onSubmitted) {
-        await Promise.resolve(onSubmitted());
-      }
-    } catch (error) {
-      const fallbackMessage = "Please try again.";
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : fallbackMessage;
-      Toast.show({
-        type: "error",
-        text1: "Failed to post reply",
-        text2: errorMessage,
+    void mutateAsync(submitPayload)
+      .then(async () => {
+        if (onSubmitted) {
+          await Promise.resolve(onSubmitted());
+        }
+      })
+      .catch((error) => {
+        console.warn("Reply submission failed in background", error);
+      })
+      .finally(() => {
+        void queryClient.invalidateQueries({
+          queryKey: feedKeys.base,
+        });
       });
-    }
   };
 
   const handleCommentChange = (value: string) => {

@@ -6,6 +6,7 @@ import {
   DarkTheme,
   DefaultTheme,
   LinkingOptions,
+  getStateFromPath as getNavigationStateFromPath,
 } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
@@ -35,6 +36,25 @@ configure({
 // Web URL linking configuration - allows navigation via URLs like /profile, /settings
 const linking: LinkingOptions<RootStackParamList> = {
   prefixes: [window.location.origin, "grayso://"],
+  getStateFromPath(path, options) {
+    const candidateUrl = new URL(
+      path.startsWith("/") ? path : `/${path}`,
+      window.location.origin,
+    );
+    const legacyPostThreadHash = candidateUrl.searchParams.get("postHash")?.trim();
+
+    if (
+      candidateUrl.pathname.toLowerCase() === "/postthread" &&
+      legacyPostThreadHash
+    ) {
+      return getNavigationStateFromPath(
+        `/post/${legacyPostThreadHash}`,
+        options,
+      );
+    }
+
+    return getNavigationStateFromPath(path, options);
+  },
   config: {
     screens: {
       Main: {
@@ -49,6 +69,7 @@ const linking: LinkingOptions<RootStackParamList> = {
       Composer: "compose",
       Conversation: "conversation/:threadPublicKey",
       NewChat: "new-chat",
+      PostThread: "post/:postHash",
       Login: "login",
     },
   },

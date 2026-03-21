@@ -13,6 +13,7 @@ import { SettingsScreen } from "../features/settings/screens/SettingsScreen";
 import { ComposerScreen } from "../features/messaging/screens/ComposerScreen";
 import { ConversationScreen } from "../features/messaging/screens/ConversationScreen";
 import { NewChatScreen } from "../features/messaging/screens/NewChatScreen";
+import { PostThreadScreen } from "../features/feed/screens/PostThreadScreen";
 import AppLogo from "../assets/app-logo.svg";
 import { useColorScheme } from "nativewind";
 
@@ -131,6 +132,14 @@ export function RootNavigator() {
               <Stack.Screen
                 name="Settings"
                 component={SettingsScreen}
+                options={{
+                  headerShown: false,
+                  animation: "slide_from_right",
+                }}
+              />
+              <Stack.Screen
+                name="PostThread"
+                component={PostThreadScreen}
                 options={{
                   headerShown: false,
                   animation: "slide_from_right",

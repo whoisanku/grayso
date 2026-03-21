@@ -19,6 +19,8 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { DeSoIdentityContext } from "react-deso-protocol";
 import { Feather } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { type NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import ScreenWrapper from "@/components/ScreenWrapper";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -31,6 +33,7 @@ import { FeedReactionModal } from "@/features/feed/components/FeedReactionModal"
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { useSetDrawerOpen } from "@/state/shell";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { type RootStackParamList } from "@/navigation/types";
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 type FeedMode = "forYou" | "following";
@@ -40,6 +43,8 @@ export function FeedScreen() {
   const { isDark, accentColor } = useAccentColor();
   const { width: windowWidth } = useWindowDimensions();
   const setDrawerOpen = useSetDrawerOpen();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const userPublicKey = currentUser?.PublicKeyBase58Check;
   const isDesktopWeb = Platform.OS === "web" && windowWidth >= 1024;
@@ -148,10 +153,18 @@ export function FeedScreen() {
   const closeReactionList = useCallback(() => {
     setReactionTargetPost(null);
   }, []);
-  const handleCommentSubmitted = useCallback(() => {
-    void reload();
-  }, [reload]);
+  const openPostThread = useCallback(
+    (post: FocusFeedPost) => {
+      if (!post.postHash) {
+        return;
+      }
 
+      navigation.push("PostThread", {
+        postHash: post.postHash,
+      });
+    },
+    [navigation],
+  );
   const listEmptyState = useMemo(() => {
     if (isLoading) {
       return <FeedPostShimmer />;
@@ -282,6 +295,7 @@ export function FeedScreen() {
                     ? index < 2
                     : visiblePostHashes.has(item.postHash)
                 }
+                onPress={openPostThread}
                 onReplyPress={openCommentComposer}
                 onReactionSummaryPress={openReactionList}
               />
@@ -332,7 +346,6 @@ export function FeedScreen() {
           visible={Boolean(commentTargetPost)}
           post={commentTargetPost}
           onClose={closeCommentComposer}
-          onSubmitted={handleCommentSubmitted}
         />
 
         <FeedReactionModal
