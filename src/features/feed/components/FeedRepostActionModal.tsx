@@ -30,10 +30,10 @@ type FeedRepostActionModalProps = {
   isSubmittingRepost?: boolean;
 };
 
-const MENU_WIDTH = 158;
-const MENU_HEIGHT = 104;
+const MENU_WIDTH = 176;
+const MENU_HEIGHT = 108;
 const SCREEN_EDGE_PADDING = 12;
-const MENU_CONTENT_LEFT_PADDING = 14;
+const MENU_VERTICAL_GAP = 12;
 
 function getMenuPosition({
   anchor,
@@ -51,26 +51,21 @@ function getMenuPosition({
     SCREEN_EDGE_PADDING,
     windowWidth - MENU_WIDTH - SCREEN_EDGE_PADDING,
   );
-  // Align menu so its item content start lines up with the repost icon start line.
-  const preferredLeft = resolvedAnchorX - MENU_CONTENT_LEFT_PADDING;
-  const left = Math.min(
-    Math.max(SCREEN_EDGE_PADDING, preferredLeft),
-    maxLeft,
-  );
+  const preferredLeft = resolvedAnchorX - MENU_WIDTH / 2;
+  const left = Math.min(Math.max(SCREEN_EDGE_PADDING, preferredLeft), maxLeft);
 
   const maxTop = Math.max(
     SCREEN_EDGE_PADDING,
     windowHeight - MENU_HEIGHT - SCREEN_EDGE_PADDING,
   );
-  // Prefer showing below the tapped repost button; fallback above if needed.
-  const preferredTop = resolvedAnchorY + 6;
-  const fallbackTop = resolvedAnchorY - MENU_HEIGHT - 12;
-  const top =
-    preferredTop <= maxTop
-      ? preferredTop
-      : Math.min(Math.max(SCREEN_EDGE_PADDING, fallbackTop), maxTop);
+  const preferredTop = resolvedAnchorY + MENU_VERTICAL_GAP;
+  const top = Math.min(Math.max(SCREEN_EDGE_PADDING, preferredTop), maxTop);
 
-  return { left, top };
+  return {
+    left,
+    top,
+    placement: "below",
+  } as const;
 }
 
 export function FeedRepostActionModal({
@@ -126,7 +121,7 @@ export function FeedRepostActionModal({
 
   const menuTranslateY = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: [-4, 0],
+    outputRange: [-6, 0],
   });
 
   return (
@@ -153,20 +148,21 @@ export function FeedRepostActionModal({
         </Pressable>
 
         <Animated.View
-          className="absolute overflow-hidden rounded-xl border"
+          className="absolute overflow-hidden border"
           style={{
             left: menuPosition.left,
             top: menuPosition.top,
             width: MENU_WIDTH,
+            borderRadius: 20,
             borderWidth: 1.5,
             borderColor: getBorderColor(isDark, "contrast_medium"),
-            backgroundColor: isDark ? "rgba(2, 6, 23, 0.98)" : "#ffffff",
+            backgroundColor: isDark ? "#111827" : "#ffffff",
             opacity: animation,
             transform: [{ scale: menuScale }, { translateY: menuTranslateY }],
             ...(Platform.OS === "web"
               ? ({
                   boxShadow: "0 14px 38px rgba(15, 23, 42, 0.28)",
-                  transformOrigin: "top right",
+                  transformOrigin: "top center",
                 } as any)
               : {
                   shadowColor: "#000000",
@@ -178,7 +174,7 @@ export function FeedRepostActionModal({
           }}
         >
           <Pressable
-            className="flex-row items-center gap-2.5 px-3.5 py-3"
+            className="flex-row items-center gap-3 px-4 py-3.5"
             onPress={onSelectRepost}
             disabled={isSubmittingRepost}
             accessibilityRole="button"
@@ -212,7 +208,7 @@ export function FeedRepostActionModal({
           />
 
           <Pressable
-            className="flex-row items-center gap-2.5 px-3.5 py-3"
+            className="flex-row items-center gap-3 px-4 py-3.5"
             onPress={onSelectQuote}
             disabled={isSubmittingRepost}
             accessibilityRole="button"

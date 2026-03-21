@@ -29,6 +29,7 @@ import { HeartIcon } from "@/components/icons/HeartIcon";
 import { RepostIcon } from "@/components/icons/RepostIcon";
 import { parseRichTextContent } from "@/lib/richText";
 import { Toast } from "@/components/ui/Toast";
+import { ReactionIcon } from "@/components/ui/ReactionIcon";
 import { feedKeys } from "@/features/feed/api/keys";
 import { applyOptimisticReactionUpdate } from "@/features/feed/api/optimisticUpdates";
 import { getBorderColor } from "@/theme/borders";
@@ -769,8 +770,9 @@ export function FeedCard({
   const mutedIconColor = isDark ? "#94a3b8" : "#64748b";
   const mutedCountColor = isDark ? "#94a3b8" : "#64748b";
   const threadCommentActionIconSize = 16;
-  const feedActionIconSize = 17;
-  const feedActionLabelClassName = "text-[13px] font-medium leading-[18px]";
+  const feedActionIconSize = 18;
+  const feedSelectedReactionIconSize = 19;
+  const feedActionLabelClassName = "text-[14px] font-medium leading-5";
   const threadCommentActionCountClassName =
     "text-[14px] font-medium leading-[18px]";
   const threadAnchorReplyIconSize = 20;
@@ -1095,6 +1097,14 @@ export function FeedCard({
     },
     [onProfilePress],
   );
+  const handleCardPress = React.useCallback(() => {
+    if (Platform.OS !== "web" && isReactionPickerVisible) {
+      closeReactionPicker();
+      return;
+    }
+
+    onPress?.(post);
+  }, [closeReactionPicker, isReactionPickerVisible, onPress, post]);
 
   if (isThreadCommentVariant) {
     const threadTextOffset = avatarSize + 8;
@@ -1103,10 +1113,23 @@ export function FeedCard({
 
     return (
       <Pressable
-        onPress={() => onPress?.(post)}
+        onPress={handleCardPress}
         className="py-1.5"
         style={({ pressed }) => ({ opacity: pressed ? 0.96 : 1 })}
       >
+        {Platform.OS !== "web" && isReactionPickerVisible ? (
+          <Pressable
+            className="absolute inset-0"
+            onPress={(event) => {
+              event.stopPropagation?.();
+              closeReactionPicker();
+            }}
+            style={{ zIndex: 20 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close reaction picker"
+          />
+        ) : null}
+
         {isPureRepost ? (
           <View
             className="mb-1 flex-row items-center gap-1"
@@ -1271,7 +1294,14 @@ export function FeedCard({
                 ) : null}
               </Pressable>
 
-              <View className="relative">
+              <View
+                className="relative"
+                style={
+                  Platform.OS !== "web" && isReactionPickerVisible
+                    ? { zIndex: 30 }
+                    : undefined
+                }
+              >
                 {isReactionPickerVisible ? (
                   <Pressable
                     ref={reactionPickerRef}
@@ -1337,9 +1367,10 @@ export function FeedCard({
                               accessibilityRole="button"
                               accessibilityLabel={`React with ${reactionOption.label}`}
                             >
-                              <Text style={reactionPickerStyles.emojiText}>
-                                {reactionOption.emoji}
-                              </Text>
+                              <ReactionIcon
+                                name={reactionOption.iconName}
+                                size={26}
+                              />
                             </Pressable>
                           </Animated.View>
                         );
@@ -1381,14 +1412,10 @@ export function FeedCard({
                         justifyContent: "center",
                       }}
                     >
-                      <Text
-                        style={{
-                          fontSize: threadCommentActionIconSize,
-                          lineHeight: threadCommentActionIconSize,
-                        }}
-                      >
-                        {selectedReactionOption.emoji}
-                      </Text>
+                      <ReactionIcon
+                        name={selectedReactionOption.iconName}
+                        size={threadCommentActionIconSize}
+                      />
                     </View>
                   ) : (
                     <HeartIcon
@@ -1417,7 +1444,7 @@ export function FeedCard({
 
   return (
     <Pressable
-      onPress={() => onPress?.(post)}
+      onPress={handleCardPress}
       className={
         isThreadCommentVariant
           ? "py-1.5"
@@ -1429,6 +1456,19 @@ export function FeedCard({
       }
       style={({ pressed }) => ({ opacity: pressed ? 0.95 : 1 })}
     >
+      {Platform.OS !== "web" && isReactionPickerVisible ? (
+        <Pressable
+          className="absolute inset-0"
+          onPress={(event) => {
+            event.stopPropagation?.();
+            closeReactionPicker();
+          }}
+          style={{ zIndex: 20 }}
+          accessibilityRole="button"
+          accessibilityLabel="Close reaction picker"
+        />
+      ) : null}
+
       {isPureRepost ? (
         <View className="mb-1.5 flex-row items-center gap-1">
           <RepostIcon
@@ -1943,9 +1983,7 @@ export function FeedCard({
                       zIndex: topReactionBadges.length - index,
                     }}
                   >
-                    <Text className="text-[10px] leading-[10px]">
-                      {reaction.emoji}
-                    </Text>
+                    <ReactionIcon name={reaction.iconName} size={12} />
                   </View>
                 ))}
 
@@ -2203,6 +2241,11 @@ export function FeedCard({
                 ? "relative"
                 : "relative flex-1"
           }
+          style={
+            Platform.OS !== "web" && isReactionPickerVisible
+              ? { zIndex: 30 }
+              : undefined
+          }
         >
           {isReactionPickerVisible ? (
             <Pressable
@@ -2263,9 +2306,10 @@ export function FeedCard({
                         accessibilityRole="button"
                         accessibilityLabel={`React with ${reactionOption.label}`}
                       >
-                        <Text style={reactionPickerStyles.emojiText}>
-                          {reactionOption.emoji}
-                        </Text>
+                        <ReactionIcon
+                          name={reactionOption.iconName}
+                          size={26}
+                        />
                       </Pressable>
                     </Animated.View>
                   );
@@ -2350,26 +2394,18 @@ export function FeedCard({
                   justifyContent: "center",
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: isThreadAnchorVariant
+                <ReactionIcon
+                  name={selectedReactionOption.iconName}
+                  size={
+                    isThreadAnchorVariant
                       ? threadAnchorLikeIconSize - 1
                       : isThreadCommentVariant
                         ? threadCommentActionIconSize
                         : isThreadVariant
                           ? 16
-                          : feedActionIconSize - 1,
-                    lineHeight: isThreadAnchorVariant
-                      ? threadAnchorLikeIconSize - 1
-                      : isThreadCommentVariant
-                        ? threadCommentActionIconSize
-                        : isThreadVariant
-                          ? 16
-                          : feedActionIconSize - 1,
-                  }}
-                >
-                  {selectedReactionOption.emoji}
-                </Text>
+                          : feedSelectedReactionIconSize
+                  }
+                />
               </View>
             ) : (
               <HeartIcon

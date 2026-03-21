@@ -148,6 +148,8 @@ export function PostThreadScreen({
         ?.label ?? "Most recent",
     [commentSortMode],
   );
+  const sortMenuBackgroundColor = isDark ? "#111827" : "#ffffff";
+  const activeSortMenuItemBackgroundColor = isDark ? "#16233a" : "#e0f2fe";
   const handleReplyToAnchor = React.useCallback(() => {
     if (!post?.post) {
       return;
@@ -305,7 +307,7 @@ export function PostThreadScreen({
                   className="absolute right-0 top-full mt-2 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-700/80"
                   style={{
                     minWidth: 176,
-                    backgroundColor: isDark ? "#111827" : "#ffffff",
+                    backgroundColor: sortMenuBackgroundColor,
                     shadowColor: "#020617",
                     shadowOpacity: isDark ? 0.36 : 0.12,
                     shadowRadius: 18,
@@ -328,10 +330,8 @@ export function PostThreadScreen({
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.88 : 1,
                           backgroundColor: isActive
-                            ? isDark
-                              ? "rgba(29, 155, 240, 0.18)"
-                              : "rgba(29, 155, 240, 0.1)"
-                            : "transparent",
+                            ? activeSortMenuItemBackgroundColor
+                            : sortMenuBackgroundColor,
                           borderTopWidth: index === 0 ? 0 : 1,
                           borderTopColor: getBorderColor(isDark, "subtle"),
                           ...(Platform.OS === "web"
@@ -371,6 +371,7 @@ export function PostThreadScreen({
     );
   }, [
     activeSortLabel,
+    activeSortMenuItemBackgroundColor,
     accentColor,
     handleOpenCommentComposer,
     handleOpenProfile,
@@ -380,6 +381,7 @@ export function PostThreadScreen({
     isSortMenuOpen,
     parents,
     post,
+    sortMenuBackgroundColor,
     threadColumnStyle,
     totalCommentCount,
   ]);
