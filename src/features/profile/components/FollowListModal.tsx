@@ -435,6 +435,7 @@ export function FollowListModal({
           data={accounts}
           renderItem={renderAccountItem}
           keyExtractor={(item, index) => item.publicKey?.trim() || `${tab}-${index}`}
+          // @ts-ignore FlashList runtime supports this prop; local types are stale.
           estimatedItemSize={ESTIMATED_ROW_SIZE}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}

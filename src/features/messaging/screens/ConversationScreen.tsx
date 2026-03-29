@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
   Animated,
   TextInput,
@@ -78,6 +79,7 @@ import {
 } from "@/alf/breakpoints";
 import UserGroupIcon from "@/assets/navIcons/user-group.svg";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
+import { estimateMessageBubbleHeight } from "@/features/messaging/lib/estimateMessageBubbleHeight";
 
 const devLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") {
@@ -170,6 +172,7 @@ export function ConversationScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { isDark, accentColor, accentSoft, accentStrong } = useAccentColor();
   const { isDesktop } = useLayoutBreakpoints();
+  const { width: windowWidth } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isWebDesktop = isWeb && isDesktop;
 
@@ -557,7 +560,6 @@ export function ConversationScreen({ navigation, route }: Props) {
   const scrollOffsetRef = useRef(0);
   const composerHideAnim = useRef(new Animated.Value(0)).current;
   const shouldAnimateComposer = !isWeb;
-  const estimatedMessageSize = 120;
 
   // --- Effects & Callbacks ---
 
@@ -749,6 +751,38 @@ export function ConversationScreen({ navigation, route }: Props) {
   );
 
   const flashListData = listData;
+  const estimatedMessageSize = useMemo(() => {
+    if (!flashListData.length) {
+      return 120;
+    }
+
+    const sample = flashListData.slice(-20);
+    const total = sample.reduce((sum, item, index) => {
+      const previousMessage = sample[index - 1];
+      const nextMessage = sample[index + 1];
+
+      return (
+        sum +
+        estimateMessageBubbleHeight({
+          item,
+          previousMessage,
+          nextMessage,
+          profiles: profilesForUi,
+          isGroupChat,
+          messageIdMap,
+          windowWidth,
+        })
+      );
+    }, 0);
+
+    return Math.round(total / sample.length);
+  }, [
+    flashListData,
+    isGroupChat,
+    messageIdMap,
+    profilesForUi,
+    windowWidth,
+  ]);
 
   const handleListScroll = useCallback(
     (e: any) => {
@@ -940,6 +974,20 @@ export function ConversationScreen({ navigation, route }: Props) {
               <FlashList<DecryptedMessageEntryResponse>
                 ref={flatListRef}
                 data={flashListData}
+                // @ts-ignore FlashList runtime supports these props; local types are stale.
+                estimatedItemSize={estimatedMessageSize}
+                // @ts-ignore FlashList runtime supports these props; local types are stale.
+                overrideItemLayout={(layout, item, index) => {
+                  (layout as { size?: number }).size = estimateMessageBubbleHeight({
+                    item,
+                    previousMessage: flashListData[index - 1],
+                    nextMessage: flashListData[index + 1],
+                    profiles: profilesForUi,
+                    isGroupChat,
+                    messageIdMap,
+                    windowWidth,
+                  });
+                }}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
                 ListHeaderComponent={topListHeader}
@@ -997,6 +1045,20 @@ export function ConversationScreen({ navigation, route }: Props) {
               <FlashList<DecryptedMessageEntryResponse>
                 ref={flatListRef}
                 data={flashListData}
+                // @ts-ignore FlashList runtime supports these props; local types are stale.
+                estimatedItemSize={estimatedMessageSize}
+                // @ts-ignore FlashList runtime supports these props; local types are stale.
+                overrideItemLayout={(layout, item, index) => {
+                  (layout as { size?: number }).size = estimateMessageBubbleHeight({
+                    item,
+                    previousMessage: flashListData[index - 1],
+                    nextMessage: flashListData[index + 1],
+                    profiles: profilesForUi,
+                    isGroupChat,
+                    messageIdMap,
+                    windowWidth,
+                  });
+                }}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
                 ListHeaderComponent={topListHeader}

@@ -48,6 +48,7 @@ import { PullToRefresh } from "@/components/ui/PullToRefresh";
 import { Toast } from "@/components/ui/Toast";
 import { PageTopBar, PageTopBarIconButton } from "@/components/ui/PageTopBar";
 import { getWebScrollbarStyle } from "@/lib/webScrollbar";
+import { estimateFeedCardHeight } from "@/features/feed/lib/estimateFeedCardHeight";
 
 const EMPTY_VISIBLE_HASHES = new Set<string>();
 const MOBILE_FEED_BOTTOM_CLEARANCE = 96;
@@ -420,6 +421,19 @@ export function FeedScreen() {
       : {
           paddingBottom: feedBottomInset,
         };
+  const estimatedFeedItemSize = useMemo(() => {
+    if (!posts.length) {
+      return 420;
+    }
+
+    const sample = posts.slice(0, 12);
+    const total = sample.reduce(
+      (sum, post) => sum + estimateFeedCardHeight(post, windowWidth),
+      0,
+    );
+
+    return Math.round(total / sample.length);
+  }, [posts, windowWidth]);
   const renderFeedItem = useCallback(
     ({ item, index }: { item: FocusFeedPost; index: number }) => (
       <FeedCard
@@ -555,8 +569,11 @@ export function FeedScreen() {
               <FlashList
                 ref={flashListRef}
                 data={posts}
-                // @ts-expect-error FlashList runtime supports this; installed types are stale.
-                estimatedItemSize={420}
+                estimatedItemSize={estimatedFeedItemSize}
+                // @ts-ignore FlashList runtime supports per-item sizing; local types are stale.
+                overrideItemLayout={(layout: { size?: number }, item: FocusFeedPost) => {
+                  layout.size = estimateFeedCardHeight(item, windowWidth);
+                }}
                 style={scrollBarStyle}
                 keyExtractor={(item) => item.postHash}
                 renderItem={renderFeedItem}

@@ -131,6 +131,23 @@ export type RichTextSegment =
   | { type: "mention"; content: string; username: string }
   | { type: "hashtag"; content: string; tag: string };
 
+const MAX_RICH_TEXT_CACHE_ENTRIES = 500;
+const richTextSegmentsCache = new Map<string, RichTextSegment[]>();
+const parsedRichTextContentCache = new Map<string, ParsedRichTextContent>();
+
+function rememberCachedValue<T>(cache: Map<string, T>, key: string, value: T) {
+  cache.set(key, value);
+
+  if (cache.size > MAX_RICH_TEXT_CACHE_ENTRIES) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey) {
+      cache.delete(firstKey);
+    }
+  }
+
+  return value;
+}
+
 const MENTION_REGEX = /@([a-zA-Z0-9_]{1,30})/g;
 const HASHTAG_REGEX = /#([a-zA-Z0-9_]+)/g;
 const URL_REGEX =
@@ -138,6 +155,11 @@ const URL_REGEX =
 
 export function getRichTextSegments(text: string): RichTextSegment[] {
   if (!text) return [];
+
+  const cached = richTextSegmentsCache.get(text);
+  if (cached) {
+    return cached;
+  }
 
   const segments: RichTextSegment[] = [];
   let lastIndex = 0;
@@ -209,7 +231,7 @@ export function getRichTextSegments(text: string): RichTextSegment[] {
     });
   }
 
-  return segments;
+  return rememberCachedValue(richTextSegmentsCache, text, segments);
 }
 
 export function parseRichTextContent({
@@ -217,6 +239,12 @@ export function parseRichTextContent({
   imageUrls,
 }: ParseRichTextInput): ParsedRichTextContent {
   const rawBody = typeof body === "string" ? body : "";
+  const explicitImageUrls = imageUrls ?? [];
+  const cacheKey = JSON.stringify([rawBody, explicitImageUrls]);
+  const cached = parsedRichTextContentCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const htmlImageUrls: string[] = [];
   const markdownImageUrls: string[] = [];
 
@@ -272,16 +300,16 @@ export function parseRichTextContent({
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  const explicitImageUrls = (imageUrls ?? [])
+  const normalizedExplicitImageUrls = explicitImageUrls
     .map((value) => normalizeExtractedUrl(value))
     .filter((value): value is string => Boolean(value));
 
-  return {
+  return rememberCachedValue(parsedRichTextContentCache, cacheKey, {
     text: normalizedText,
     imageUrls: uniqueUrls([
-      ...explicitImageUrls,
+      ...normalizedExplicitImageUrls,
       ...markdownImageUrls,
       ...htmlImageUrls,
     ]),
-  };
+  });
 }

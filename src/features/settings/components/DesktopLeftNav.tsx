@@ -193,7 +193,7 @@ export function DesktopLeftNav({ activeTab = 'Messages', onTabChange }: DesktopL
           maxHeight: '100vh',
           overflowY: 'auto',
         }),
-      }}
+      } as any}
     >
       <ScrollView
         showsVerticalScrollIndicator={false}

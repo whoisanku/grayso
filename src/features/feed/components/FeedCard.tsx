@@ -24,6 +24,7 @@ import { FeedVideo } from "@/features/feed/components/FeedVideo";
 import { FeedImageGrid } from "@/features/feed/components/FeedImageGrid";
 import { getValidHttpUrl, toPlatformSafeImageUrl } from "@/lib/mediaUrl";
 import { UserAvatar } from "@/components/UserAvatar";
+import { CollapsibleText } from "@/components/ui/CollapsibleText";
 import { CommentIcon } from "@/components/icons/CommentIcon";
 import { HeartIcon } from "@/components/icons/HeartIcon";
 import { RepostIcon } from "@/components/icons/RepostIcon";
@@ -60,10 +61,6 @@ const REACTION_VALUES = FOCUS_POST_REACTION_OPTIONS.map(
 ) as FocusPostReactionValue[];
 const REACTION_PICKER_HOVER_OPEN_DELAY_MS = 380;
 const REACTION_PICKER_HOVER_CLOSE_DELAY_MS = 140;
-const FEED_COLLAPSED_BODY_MAX_LINES = 5;
-const FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES = 4;
-const FEED_BODY_TOGGLE_MIN_CHARACTERS = 220;
-const FEED_EMBEDDED_BODY_TOGGLE_MIN_CHARACTERS = 180;
 
 function normalizeDisplayName(rawValue: unknown, username: string): string {
   if (typeof rawValue !== "string") {
@@ -309,9 +306,6 @@ export function FeedCard({
   const [isFeedReplyHovered, setIsFeedReplyHovered] = React.useState(false);
   const [isFeedRepostHovered, setIsFeedRepostHovered] = React.useState(false);
   const [isFeedLikeHovered, setIsFeedLikeHovered] = React.useState(false);
-  const [isFeedBodyExpanded, setIsFeedBodyExpanded] = React.useState(false);
-  const [isFeedEmbeddedBodyExpanded, setIsFeedEmbeddedBodyExpanded] =
-    React.useState(false);
   const pendingReactionSyncValueRef = React.useRef<
     FocusPostReactionValue | null | undefined
   >(undefined);
@@ -397,8 +391,6 @@ export function FeedCard({
     setIsFeedReplyHovered(false);
     setIsFeedRepostHovered(false);
     setIsFeedLikeHovered(false);
-    setIsFeedBodyExpanded(false);
-    setIsFeedEmbeddedBodyExpanded(false);
   }, [post.poster?.publicKey, post.postHash]);
 
   React.useEffect(
@@ -813,16 +805,6 @@ export function FeedCard({
       ? threadLikeHoverColor
       : mutedIconColor;
   const displayedLikeLabel = isFeedVariant ? "Like" : likeActionLabel;
-  const shouldShowFeedBodyToggle = Boolean(
-    isFeedVariant &&
-      primaryBody &&
-      primaryBody.length > FEED_BODY_TOGGLE_MIN_CHARACTERS,
-  );
-  const shouldShowFeedEmbeddedBodyToggle = Boolean(
-    isFeedVariant &&
-      repostBody &&
-      repostBody.length > FEED_EMBEDDED_BODY_TOGGLE_MIN_CHARACTERS,
-  );
   const reactionPickerPositionClassName = isFeedVariant
     ? "absolute bottom-full right-0"
     : "absolute bottom-full left-0";
@@ -1618,37 +1600,17 @@ export function FeedCard({
 
               {repostBody ? (
                 isFeedVariant ? (
-                  <View className="mt-2">
-                    <Text
-                      numberOfLines={
-                        shouldShowFeedEmbeddedBodyToggle && !isFeedEmbeddedBodyExpanded
-                          ? FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES
-                          : undefined
-                      }
-                      className="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
-                    >
-                      {repostBody}
-                    </Text>
-                    {shouldShowFeedEmbeddedBodyToggle ? (
-                      <Pressable
-                        onPress={(event) => {
-                          event.stopPropagation?.();
-                          setIsFeedEmbeddedBodyExpanded((current) => !current);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          isFeedEmbeddedBodyExpanded
-                            ? "Show less repost text"
-                            : "Show more repost text"
-                        }
-                        style={actionButtonStyle}
-                      >
-                        <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
-                          {isFeedEmbeddedBodyExpanded ? "See less" : "See more"}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
+                  <CollapsibleText
+                    text={repostBody}
+                    collapsedLineCount={4}
+                    textClassName="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
+                    toggleClassName="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400"
+                    containerClassName="mt-2"
+                    fontToken="feedEmbeddedBody"
+                    fallbackCharacterThreshold={180}
+                    expandedLabel="See less"
+                    collapsedLabel="See more"
+                  />
                 ) : (
                   <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
                     {repostBody}
@@ -1785,35 +1747,17 @@ export function FeedCard({
 
           {primaryBody ? (
             isFeedVariant ? (
-              <View className="mt-1">
-                <Text
-                  numberOfLines={
-                    shouldShowFeedBodyToggle && !isFeedBodyExpanded
-                      ? FEED_COLLAPSED_BODY_MAX_LINES
-                      : undefined
-                  }
-                  className="text-[15px] leading-6 text-slate-900 dark:text-slate-100"
-                >
-                  {primaryBody}
-                </Text>
-                {shouldShowFeedBodyToggle ? (
-                  <Pressable
-                    onPress={(event) => {
-                      event.stopPropagation?.();
-                      setIsFeedBodyExpanded((current) => !current);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isFeedBodyExpanded ? "Show less post text" : "Show more post text"
-                    }
-                    style={actionButtonStyle}
-                  >
-                    <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
-                      {isFeedBodyExpanded ? "See less" : "See more"}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
+              <CollapsibleText
+                text={primaryBody}
+                collapsedLineCount={5}
+                textClassName="text-[15px] leading-6 text-slate-900 dark:text-slate-100"
+                toggleClassName="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400"
+                containerClassName="mt-1"
+                fontToken="feedBody"
+                fallbackCharacterThreshold={220}
+                expandedLabel="See less"
+                collapsedLabel="See more"
+              />
             ) : (
               <Text
                 className={
@@ -1878,37 +1822,17 @@ export function FeedCard({
 
               {repostBody ? (
                 isFeedVariant ? (
-                  <View className="mt-2">
-                    <Text
-                      numberOfLines={
-                        shouldShowFeedEmbeddedBodyToggle && !isFeedEmbeddedBodyExpanded
-                          ? FEED_COLLAPSED_EMBEDDED_BODY_MAX_LINES
-                          : undefined
-                      }
-                      className="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
-                    >
-                      {repostBody}
-                    </Text>
-                    {shouldShowFeedEmbeddedBodyToggle ? (
-                      <Pressable
-                        onPress={(event) => {
-                          event.stopPropagation?.();
-                          setIsFeedEmbeddedBodyExpanded((current) => !current);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          isFeedEmbeddedBodyExpanded
-                            ? "Show less repost text"
-                            : "Show more repost text"
-                        }
-                        style={actionButtonStyle}
-                      >
-                        <Text className="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400">
-                          {isFeedEmbeddedBodyExpanded ? "See less" : "See more"}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
+                  <CollapsibleText
+                    text={repostBody}
+                    collapsedLineCount={4}
+                    textClassName="text-[14px] leading-5 text-slate-900 dark:text-slate-100"
+                    toggleClassName="mt-1 text-[13px] font-semibold text-sky-500 dark:text-sky-400"
+                    containerClassName="mt-2"
+                    fontToken="feedEmbeddedBody"
+                    fallbackCharacterThreshold={180}
+                    expandedLabel="See less"
+                    collapsedLabel="See more"
+                  />
                 ) : (
                   <Text className="mt-2 text-[14px] leading-5 text-slate-900 dark:text-slate-100">
                     {repostBody}

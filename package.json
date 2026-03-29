@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.7.0",
+    "@chenglou/pretext": "^0.0.2",
     "@ethersproject/shims": "^5.8.0",
     "@expo/ui": "~0.2.0-beta.9",
     "@expo/vector-icons": "^15.0.3",

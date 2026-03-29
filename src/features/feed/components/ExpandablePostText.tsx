@@ -6,6 +6,7 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { RichText } from "@/components/ui/RichText";
+import { getFontTokenDefinition, measureLineCount, prepareText } from "@/lib/textLayout";
 
 type ExpandablePostTextProps = {
   text: string;
@@ -43,15 +44,31 @@ export function ExpandablePostText({
   toggleClassName,
 }: ExpandablePostTextProps) {
   const normalizedText = text.trim();
+  const [measuredWidth, setMeasuredWidth] = React.useState(0);
+  const fontDefinition = getFontTokenDefinition("expandableBody");
   const characterLength = React.useMemo(
     () => Array.from(normalizedText).length,
     [normalizedText],
   );
-  const isCollapsible = characterLength > collapsedChars;
   const collapsedText = React.useMemo(
     () => getCollapsedText(normalizedText, collapsedChars),
     [collapsedChars, normalizedText],
   );
+  const preparedText = React.useMemo(
+    () => prepareText(normalizedText, fontDefinition.font),
+    [fontDefinition.font, normalizedText],
+  );
+  const measuredLineCount = React.useMemo(() => {
+    if (measuredWidth <= 0) {
+      return null;
+    }
+
+    return measureLineCount(preparedText, measuredWidth, fontDefinition.lineHeight);
+  }, [fontDefinition.lineHeight, measuredWidth, preparedText]);
+  const isCollapsible =
+    Platform.OS === "web"
+      ? (measuredLineCount ?? 0) > 5
+      : characterLength > collapsedChars;
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   React.useEffect(() => {
@@ -70,6 +87,16 @@ export function ExpandablePostText({
     <View>
       <View
         className={textClassName ?? "mt-1"}
+        onLayout={(event) => {
+          if (Platform.OS !== "web") {
+            return;
+          }
+
+          const nextWidth = event.nativeEvent.layout.width;
+          setMeasuredWidth((currentWidth) =>
+            Math.abs(currentWidth - nextWidth) > 0.5 ? nextWidth : currentWidth,
+          );
+        }}
       >
         <RichText
           text={isExpanded || !isCollapsible ? normalizedText : collapsedText}

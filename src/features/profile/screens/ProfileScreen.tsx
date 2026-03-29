@@ -42,6 +42,7 @@ import { feedKeys } from "@/features/feed/api/keys";
 import { useSubmitRepost } from "@/features/feed/api/useSubmitRepost";
 import { type FocusFeedPost } from "@/lib/focus/graphql";
 import { getWebScrollbarStyle } from "@/lib/webScrollbar";
+import { estimateFeedCardHeight } from "@/features/feed/lib/estimateFeedCardHeight";
 import { useManualRefresh } from "@/hooks/useManualRefresh";
 import { HomeTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAccentColor } from "@/state/theme/useAccentColor";
@@ -565,6 +566,19 @@ export function ProfileScreen() {
       />
     </View>
   ) : null;
+  const estimatedProfileItemSize = useMemo(() => {
+    if (!posts.length) {
+      return 420;
+    }
+
+    const sample = posts.slice(0, 12);
+    const total = sample.reduce(
+      (sum, post) => sum + estimateFeedCardHeight(post, width),
+      0,
+    );
+
+    return Math.round(total / sample.length);
+  }, [posts, width]);
 
   const renderProfilePostItem = useCallback(
     ({ item, index }: { item: FocusFeedPost; index: number }) => (
@@ -634,8 +648,11 @@ export function ProfileScreen() {
             <FlashList
               ref={flashListRef}
               data={posts}
-              // @ts-expect-error FlashList runtime supports this; installed types are stale.
-              estimatedItemSize={420}
+              estimatedItemSize={estimatedProfileItemSize}
+              // @ts-ignore FlashList runtime supports per-item sizing; local types are stale.
+              overrideItemLayout={(layout: { size?: number }, item: FocusFeedPost) => {
+                layout.size = estimateFeedCardHeight(item, width);
+              }}
               style={scrollBarStyle}
               keyExtractor={(item) => item.postHash}
               renderItem={renderProfilePostItem}
